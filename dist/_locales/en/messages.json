@@ -1,0 +1,62 @@
+{
+    "hud_label": {
+        "message": "Walker Mode"
+    },
+    "hud_on": {
+        "message": "ON"
+    },
+    "hud_off": {
+        "message": "OFF"
+    },
+    "cs_badge": {
+        "message": "Cheatsheet"
+    },
+    "cs_section_nav": {
+        "message": "Navigation"
+    },
+    "cs_section_tab": {
+        "message": "Tab Actions (Double Tap)"
+    },
+    "cs_section_sys": {
+        "message": "System"
+    },
+    "cs_nav_ad": {
+        "message": "Previous / Next Tab"
+    },
+    "cs_nav_space": {
+        "message": "Next Tab  ·  Shift+Space for Prev"
+    },
+    "cs_nav_ws": {
+        "message": "Scroll Up / Down"
+    },
+    "cs_tab_xx": {
+        "message": "Close Tab"
+    },
+    "cs_tab_zz": {
+        "message": "Restore Closed Tab"
+    },
+    "cs_tab_rr": {
+        "message": "Reload Tab"
+    },
+    "cs_tab_mm": {
+        "message": "Toggle Mute"
+    },
+    "cs_tab_gg": {
+        "message": "Discard Inactive Tabs"
+    },
+    "cs_tab_00": {
+        "message": "Close All Other Tabs"
+    },
+    "cs_tab_ll": {
+        "message": "Focus URL Bar"
+    },
+    "cs_sys_esc": {
+        "message": "Toggle Walker Mode"
+    },
+    "cs_sys_f": {
+        "message": "Toggle Cheatsheet"
+    },
+    "cs_footer": {
+        "message": "Press F or Esc to close"
+    }
+}

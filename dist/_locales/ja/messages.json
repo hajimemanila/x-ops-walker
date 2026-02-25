@@ -1,0 +1,62 @@
+{
+    "hud_label": {
+        "message": "Walker Mode"
+    },
+    "hud_on": {
+        "message": "ON"
+    },
+    "hud_off": {
+        "message": "OFF"
+    },
+    "cs_badge": {
+        "message": "チートシート"
+    },
+    "cs_section_nav": {
+        "message": "ナビゲーション"
+    },
+    "cs_section_tab": {
+        "message": "タブ操作（ダブルタップ）"
+    },
+    "cs_section_sys": {
+        "message": "システム"
+    },
+    "cs_nav_ad": {
+        "message": "前 / 次のタブへ移動"
+    },
+    "cs_nav_space": {
+        "message": "次のタブ（Shift+Space で前）"
+    },
+    "cs_nav_ws": {
+        "message": "ページを上 / 下スクロール"
+    },
+    "cs_tab_xx": {
+        "message": "タブを閉じる"
+    },
+    "cs_tab_zz": {
+        "message": "閉じたタブを復元"
+    },
+    "cs_tab_rr": {
+        "message": "タブをリロード"
+    },
+    "cs_tab_mm": {
+        "message": "ミュート切替"
+    },
+    "cs_tab_gg": {
+        "message": "他タブを休止（メモリ解放）"
+    },
+    "cs_tab_00": {
+        "message": "アクティブ以外を全て閉じる"
+    },
+    "cs_tab_ll": {
+        "message": "URLバーにフォーカス"
+    },
+    "cs_sys_esc": {
+        "message": "Walker Mode 切替"
+    },
+    "cs_sys_f": {
+        "message": "チートシートを開閉"
+    },
+    "cs_footer": {
+        "message": "F または Esc で閉じる"
+    }
+}
