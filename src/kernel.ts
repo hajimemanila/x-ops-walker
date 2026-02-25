@@ -83,7 +83,8 @@ const hud: HudController = (() => {
     const hudEl = document.createElement('div');
     hudEl.id = 'hud';
     // i18n: HUDのラベル・ステータスを messages.json から取得
-    hudEl.innerHTML = `<span class="icon">🦊</span><span class="label">${t('hud_label')}</span><span class="status off">${t('hud_off')}</span>`;
+    const iconUrl = browser.runtime.getURL('icons/icon48.png');
+    hudEl.innerHTML = `<img src="${iconUrl}" class="icon" alt="" /><span class="label">${t('hud_label')}</span><span class="status off">${t('hud_off')}</span>`;
 
     shadow.appendChild(style);
     shadow.appendChild(hudEl);
@@ -204,8 +205,8 @@ const cheatsheet: CheatsheetController = (() => {
     panel.id = 'panel';
     panel.innerHTML = `
     <div id="header">
-      <span class="icon">🦊</span>
-      <span class="title">Fox Walker</span>
+      <img src="${browser.runtime.getURL('icons/icon48.png')}" class="icon" alt="" />
+      <span class="title">X-Ops Walker</span>
       <span class="badge">${t('cs_badge')}</span>
     </div>
     <table>

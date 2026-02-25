@@ -58,5 +58,32 @@
     },
     "cs_footer": {
         "message": "F または Esc で閉じる"
+    },
+    "popup_mode_label": {
+        "message": "Walker Mode"
+    },
+    "popup_status_on": {
+        "message": "アクティブ"
+    },
+    "popup_status_off": {
+        "message": "停止中"
+    },
+    "popup_detail_on": {
+        "message": "Walker Mode 稼働中"
+    },
+    "popup_detail_off": {
+        "message": "Walker Mode 一時停止"
+    },
+    "popup_sc_title": {
+        "message": "キーボードショートカット"
+    },
+    "popup_sc_hint_before": {
+        "message": "任意のページで"
+    },
+    "popup_sc_hint_after": {
+        "message": "を押すとチートシートを表示"
+    },
+    "popup_footer_hint": {
+        "message": "Escキーで Walker Mode を切り替えられます"
     }
 }

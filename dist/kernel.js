@@ -72,7 +72,8 @@
   `;
     const hudEl = document.createElement("div");
     hudEl.id = "hud";
-    hudEl.innerHTML = `<span class="icon">\u{1F98A}</span><span class="label">${t("hud_label")}</span><span class="status off">${t("hud_off")}</span>`;
+    const iconUrl = browser.runtime.getURL("icons/icon48.png");
+    hudEl.innerHTML = `<img src="${iconUrl}" class="icon" alt="" /><span class="label">${t("hud_label")}</span><span class="status off">${t("hud_off")}</span>`;
     shadow.appendChild(style);
     shadow.appendChild(hudEl);
     const statusEl = hudEl.querySelector(".status");
@@ -176,8 +177,8 @@
     panel.id = "panel";
     panel.innerHTML = `
     <div id="header">
-      <span class="icon">\u{1F98A}</span>
-      <span class="title">Fox Walker</span>
+      <img src="${browser.runtime.getURL("icons/icon48.png")}" class="icon" alt="" />
+      <span class="title">X-Ops Walker</span>
       <span class="badge">${t("cs_badge")}</span>
     </div>
     <table>

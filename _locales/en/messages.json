@@ -58,5 +58,32 @@
     },
     "cs_footer": {
         "message": "Press F or Esc to close"
+    },
+    "popup_mode_label": {
+        "message": "Walker Mode"
+    },
+    "popup_status_on": {
+        "message": "Active"
+    },
+    "popup_status_off": {
+        "message": "Inactive"
+    },
+    "popup_detail_on": {
+        "message": "Walker Mode is running"
+    },
+    "popup_detail_off": {
+        "message": "Walker Mode is paused"
+    },
+    "popup_sc_title": {
+        "message": "Keyboard Shortcuts"
+    },
+    "popup_sc_hint_before": {
+        "message": "Press"
+    },
+    "popup_sc_hint_after": {
+        "message": "on any page to open the cheatsheet"
+    },
+    "popup_footer_hint": {
+        "message": "Esc toggles Walker Mode on any page"
     }
 }

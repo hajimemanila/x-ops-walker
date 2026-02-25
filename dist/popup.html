@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>X-Ops Walker</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: 260px;
+            background: #0a0a16;
+            color: #e0e0f0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            font-size: 13px;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        #header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 16px 12px;
+            background: linear-gradient(135deg, rgba(255, 140, 0, 0.10) 0%, rgba(255, 140, 0, 0.03) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        #header .logo {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+        }
+
+        #header .title {
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.90);
+        }
+
+        #header .version {
+            margin-left: auto;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            color: rgba(255, 140, 0, 0.70);
+            background: rgba(255, 140, 0, 0.10);
+            border: 1px solid rgba(255, 140, 0, 0.20);
+            border-radius: 999px;
+            padding: 1px 7px;
+        }
+
+        /* ── Mode card ── */
+        #mode-card {
+            margin: 12px 12px 0;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+        }
+
+        #mode-card .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #mode-card .label-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        #mode-card .mode-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.45);
+        }
+
+        #status-text {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            transition: color 0.2s;
+        }
+
+        #status-text.on {
+            color: #ffac30;
+        }
+
+        #status-text.off {
+            color: rgba(255, 255, 255, 0.35);
+        }
+
+        /* Toggle switch */
+        #toggle {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+            flex-shrink: 0;
+        }
+
+        #toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.50);
+            border-radius: 50%;
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s;
+        }
+
+        #toggle.active {
+            background: rgba(255, 140, 0, 0.25);
+            border-color: rgba(255, 140, 0, 0.50);
+            box-shadow: 0 0 12px rgba(255, 140, 0, 0.20);
+        }
+
+        #toggle.active::after {
+            transform: translateX(24px);
+            background: #ffac30;
+        }
+
+        /* Status dot */
+        #status-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        #status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            transition: background 0.25s, box-shadow 0.25s;
+        }
+
+        #status-dot.on {
+            background: #4ade80;
+            box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+        }
+
+        #status-dot.off {
+            background: rgba(255, 255, 255, 0.20);
+        }
+
+        #status-detail {
+            font-size: 10px;
+            letter-spacing: 0.05em;
+            color: rgba(255, 255, 255, 0.30);
+        }
+
+        /* ── Shortcuts card ── */
+        #shortcuts-card {
+            margin: 8px 12px 0;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+        }
+
+        #shortcuts-card .sc-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: rgba(255, 140, 0, 0.55);
+            margin-bottom: 6px;
+        }
+
+        #shortcuts-card .sc-hint {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.5;
+        }
+
+        .key-badge {
+            display: inline-block;
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            color: #ffac30;
+            background: rgba(255, 140, 0, 0.12);
+            border: 1px solid rgba(255, 140, 0, 0.25);
+            border-radius: 4px;
+            padding: 0 5px;
+        }
+
+        /* ── Footer ── */
+        #footer {
+            padding: 10px 16px 12px;
+            text-align: center;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.18);
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div id="header">
+        <img src="icons/icon48.png" class="logo" alt="X-Ops Walker" />
+        <span class="title" id="title-text">X-Ops Walker</span>
+        <span class="version" id="version-badge">v1.1.0</span>
+    </div>
+
+    <!-- Mode Card -->
+    <div id="mode-card">
+        <div class="row">
+            <div class="label-group">
+                <span class="mode-label" id="mode-label">Walker Mode</span>
+                <span id="status-text" class="off">—</span>
+            </div>
+            <div id="toggle" role="switch" aria-checked="false"></div>
+        </div>
+        <div id="status-row">
+            <div id="status-dot" class="off"></div>
+            <span id="status-detail"></span>
+        </div>
+    </div>
+
+    <!-- Shortcuts Card -->
+    <div id="shortcuts-card">
+        <div class="sc-title" id="sc-title"></div>
+        <div class="sc-hint" id="sc-hint"></div>
+    </div>
+
+    <!-- Footer -->
+    <div id="footer" id="footer-hint"></div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
