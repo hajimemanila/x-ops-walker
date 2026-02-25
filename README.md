@@ -1,4 +1,4 @@
-# Fox Walker (Firefox Extension)
+# X-Ops Walker (Browser Extension)
 
 **Fox Walker** is a high-precision, minimalist navigation tool designed to eliminate mouse dependency. It allows you to "walk through the web" with zero-latency keyboard control, built on a robust TypeScript architecture.
 
