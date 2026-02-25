@@ -4,6 +4,7 @@
   var STORAGE_KEY = "isWalkerMode";
   var SCROLL_AMOUNT = 380;
   var DOUBLE_TAP_DELAY = 250;
+  var WALKER_KEYS = /* @__PURE__ */ new Set(["a", "d", "s", "w", "f", "x", "z", "r", "m", "g", "0", " "]);
   var isWalkerMode = false;
   var lastKey = null;
   var lastKeyTime = 0;
@@ -110,16 +111,7 @@
     isWalkerMode = !!changes[STORAGE_KEY].newValue;
     hud.setState(isWalkerMode);
   });
-  window.addEventListener("keydown", (event) => {
-    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
-    if (event.repeat) return;
-    if (event.key === "Escape") {
-      isWalkerMode = !isWalkerMode;
-      browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
-      hud.setState(isWalkerMode);
-      return;
-    }
-    if (!isWalkerMode || isInputActive()) return;
+  function handleKeyInput(event) {
     const key = event.key.toLowerCase();
     const shift = event.shiftKey;
     const currentTime = Date.now();
@@ -141,13 +133,11 @@
     };
     if (isDoubleTap && key === "l") {
       event.preventDefault();
-      event.stopImmediatePropagation();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "F6", keyCode: 117, bubbles: true }));
       return;
     }
     if (isDoubleTap && doubleActions[key]) {
       event.preventDefault();
-      event.stopImmediatePropagation();
       browser.runtime.sendMessage({ command: doubleActions[key] });
       return;
     }
@@ -160,8 +150,25 @@
     };
     if (navActions[key]) {
       event.preventDefault();
-      event.stopImmediatePropagation();
       navActions[key]();
     }
-  }, true);
+  }
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
+    if (event.repeat) return;
+    if (document.fullscreenElement !== null && event.key === "Escape") return;
+    if (event.key === "Escape") {
+      isWalkerMode = !isWalkerMode;
+      browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
+      hud.setState(isWalkerMode);
+      return;
+    }
+    if (!isWalkerMode || isInputActive()) return;
+    const key = event.key.toLowerCase();
+    if (WALKER_KEYS.has(key)) {
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+    handleKeyInput(event);
+  }, { capture: true });
 })();

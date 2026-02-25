@@ -4,6 +4,10 @@ const STORAGE_KEY = 'isWalkerMode';
 const SCROLL_AMOUNT = 380;
 const DOUBLE_TAP_DELAY = 250; // AHK版の感触に合わせた待機時間
 
+// Fox Walker が主権を持つキー一覧
+// Walker Mode ON 時、これらのキーはサイト側への伝播を封殺する
+const WALKER_KEYS = new Set(['a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', '0', ' ']);
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let isWalkerMode = false;
 let lastKey: string | null = null;
@@ -27,7 +31,7 @@ function isInputActive(): boolean {
     return false;
 }
 
-// ── HUD (Shadow DOM - Full Restoration) ───────────────────────────────────────
+// ── HUD (Shadow DOM) ──────────────────────────────────────────────────────────
 interface HudController {
     setState(active: boolean): void;
 }
@@ -126,56 +130,42 @@ browser.storage.onChanged.addListener((changes, area) => {
     hud.setState(isWalkerMode);
 });
 
-// ── Key handler (Integrated Double Tap) ──────────────────────────────────────
-window.addEventListener('keydown', (event: KeyboardEvent) => {
-    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
-    if (event.repeat) return; // キーリピートは全て無視
-
-    if (event.key === 'Escape') {
-        isWalkerMode = !isWalkerMode;
-        browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
-        hud.setState(isWalkerMode);
-        return;
-    }
-
-    if (!isWalkerMode || isInputActive()) return;
-
+// ── Key handler: 実際の機能分岐 ───────────────────────────────────────────────
+function handleKeyInput(event: KeyboardEvent): void {
     const key = event.key.toLowerCase();
     const shift = event.shiftKey;
     const currentTime = Date.now();
     const isDoubleTap = (key === lastKey && (currentTime - lastKeyTime) < DOUBLE_TAP_DELAY);
 
-    // Double-tap state update
+    // ダブルタップ状態の更新
     if (!isDoubleTap) {
         lastKey = key;
         lastKeyTime = currentTime;
     } else {
-        lastKey = null; // Prevent triple-tap triggering
+        lastKey = null; // トリプルタップ防止
     }
 
-    // Command Table（ダブルタップ → background.tsのコマンドへ）
+    // ダブルタップ → background.ts へコマンド送信
     const doubleActions: Record<string, string> = {
         'g': 'DISCARD_TAB', 'x': 'CLOSE_TAB', 'z': 'UNDO_CLOSE',
         '0': 'CLEAN_UP', '9': 'GO_FIRST_TAB', 'm': 'MUTE_TAB',
         'r': 'RELOAD_TAB'
     };
 
-    // LL: URLバーフォーカス（background経由不可のためkernel側でF6を送出）
+    // LL: URLバーフォーカス（kernel側でF6を合成送出）
     if (isDoubleTap && key === 'l') {
         event.preventDefault();
-        event.stopImmediatePropagation();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', keyCode: 117, bubbles: true }));
         return;
     }
 
     if (isDoubleTap && doubleActions[key]) {
         event.preventDefault();
-        event.stopImmediatePropagation();
         browser.runtime.sendMessage({ command: doubleActions[key] });
         return;
     }
 
-    // Single-tap navigation
+    // シングルタップ: ナビゲーション
     const navActions: Record<string, () => void> = {
         'w': () => window.scrollBy({ top: -SCROLL_AMOUNT, behavior: 'smooth' }),
         's': () => window.scrollBy({ top: SCROLL_AMOUNT, behavior: 'smooth' }),
@@ -186,7 +176,37 @@ window.addEventListener('keydown', (event: KeyboardEvent) => {
 
     if (navActions[key]) {
         event.preventDefault();
-        event.stopImmediatePropagation();
         navActions[key]();
     }
-}, true);
+}
+
+// ── メインリスナー（capture: true で最優先取得）────────────────────────────────
+window.addEventListener('keydown', (event: KeyboardEvent): void => {
+    // 修飾キー単体・リピートは無視
+    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
+    if (event.repeat) return;
+
+    // 【全画面保護】fullscreen 中の ESC はブラウザ標準の全画面解除を優先して放流
+    if (document.fullscreenElement !== null && event.key === 'Escape') return;
+
+    // ESC: Walker Mode トグル（fullscreen 中以外）
+    if (event.key === 'Escape') {
+        isWalkerMode = !isWalkerMode;
+        browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
+        hud.setState(isWalkerMode);
+        return;
+    }
+
+    // Walker Mode OFF または入力フォーム中は介入しない
+    if (!isWalkerMode || isInputActive()) return;
+
+    const key = event.key.toLowerCase();
+
+    // 【主導権の奪還】定義済みキーはサイト側への伝播を封殺してから処理
+    if (WALKER_KEYS.has(key)) {
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+
+    handleKeyInput(event);
+}, { capture: true });
