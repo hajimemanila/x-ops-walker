@@ -1,65 +1,111 @@
-# X-Ops Walker (Browser Extension)
+# X-Ops Walker
 
-**X-Ops Walker** is a high-precision, minimalist navigation tool designed to eliminate mouse dependency. It allows you to "walk through the web" with zero-latency keyboard control, built on a robust TypeScript architecture.
+**X-Ops Walker** is a high-precision, minimalist Firefox navigation extension designed to eliminate mouse dependency. Walk through the web with zero-latency keyboard control, built on a strict TypeScript architecture.
 
-Unlike standard extensions, Fox Walker features a smart bypass engine that prevents you from getting stuck on restricted pages like `about:addons` or `addons.mozilla.org`.
-
-## 🔥 Core Philosophies
-
-- **Smart Navigation**: Automatically detects and skips "restricted zones" (`about:`, `chrome:`, `moz-extension:`, etc.) to ensure seamless tab switching.
-- **Robust Walker Mode (ESC)**: 
-    - Instant toggle via `Escape` key.
-    - Built-in `event.repeat` guard to prevent state-flip errors caused by hardware key-repeat.
-- **Resource Mastery**: 
-    - **00 (Clean up)**: Purges all tabs except the active one and "Pinned" tabs.
-    - **GG (Discard)**: Suspends all background tabs (except Pinned) to reclaim memory without losing your workspace.
-- **Shadow DOM HUD**: A custom Glassmorphism HUD isolated via Shadow DOM. Visual feedback (Pulse Animation) is immune to the CSS of the websites you visit.
-- **Type-Safe Logic**: Engineered with TypeScript + esbuild. Strict type definitions eliminate runtime errors and ensure reliable command execution.
+---
 
 ## ⌨️ Key Bindings
+
+### Single Press
 
 | Key | Action |
 | :--- | :--- |
 | **ESC** | Toggle Walker Mode |
 | **W / S** | Smooth Scroll (Up / Down) |
-| **A / D** | Previous / Next Tab (Bypass restricted pages) |
-| **Space** | Next Tab (Shift+Space: Previous) |
-| **XX** (Double-tap) | Close Current Tab |
-| **ZZ** (Double-tap) | Undo Close Tab (Restore Session) |
-| **RR** (Double-tap) | Reload Current Tab |
-| **MM** (Double-tap) | Mute / Unmute Tab |
-| **GG** (Double-tap) | Discard all tabs (except Active/Pinned) |
-| **00** (Double-tap) | Close all tabs (except Active/Pinned) |
+| **A / D** | Previous / Next Tab (bypasses restricted pages) |
+| **Space** | Next Tab · **Shift+Space**: Previous Tab |
+| **Q** | History Back |
+| **E** | History Forward |
+| **Z** | DOM Reset (blur focus) |
+| **F** | Toggle Cheatsheet |
 
-## 🏗 Development & Build
+### Double-Tap
 
-### Structure
-- `src/`: TypeScript source files (Logic).
-- `dist/`: Build artifacts (Load this folder into Firefox).
+| Keys | Action |
+| :--- | :--- |
+| **XX** | Close Current Tab |
+| **ZZ** | Restore Last Closed Tab |
+| **RR** | Reload Tab |
+| **MM** | Mute / Unmute Tab |
+| **GG** | Discard All Background Tabs (except Pinned) |
+| **00** | Close All Other Tabs (except Active/Pinned) |
+| **WW** | Scroll to Top (smooth) |
+| **VV** | Scroll to Bottom (smooth) |
+| **CC** | Duplicate Tab (preserves container & session) |
 
-### Setup
-```bash
-# Install dependencies
-npm install
+---
 
-# Production Build
-npm run build
+## 🔥 Core Design Principles
 
-# Development (Watch Mode)
-npm run watch
+- **Smart Bypass Engine**: Automatically skips restricted pages (`about:`, `moz-extension:`, etc.) during tab switching — you never get stuck.
+- **Capture-Phase Listener**: The `keydown` listener runs at capture phase (`capture: true`) so Walker keys are intercepted before page scripts, preventing conflicts with site-native shortcuts (e.g., Twitter).
+- **Zero Layout Residue**: HUD and Cheatsheet use `display: none` (not `pointer-events: none`) when hidden — the extension leaves no invisible layer that could swallow clicks on React/synthetic-event UIs.
+- **Shadow DOM Isolation**: HUD and Cheatsheet are rendered inside closed Shadow DOM trees, fully immune to site CSS.
+- **Type-Safe Architecture**: TypeScript + esbuild. Strict types eliminate runtime errors.
+- **i18n**: UI labels are fully localized in English (default) and Japanese via `browser.i18n`.
+
+---
+
+## 🛡️ Security Guard Clause
+
+Walker Mode is **automatically suppressed** when the focused element matches any of the following. No Walker action fires, and no key event is modified:
+
+| Condition | Covered Cases |
+| :--- | :--- |
+| `type="password"` | Login / account password fields |
+| `autocomplete` contains `password` or `cc-*` | Payment forms, credit card inputs |
+| `isContentEditable` | Tweet composer, rich-text editors |
+| `INPUT / TEXTAREA / SELECT` | All standard text-input elements |
+| `role="textbox"` | Custom editor components |
+
+> **Purpose**: To dispel keylogger concerns and prevent unintended Walker actions (scroll, tab-switch, etc.) during sensitive input.
+
+---
+
+## 🔒 Privacy Declaration
+
+> **This extension makes zero external network requests.**
+>
+> - No `fetch()`, `XMLHttpRequest`, `WebSocket`, or any other outgoing connection is present in the source code.
+> - All logic runs entirely within the browser. No data is collected, stored externally, or transmitted.
+> - **The GitHub repository is the complete and authoritative source of truth.** The installed extension is built directly from it with no additional dependencies injected at runtime.
+> - Permissions used: `storage` (persist Walker Mode state), `tabs`, `sessions` (undo-close), `tabHide`.
+
+---
+
+## 🧩 Optional Feature: Block Google One Tap
+
+The popup provides a toggle (default **OFF**) to suppress Google One Tap / GSI login popups across all sites. When enabled, the following elements are hidden via injected CSS:
+
+- `iframe[src*="accounts.google.com/gsi/"]`
+- `iframe[src*="smartlock.google.com"]`
+- `#credential_picker_container`, `#google_one_tap_notification`
+
+This prevents the One Tap iframe from stealing keyboard focus and disabling Walker keybinds.
+
+---
+
+## 🏗 Build
+
+```
+src/          TypeScript source files
+dist/         Build output — load this folder into Firefox via about:debugging
+_locales/     i18n message files (en / ja)
 ```
 
-## 🔒 Privacy & Security
+```bash
+npm install        # install devDependencies (esbuild, type defs)
+npm run build      # production build → dist/
+npm run watch      # incremental watch build
+```
 
-X-Ops Walker implements a **Security Guard Clause** that immediately exits all key processing when the focused element is:
+**Loading in Firefox:**
+1. Navigate to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on**
+3. Select `dist/manifest.json`
 
-| Condition | Example |
-| :--- | :--- |
-| `type="password"` field | Login / account password inputs |
-| `autocomplete` contains `password` or `cc-*` | Payment forms, credit card fields |
-| `isContentEditable` element | Rich-text editors, inline editors |
-
-**No input data is ever read, stored, or transmitted.** Walker Mode is automatically suppressed on sensitive fields — keystrokes from password or payment forms are never intercepted or processed by this extension.
+---
 
 ## 📜 License
+
 MIT License.
