@@ -424,6 +424,19 @@ browser.storage.onChanged.addListener((changes, area) => {
     }
 });
 
+// ── Arrival Override リスナー（Background → Kernel）────────────────────────────
+// タブ到着直後にバックグラウンドから FORCE_BLUR_ON_ARRIVAL が送られてくる。
+// Walker Mode が無効な場合は何もしない（ユーザーの意図しないフォーカス奪取防止）。
+browser.runtime.onMessage.addListener((message: { command: string }) => {
+    if (message.command !== 'FORCE_BLUR_ON_ARRIVAL') return;
+    if (!isWalkerMode) return;  // Walker OFF 時は完全無視
+
+    if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+    }
+    window.focus();
+});
+
 // ── Key handler ───────────────────────────────────────────────────────────────
 function handleKeyInput(event: KeyboardEvent): void {
     const key = event.key.toLowerCase();

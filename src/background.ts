@@ -7,20 +7,18 @@
  * ソート後の tabs[] 配列の添字（0, 1, 2...）とは別物。
  * そのため配列上の位置（findIndex）を使って nextIndex を計算する。
  */
-async function shiftTab(direction: 1 | -1): Promise<void> {
+async function shiftTab(direction: 1 | -1): Promise<number | undefined> {
     try {
         const tabs = await browser.tabs.query({ currentWindow: true });
-        if (tabs.length <= 1) return;
+        if (tabs.length <= 1) return undefined;
 
         tabs.sort((a, b) => a.index - b.index);
 
-        // ✅ 修正: activeTab.index ではなく 配列上の添字（arrayPos）を使う
         const arrayPos = tabs.findIndex(t => t.active);
-        if (arrayPos === -1) return;
+        if (arrayPos === -1) return undefined;
 
         let nextPos = (arrayPos + direction + tabs.length) % tabs.length;
 
-        // ── 特権ページスキップ ──
         for (let attempts = 0; attempts < tabs.length; attempts++) {
             const targetTab = tabs[nextPos];
             const url = targetTab.url ?? '';
@@ -33,15 +31,36 @@ async function shiftTab(direction: 1 | -1): Promise<void> {
 
             if (!isRestricted) {
                 await browser.tabs.update(targetTab.id!, { active: true });
-                return;
+                return targetTab.id;  // 活性化したタブIDを返す
             }
 
             nextPos = (nextPos + direction + tabs.length) % tabs.length;
         }
-        // 全タブが特権ページの場合は何もしない
     } catch (e) {
-        console.error('[FoxWalker] shiftTab error:', e);
+        console.error('[X-Ops Walker] shiftTab error:', e);
     }
+    return undefined;
+}
+
+// ── Background → Content Script メッセージ型定義 ───────────────────────────────
+type BackgroundCommand = 'FORCE_BLUR_ON_ARRIVAL';
+
+interface BackgroundMessage {
+    command: BackgroundCommand;
+}
+
+/**
+ * タブ到着後に Arrival Override を送信する。
+ * ブラウザ自身のフォーカス復元処理を待ってから blur を指示するため、
+ * 50ms 遺延して content script へメッセージを送信する。
+ */
+function sendArrivalBlur(tabId: number): void {
+    setTimeout(() => {
+        const msg: BackgroundMessage = { command: 'FORCE_BLUR_ON_ARRIVAL' };
+        browser.tabs.sendMessage(tabId, msg).catch(() => {
+            // content script がないページ（about: 等）は無視
+        });
+    }, 50);
 }
 
 type FoxWalkerCommand =
@@ -70,13 +89,17 @@ browser.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
     (async () => {
         try {
             switch (message.command) {
-                case 'NEXT_TAB':
-                    await shiftTab(1);
+                case 'NEXT_TAB': {
+                    const nextId = await shiftTab(1);
+                    if (nextId !== undefined) sendArrivalBlur(nextId);
                     break;
+                }
 
-                case 'PREV_TAB':
-                    await shiftTab(-1);
+                case 'PREV_TAB': {
+                    const prevId = await shiftTab(-1);
+                    if (prevId !== undefined) sendArrivalBlur(prevId);
                     break;
+                }
 
                 case 'CLOSE_TAB': {
                     if (tabId !== undefined) await browser.tabs.remove(tabId);
@@ -118,11 +141,11 @@ browser.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                 }
 
                 case 'GO_FIRST_TAB': {
-                    // 99: index最小（最も左）のタブへ移動
                     const allTabs = await browser.tabs.query({ currentWindow: true });
                     allTabs.sort((a, b) => a.index - b.index);
                     if (allTabs[0]?.id !== undefined) {
                         await browser.tabs.update(allTabs[0].id!, { active: true });
+                        sendArrivalBlur(allTabs[0].id!);
                     }
                     break;
                 }

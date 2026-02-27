@@ -360,6 +360,14 @@
       applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
     }
   });
+  browser.runtime.onMessage.addListener((message) => {
+    if (message.command !== "FORCE_BLUR_ON_ARRIVAL") return;
+    if (!isWalkerMode) return;
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    window.focus();
+  });
   function handleKeyInput(event) {
     const key = event.key.toLowerCase();
     const shift = event.shiftKey;
