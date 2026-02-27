@@ -208,6 +208,63 @@
             padding: 0 5px;
         }
 
+        /* ── Settings card ── */
+        #settings-card {
+            margin: 8px 12px 0;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .setting-label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.50);
+            letter-spacing: 0.04em;
+        }
+
+        /* Mini toggle — same design language as #toggle but smaller */
+        .mini-toggle {
+            position: relative;
+            width: 36px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+            flex-shrink: 0;
+        }
+
+        .mini-toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            background: rgba(255, 255, 255, 0.50);
+            border-radius: 50%;
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s;
+        }
+
+        .mini-toggle.active {
+            background: rgba(255, 140, 0, 0.25);
+            border-color: rgba(255, 140, 0, 0.50);
+            box-shadow: 0 0 8px rgba(255, 140, 0, 0.20);
+        }
+
+        .mini-toggle.active::after {
+            transform: translateX(16px);
+            background: #ffac30;
+        }
+
         /* ── Footer ── */
         #footer {
             padding: 10px 16px 12px;
@@ -247,6 +304,14 @@
     <div id="shortcuts-card">
         <div class="sc-title" id="sc-title"></div>
         <div class="sc-hint" id="sc-hint"></div>
+    </div>
+
+    <!-- Settings Card -->
+    <div id="settings-card">
+        <div class="setting-row">
+            <span class="setting-label" id="blocker-label"></span>
+            <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+        </div>
     </div>
 
     <!-- Footer -->

@@ -25,6 +25,22 @@
     "a": () => browser.runtime.sendMessage({ command: "PREV_TAB" }),
     "d": () => browser.runtime.sendMessage({ command: "NEXT_TAB" })
   };
+  var BLOCKER_KEY = "blockGoogleOneTap";
+  var oneTapBlockStyle = document.createElement("style");
+  oneTapBlockStyle.textContent = [
+    'iframe[src*="accounts.google.com/gsi/"]',
+    'iframe[src*="smartlock.google.com"]',
+    "#credential_picker_container",
+    "#google_one_tap_notification",
+    "#google-one-tap-popup"
+  ].join(",\n") + " { display: none !important; pointer-events: none !important; }";
+  function applyOneTapBlocker(enabled) {
+    if (enabled && !oneTapBlockStyle.isConnected) {
+      document.documentElement.appendChild(oneTapBlockStyle);
+    } else if (!enabled && oneTapBlockStyle.isConnected) {
+      oneTapBlockStyle.remove();
+    }
+  }
   var isWalkerMode = false;
   var lastKey = null;
   var lastKeyTime = 0;
@@ -329,14 +345,20 @@
     mount();
     return { toggle, hide, isVisible };
   })();
-  browser.storage.local.get(STORAGE_KEY).then((result) => {
+  browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
     isWalkerMode = !!result[STORAGE_KEY];
     hud.setState(isWalkerMode);
+    applyOneTapBlocker(!!result[BLOCKER_KEY]);
   });
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local" || !(STORAGE_KEY in changes)) return;
-    isWalkerMode = !!changes[STORAGE_KEY].newValue;
-    hud.setState(isWalkerMode);
+    if (area !== "local") return;
+    if (STORAGE_KEY in changes) {
+      isWalkerMode = !!changes[STORAGE_KEY].newValue;
+      hud.setState(isWalkerMode);
+    }
+    if (BLOCKER_KEY in changes) {
+      applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    }
   });
   function handleKeyInput(event) {
     const key = event.key.toLowerCase();

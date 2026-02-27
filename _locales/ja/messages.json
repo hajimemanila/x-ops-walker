@@ -97,5 +97,8 @@
     },
     "popup_footer_hint": {
         "message": "Escキーで Walker Mode を切り替えられます"
+    },
+    "popup_blocker_label": {
+        "message": "Google One Tap をブロック"
     }
 }

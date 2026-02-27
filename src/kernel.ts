@@ -23,6 +23,31 @@ const NAV_ACTIONS: Record<string, () => void> = {
     'd': () => browser.runtime.sendMessage({ command: 'NEXT_TAB' }),
 };
 
+// ── Google One Tap 迎撃CSS ──────────────────────────────────────────────────────
+// Google One Tap iframe によるフォーカス強奪を防ぎ、
+// X-Ops Walker のキーバインドを死守するための迎撃 CSS。
+// ストレージ設定に応じて動的に有効/無効を切り替える。デフォルト OFF。
+const BLOCKER_KEY = 'blockGoogleOneTap';
+
+const oneTapBlockStyle = document.createElement('style');
+oneTapBlockStyle.textContent = [
+    'iframe[src*="accounts.google.com/gsi/"]',
+    'iframe[src*="smartlock.google.com"]',
+    '#credential_picker_container',
+    '#google_one_tap_notification',
+    '#google-one-tap-popup',
+].join(',\n') + ' { display: none !important; pointer-events: none !important; }';
+
+function applyOneTapBlocker(enabled: boolean): void {
+    if (enabled && !oneTapBlockStyle.isConnected) {
+        document.documentElement.appendChild(oneTapBlockStyle);
+    } else if (!enabled && oneTapBlockStyle.isConnected) {
+        oneTapBlockStyle.remove();
+    }
+}
+
+
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let isWalkerMode = false;
 let lastKey: string | null = null;
@@ -382,15 +407,21 @@ const cheatsheet: CheatsheetController = (() => {
 })();
 
 // ── Storage logic ─────────────────────────────────────────────────────────────
-browser.storage.local.get(STORAGE_KEY).then((result) => {
+browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
     isWalkerMode = !!result[STORAGE_KEY];
     hud.setState(isWalkerMode);
+    applyOneTapBlocker(!!result[BLOCKER_KEY]);  // デフォルト false (OFF)
 });
 
 browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !(STORAGE_KEY in changes)) return;
-    isWalkerMode = !!changes[STORAGE_KEY].newValue;
-    hud.setState(isWalkerMode);
+    if (area !== 'local') return;
+    if (STORAGE_KEY in changes) {
+        isWalkerMode = !!changes[STORAGE_KEY].newValue;
+        hud.setState(isWalkerMode);
+    }
+    if (BLOCKER_KEY in changes) {
+        applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    }
 });
 
 // ── Key handler ───────────────────────────────────────────────────────────────

@@ -97,5 +97,8 @@
     },
     "popup_footer_hint": {
         "message": "Esc toggles Walker Mode on any page"
+    },
+    "popup_blocker_label": {
+        "message": "Block Google One Tap"
     }
 }
