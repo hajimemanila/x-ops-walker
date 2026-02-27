@@ -345,6 +345,13 @@
     mount();
     return { toggle, hide, isVisible };
   })();
+  function blurActiveInput() {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && el !== document.body) {
+      el.blur();
+    }
+    window.focus();
+  }
   browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
     isWalkerMode = !!result[STORAGE_KEY];
     hud.setState(isWalkerMode);
@@ -355,6 +362,7 @@
     if (STORAGE_KEY in changes) {
       isWalkerMode = !!changes[STORAGE_KEY].newValue;
       hud.setState(isWalkerMode);
+      if (isWalkerMode && !document.hidden) blurActiveInput();
     }
     if (BLOCKER_KEY in changes) {
       applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
@@ -432,6 +440,7 @@
       isWalkerMode = !isWalkerMode;
       browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
       hud.setState(isWalkerMode);
+      if (isWalkerMode) blurActiveInput();
       return;
     }
     if (!isWalkerMode || isInputActive()) return;

@@ -406,6 +406,18 @@ const cheatsheet: CheatsheetController = (() => {
     return { toggle, hide, isVisible };
 })();
 
+// ── Blur on Enable ヘルパー ───────────────────────────────────────────────────
+// 入力欄にフォーカスが残ったまま Walker Mode が ON になった際に、
+// 入力欄からフォーカスを強制的に外して操作の主導権を取り戻す。
+function blurActiveInput(): void {
+    const el = document.activeElement;
+    // body は「フォーカスなし」のデフォルト状態なのでスキップ
+    if (el instanceof HTMLElement && el !== document.body) {
+        el.blur();
+    }
+    window.focus();
+}
+
 // ── Storage logic ─────────────────────────────────────────────────────────────
 browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
     isWalkerMode = !!result[STORAGE_KEY];
@@ -418,6 +430,10 @@ browser.storage.onChanged.addListener((changes, area) => {
     if (STORAGE_KEY in changes) {
         isWalkerMode = !!changes[STORAGE_KEY].newValue;
         hud.setState(isWalkerMode);
+        // ポップアップから ON にした際も入力欄ブラーを発火
+        // document.hidden チェック：バックグラウンドタブが window.focus() を呼んで
+        // タブが勝手に切り替わる問題を防ぐ。前景タブのみ実行。
+        if (isWalkerMode && !document.hidden) blurActiveInput();
     }
     if (BLOCKER_KEY in changes) {
         applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
@@ -510,6 +526,8 @@ window.addEventListener('keydown', (event: KeyboardEvent): void => {
         isWalkerMode = !isWalkerMode;
         browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
         hud.setState(isWalkerMode);
+        // Esc で ON になった際だけ入力欄ブラーを発火（OFF時は実行しない）
+        if (isWalkerMode) blurActiveInput();
         return;
     }
 
