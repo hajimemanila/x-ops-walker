@@ -27,18 +27,26 @@
     const msg = browser.i18n.getMessage(key);
     return msg || key;
   }
+  function isSensitiveElement(el) {
+    const htmlEl = el;
+    if (el.tagName === "INPUT" && el.type === "password") return true;
+    const ac = htmlEl.getAttribute("autocomplete") ?? "";
+    if (ac.includes("password") || ac.startsWith("cc-")) return true;
+    if (htmlEl.isContentEditable) return true;
+    return false;
+  }
   function isInputActive() {
     const el = document.activeElement;
     if (!el) return false;
+    if (isSensitiveElement(el)) return true;
     const tag = el.tagName.toUpperCase();
     if (["INPUT", "TEXTAREA", "SELECT", "OPTION"].includes(tag)) return true;
-    if (el.isContentEditable) return true;
     if (el.shadowRoot) {
       const inner = el.shadowRoot.activeElement;
       if (inner) {
+        if (isSensitiveElement(inner)) return true;
         const innerTag = inner.tagName.toUpperCase();
         if (["INPUT", "TEXTAREA", "SELECT"].includes(innerTag)) return true;
-        if (inner.isContentEditable) return true;
       }
     }
     return false;

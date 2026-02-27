@@ -27,19 +27,42 @@ function t(key: string): string {
     return msg || key;
 }
 
-// ── Input guard ───────────────────────────────────────────────────────────────
+// ── Security Guard Clause (Input Guard) ──────────────────────────────────────
+// キーロガーの疑念を払拭し、機密入力時の意図しないスクロールを防止するため、
+// パスワード・クレジットカード・contentEditable 要素ではキー処理を一切行わず即座に return する。
+function isSensitiveElement(el: Element): boolean {
+    const htmlEl = el as HTMLElement;
+
+    // type="password" — 最優先ガード
+    if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'password') return true;
+
+    // autocomplete に "password" または "cc-" プレフィックスが含まれる要素
+    // （標準 INPUT 以外のカスタム要素でも確実にガードする）
+    const ac = htmlEl.getAttribute('autocomplete') ?? '';
+    if (ac.includes('password') || ac.startsWith('cc-')) return true;
+
+    // isContentEditable — テキスト編集中の可能性があるため除外
+    if (htmlEl.isContentEditable) return true;
+
+    return false;
+}
+
 function isInputActive(): boolean {
     const el = document.activeElement;
     if (!el) return false;
+
+    // Security Guard Clause: 機密フィールドでは即座に処理を中断
+    if (isSensitiveElement(el)) return true;
+
     const tag = el.tagName.toUpperCase();
     if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'].includes(tag)) return true;
-    if ((el as HTMLElement).isContentEditable) return true;
+
     if (el.shadowRoot) {
         const inner = el.shadowRoot.activeElement;
         if (inner) {
+            if (isSensitiveElement(inner)) return true;
             const innerTag = inner.tagName.toUpperCase();
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(innerTag)) return true;
-            if ((inner as HTMLElement).isContentEditable) return true;
         }
     }
     return false;

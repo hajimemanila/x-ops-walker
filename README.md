@@ -49,5 +49,17 @@ npm run build
 npm run watch
 ```
 
+## 🔒 Privacy & Security
+
+X-Ops Walker implements a **Security Guard Clause** that immediately exits all key processing when the focused element is:
+
+| Condition | Example |
+| :--- | :--- |
+| `type="password"` field | Login / account password inputs |
+| `autocomplete` contains `password` or `cc-*` | Payment forms, credit card fields |
+| `isContentEditable` element | Rich-text editors, inline editors |
+
+**No input data is ever read, stored, or transmitted.** Walker Mode is automatically suppressed on sensitive fields — keystrokes from password or payment forms are never intercepted or processed by this extension.
+
 ## 📜 License
 MIT License.
