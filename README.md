@@ -19,19 +19,19 @@
 | **Z** | DOM Reset (blur focus) |
 | **F** | Toggle Cheatsheet |
 
-### Double-Tap
+### Shift + Key
 
 | Keys | Action |
 | :--- | :--- |
-| **XX** | Close Current Tab |
-| **ZZ** | Restore Last Closed Tab |
-| **RR** | Reload Tab |
-| **MM** | Mute / Unmute Tab |
-| **GG** | Discard All Background Tabs (except Pinned) |
-| **00** | Close All Other Tabs (except Active/Pinned) |
-| **WW** | Scroll to Top (smooth) |
-| **VV** | Scroll to Bottom (smooth) |
-| **CC** | Duplicate Tab (preserves container & session) |
+| **Shift + X** | Close Current Tab |
+| **Shift + Z** | Restore Last Closed Tab |
+| **Shift + R** | Reload Tab |
+| **Shift + M** | Mute / Unmute Tab |
+| **Shift + G** | Discard All Background Tabs (except Pinned) |
+| **Shift + 0** | Close All Other Tabs (except Active/Pinned) |
+| **Shift + W** | Scroll to Top (smooth) |
+| **Shift + V** | Scroll to Bottom (smooth) |
+| **Shift + C** | Duplicate Tab (preserves container & session) |
 
 ---
 
