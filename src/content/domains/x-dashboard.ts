@@ -18,8 +18,9 @@ function removeDashboard() {
     }
     const spacer = document.getElementById('x-ops-dashboard-spacer');
     if (spacer) spacer.remove();
+
     const box = document.getElementById('x-ops-dashboard-box');
-    if (box) box.style.display = 'none';
+    if (box) box.remove(); // Completely remove to keep DOM clean when OFF
 }
 
 function pollAndSync() {
@@ -31,27 +32,14 @@ function pollAndSync() {
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
     if (!sidebar) return;
 
-    // Find the search bar container to insert after it
-    // The search form usually resides in a fixed top-level container in the sidebar.
-    const searchForm = sidebar.querySelector('form[role="search"]');
-    const searchContainer = searchForm?.closest('.css-175oi2r.r-1p0dtai, .css-175oi2r.r-1aqg1i6, .css-175oi2r');
-
     let spacer = document.getElementById('x-ops-dashboard-spacer');
     if (!spacer) {
         spacer = document.createElement('div');
         spacer.id = 'x-ops-dashboard-spacer';
-        // Give it reasonable dimensions
-        spacer.style.height = '320px';
         spacer.style.width = '100%';
         spacer.style.marginTop = '12px';
         spacer.style.opacity = '0';
         spacer.style.pointerEvents = 'none';
-
-        if (searchContainer && searchContainer.parentNode) {
-            searchContainer.parentNode.insertBefore(spacer, searchContainer.nextSibling);
-        } else {
-            sidebar.appendChild(spacer);
-        }
     }
 
     let box = document.getElementById('x-ops-dashboard-box');
@@ -90,22 +78,44 @@ function pollAndSync() {
         document.body.appendChild(box);
     }
 
-    box.style.display = 'block';
+    const searchBar = sidebar.querySelector('[role="search"]');
 
-    // Sync position exactly over the spacer
+    // Deep Hook: Safely traverse up the DOM to inject the spacer
+    if (spacer && searchBar && !spacer.isConnected) {
+        let target = searchBar;
+        let depth = 0;
+        // Traverse up until we are just below the sidebar's main wrapper
+        while (target.parentElement && target.parentElement !== sidebar.firstChild && depth < 12) {
+            target = target.parentElement as Element;
+            depth++;
+        }
+        if (target && target.parentElement) {
+            target.after(spacer);
+        }
+    } else if (spacer && !spacer.isConnected) {
+        // Fallback injection if search bar isn't found
+        sidebar.appendChild(spacer);
+    }
+
+    // Box Syncing
     const spacerRect = spacer.getBoundingClientRect();
     const boxHeight = box.offsetHeight;
+    const isSidebarVisible = window.getComputedStyle(sidebar).display !== 'none';
 
-    if (spacerRect.width > 0) {
-        // 1. Force the spacer to take up physical space in the native DOM
-        spacer.style.height = (boxHeight + 10) + 'px';
+    if (isSidebarVisible) {
+        box.style.width = (spacerRect.width > 0 ? spacerRect.width : 350) + 'px';
+        box.style.display = 'block';
 
-        // 2. Sync the Box to float exactly over the Spacer
-        box.style.width = spacerRect.width + 'px';
-        box.style.left = spacerRect.left + 'px';
-
-        // 3. Keep it below the search bar (53px is X's sticky header height)
-        box.style.top = Math.max(spacerRect.top, 53) + 'px';
+        if (spacerRect.width > 0) {
+            // 1. Force the spacer to take up physical space to push native content down
+            spacer.style.height = (boxHeight + 10) + 'px';
+            // 2. Sync the Box to float exactly over the Spacer
+            box.style.left = spacerRect.left + 'px';
+            // 3. Keep it below the search bar (53px is X's sticky header height)
+            box.style.top = Math.max(spacerRect.top, 53) + 'px';
+        }
+    } else {
+        box.style.display = 'none';
     }
 }
 

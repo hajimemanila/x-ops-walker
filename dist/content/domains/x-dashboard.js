@@ -15,7 +15,7 @@
     const spacer = document.getElementById("x-ops-dashboard-spacer");
     if (spacer) spacer.remove();
     const box = document.getElementById("x-ops-dashboard-box");
-    if (box) box.style.display = "none";
+    if (box) box.remove();
   }
   function pollAndSync() {
     if (!isDashboardEnabled) {
@@ -24,22 +24,14 @@
     }
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
     if (!sidebar) return;
-    const searchForm = sidebar.querySelector('form[role="search"]');
-    const searchContainer = searchForm?.closest(".css-175oi2r.r-1p0dtai, .css-175oi2r.r-1aqg1i6, .css-175oi2r");
     let spacer = document.getElementById("x-ops-dashboard-spacer");
     if (!spacer) {
       spacer = document.createElement("div");
       spacer.id = "x-ops-dashboard-spacer";
-      spacer.style.height = "320px";
       spacer.style.width = "100%";
       spacer.style.marginTop = "12px";
       spacer.style.opacity = "0";
       spacer.style.pointerEvents = "none";
-      if (searchContainer && searchContainer.parentNode) {
-        searchContainer.parentNode.insertBefore(spacer, searchContainer.nextSibling);
-      } else {
-        sidebar.appendChild(spacer);
-      }
     }
     let box = document.getElementById("x-ops-dashboard-box");
     if (!box) {
@@ -73,14 +65,33 @@
       box.appendChild(placeholder);
       document.body.appendChild(box);
     }
-    box.style.display = "block";
+    const searchBar = sidebar.querySelector('[role="search"]');
+    if (spacer && searchBar && !spacer.isConnected) {
+      let target = searchBar;
+      let depth = 0;
+      while (target.parentElement && target.parentElement !== sidebar.firstChild && depth < 12) {
+        target = target.parentElement;
+        depth++;
+      }
+      if (target && target.parentElement) {
+        target.after(spacer);
+      }
+    } else if (spacer && !spacer.isConnected) {
+      sidebar.appendChild(spacer);
+    }
     const spacerRect = spacer.getBoundingClientRect();
     const boxHeight = box.offsetHeight;
-    if (spacerRect.width > 0) {
-      spacer.style.height = boxHeight + 10 + "px";
-      box.style.width = spacerRect.width + "px";
-      box.style.left = spacerRect.left + "px";
-      box.style.top = Math.max(spacerRect.top, 53) + "px";
+    const isSidebarVisible = window.getComputedStyle(sidebar).display !== "none";
+    if (isSidebarVisible) {
+      box.style.width = (spacerRect.width > 0 ? spacerRect.width : 350) + "px";
+      box.style.display = "block";
+      if (spacerRect.width > 0) {
+        spacer.style.height = boxHeight + 10 + "px";
+        box.style.left = spacerRect.left + "px";
+        box.style.top = Math.max(spacerRect.top, 53) + "px";
+      }
+    } else {
+      box.style.display = "none";
     }
   }
   console.log("[X-Ops Walker X-Dashboard] Loaded. Waiting for PhantomState...");
