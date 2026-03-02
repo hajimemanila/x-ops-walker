@@ -16,7 +16,9 @@ let isActive = false;
 let currentIndex = -1;
 let targetArticles: HTMLElement[] = [];
 let indicatorDiv: HTMLElement | null = null;
-let backspacePressTime = 0;
+let backspaceTimer: number | null = null;
+let isBackspaceHeld = false;
+let originalTitle = "";
 
 // CSS
 const style = document.createElement('style');
@@ -163,45 +165,7 @@ function xOpsOpenDetail(article: HTMLElement) {
     if (timeLink) timeLink.click();
 }
 
-function xOpsHandleDelete(article: HTMLElement, isLongPress: boolean) {
-    if (isLongPress) {
-        // Silent confirm sequence
-        const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]') as HTMLElement;
-        if (confirmBtn) {
-            confirmBtn.click();
-            if (article) flashFeedback(article, 'rgba(244, 33, 46, 0.3)');
-            setTimeout(() => {
-                updateTargets();
-                if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
-                focusArticle(currentIndex);
-            }, 500);
-            return;
-        }
-
-        if (!article) return;
-        const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
-        if (!caret) return;
-        caret.click();
-        setTimeout(() => {
-            const menu = document.querySelector('[role="menu"]');
-            if (!menu) return;
-            const deleteItem = Array.from(menu.querySelectorAll('[role="menuitem"]')).find(el => el.textContent?.match(/削除|Delete/)) as HTMLElement;
-            if (deleteItem) { deleteItem.click(); }
-        }, 100);
-    } else {
-        // Short tap: Just open menu -> click delete but DO NOT click confirm
-        if (!article) return;
-        const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
-        if (!caret) return;
-        caret.click();
-        setTimeout(() => {
-            const menu = document.querySelector('[role="menu"]');
-            if (!menu) return;
-            const deleteItem = Array.from(menu.querySelectorAll('[role="menuitem"]')).find(el => el.textContent?.match(/削除|Delete/)) as HTMLElement;
-            if (deleteItem) { deleteItem.click(); }
-        }, 100);
-    }
-}
+// Removed xOpsHandleDelete to be replaced by inline Backspace Overdrive
 
 function isInputActive(): boolean {
     const activeEl = document.activeElement;
@@ -215,9 +179,58 @@ window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
 
     if (e.code === 'Backspace') {
-        if (!e.repeat) backspacePressTime = Date.now();
-        // Prevent default browser back behavior
         e.preventDefault();
+        e.stopPropagation();
+
+        if (e.repeat) return; // Prevent multiple triggers
+
+        isBackspaceHeld = true;
+        resyncCurrentIndex();
+        const article = targetArticles[currentIndex];
+        if (!article) return;
+
+        // Visual Feedback (Tab Title)
+        originalTitle = document.title;
+        document.title = "⚠️ DRS ACTIVE ⚠️";
+
+        // Phase A: Immediate open menu
+        const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
+        if (caret) caret.click();
+
+        setTimeout(() => {
+            const menu = document.querySelector('[role="menu"]');
+            if (!menu) return;
+            const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+            const deleteItem = deleteItems.find(el => el.textContent?.match(/削除|Delete/)) as HTMLElement;
+            if (deleteItem) deleteItem.click();
+        }, 100);
+
+        // Phase B: Timer 600ms
+        backspaceTimer = window.setTimeout(() => {
+            if (isBackspaceHeld) {
+                // Phase C: Auto-Click
+                let attempts = 0;
+                const interval = setInterval(() => {
+                    const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]') as HTMLElement;
+                    if (confirmBtn) {
+                        clearInterval(interval);
+                        confirmBtn.click();
+                        flashFeedback(article, 'rgba(244, 33, 46, 0.3)');
+                        setTimeout(() => {
+                            updateTargets();
+                            if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
+                            focusArticle(currentIndex);
+                        }, 500);
+                    } else if (++attempts > 40) {
+                        clearInterval(interval);
+                    }
+                }, 50);
+
+                // Cleanup visual feedback
+                if (document.title === "⚠️ DRS ACTIVE ⚠️") document.title = originalTitle;
+                isBackspaceHeld = false;
+            }
+        }, 600);
         return;
     }
 
@@ -235,12 +248,19 @@ window.addEventListener('keyup', (e) => {
     if (isInputActive()) return;
 
     if (e.code === 'Backspace') {
-        const pressDuration = Date.now() - backspacePressTime;
-        resyncCurrentIndex();
-        if (targetArticles[currentIndex]) {
-            xOpsHandleDelete(targetArticles[currentIndex], pressDuration >= CONFIG.longPressDelay);
-        }
         e.preventDefault();
+        e.stopPropagation();
+
+        isBackspaceHeld = false;
+        if (backspaceTimer !== null) {
+            clearTimeout(backspaceTimer);
+            backspaceTimer = null;
+        }
+
+        // Restore title if not already restored
+        if (document.title === "⚠️ DRS ACTIVE ⚠️") {
+            document.title = originalTitle;
+        }
     }
 }, true);
 

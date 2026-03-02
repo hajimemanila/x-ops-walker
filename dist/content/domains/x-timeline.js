@@ -12,7 +12,9 @@
   var isActive = false;
   var currentIndex = -1;
   var targetArticles = [];
-  var backspacePressTime = 0;
+  var backspaceTimer = null;
+  var isBackspaceHeld = false;
+  var originalTitle = "";
   var style = document.createElement("style");
   style.textContent = `
     body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
@@ -158,46 +160,6 @@
     const timeLink = article.querySelector("time")?.closest("a");
     if (timeLink) timeLink.click();
   }
-  function xOpsHandleDelete(article, isLongPress) {
-    if (isLongPress) {
-      const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]');
-      if (confirmBtn) {
-        confirmBtn.click();
-        if (article) flashFeedback(article, "rgba(244, 33, 46, 0.3)");
-        setTimeout(() => {
-          updateTargets();
-          if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
-          focusArticle(currentIndex);
-        }, 500);
-        return;
-      }
-      if (!article) return;
-      const caret = article.querySelector('[data-testid="caret"]');
-      if (!caret) return;
-      caret.click();
-      setTimeout(() => {
-        const menu = document.querySelector('[role="menu"]');
-        if (!menu) return;
-        const deleteItem = Array.from(menu.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.match(/削除|Delete/));
-        if (deleteItem) {
-          deleteItem.click();
-        }
-      }, 100);
-    } else {
-      if (!article) return;
-      const caret = article.querySelector('[data-testid="caret"]');
-      if (!caret) return;
-      caret.click();
-      setTimeout(() => {
-        const menu = document.querySelector('[role="menu"]');
-        if (!menu) return;
-        const deleteItem = Array.from(menu.querySelectorAll('[role="menuitem"]')).find((el) => el.textContent?.match(/削除|Delete/));
-        if (deleteItem) {
-          deleteItem.click();
-        }
-      }, 100);
-    }
-  }
   function isInputActive() {
     const activeEl = document.activeElement;
     if (!activeEl) return false;
@@ -208,8 +170,46 @@
     if (isInputActive()) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
     if (e.code === "Backspace") {
-      if (!e.repeat) backspacePressTime = Date.now();
       e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      isBackspaceHeld = true;
+      resyncCurrentIndex();
+      const article = targetArticles[currentIndex];
+      if (!article) return;
+      originalTitle = document.title;
+      document.title = "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
+      const caret = article.querySelector('[data-testid="caret"]');
+      if (caret) caret.click();
+      setTimeout(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return;
+        const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+        const deleteItem = deleteItems.find((el) => el.textContent?.match(/削除|Delete/));
+        if (deleteItem) deleteItem.click();
+      }, 100);
+      backspaceTimer = window.setTimeout(() => {
+        if (isBackspaceHeld) {
+          let attempts = 0;
+          const interval = setInterval(() => {
+            const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]');
+            if (confirmBtn) {
+              clearInterval(interval);
+              confirmBtn.click();
+              flashFeedback(article, "rgba(244, 33, 46, 0.3)");
+              setTimeout(() => {
+                updateTargets();
+                if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
+                focusArticle(currentIndex);
+              }, 500);
+            } else if (++attempts > 40) {
+              clearInterval(interval);
+            }
+          }, 50);
+          if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") document.title = originalTitle;
+          isBackspaceHeld = false;
+        }
+      }, 600);
       return;
     }
     switch (e.code) {
@@ -244,12 +244,16 @@
     if (!isActive) return;
     if (isInputActive()) return;
     if (e.code === "Backspace") {
-      const pressDuration = Date.now() - backspacePressTime;
-      resyncCurrentIndex();
-      if (targetArticles[currentIndex]) {
-        xOpsHandleDelete(targetArticles[currentIndex], pressDuration >= CONFIG.longPressDelay);
-      }
       e.preventDefault();
+      e.stopPropagation();
+      isBackspaceHeld = false;
+      if (backspaceTimer !== null) {
+        clearTimeout(backspaceTimer);
+        backspaceTimer = null;
+      }
+      if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
+        document.title = originalTitle;
+      }
     }
   }, true);
   console.log("[X-Ops Walker X-Timeline] Loaded. Waiting for PhantomState...");
