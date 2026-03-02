@@ -119,6 +119,9 @@
     "x_timeline_walker": {
         "message": "X タイムライン・ウォーカー"
     },
+    "x_dashboard_walker": {
+        "message": "右カラムダッシュボード"
+    },
     "block_google_one_tap": {
         "message": "Google One Tap 遮断"
     },

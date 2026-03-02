@@ -51,6 +51,14 @@
       xToggle.classList.remove("active");
       xToggle.setAttribute("aria-checked", "false");
     }
+    const dashboardToggle = document.getElementById("phantom-dashboard-toggle");
+    if (config.xDashboard) {
+      dashboardToggle.classList.add("active");
+      dashboardToggle.setAttribute("aria-checked", "true");
+    } else {
+      dashboardToggle.classList.remove("active");
+      dashboardToggle.setAttribute("aria-checked", "false");
+    }
   }
   async function init() {
     const manifest = browser.runtime.getManifest();
@@ -63,10 +71,11 @@
     document.getElementById("phantom-master-label").textContent = t("phantom_mode_master");
     document.getElementById("domain-protocols-title").textContent = t("domain_protocols_title");
     document.getElementById("x-timeline-label").textContent = t("x_timeline_walker");
+    document.getElementById("x-dashboard-label").textContent = t("x_dashboard_walker");
     document.getElementById("gemini-label").textContent = t("gemini_walker");
     const result = await browser.storage.local.get(["global", "phantom"]);
     const globalConfig = result.global || {};
-    const phantomConfig = result.phantom || { master: true, xWalker: true, geminiWalker: false };
+    const phantomConfig = result.phantom || { master: true, xWalker: true, xDashboard: false, geminiWalker: false };
     updateGlobalUI(globalConfig);
     updatePhantomUI(phantomConfig);
     document.getElementById("toggle").addEventListener("click", async () => {
@@ -94,6 +103,13 @@
       const res = await browser.storage.local.get("phantom");
       const config = res.phantom || {};
       config.xWalker = !config.xWalker;
+      await browser.storage.local.set({ phantom: config });
+      updatePhantomUI(config);
+    });
+    document.getElementById("phantom-dashboard-toggle").addEventListener("click", async () => {
+      const res = await browser.storage.local.get("phantom");
+      const config = res.phantom || {};
+      config.xDashboard = !config.xDashboard;
       await browser.storage.local.set({ phantom: config });
       updatePhantomUI(config);
     });

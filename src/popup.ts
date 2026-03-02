@@ -11,6 +11,7 @@ interface GlobalConfig {
 interface PhantomConfig {
     master?: boolean;
     xWalker?: boolean;
+    xDashboard?: boolean;
     geminiWalker?: boolean;
 }
 
@@ -70,6 +71,15 @@ function updatePhantomUI(config: PhantomConfig): void {
         xToggle.setAttribute('aria-checked', 'false');
     }
 
+    const dashboardToggle = document.getElementById('phantom-dashboard-toggle')!;
+    if (config.xDashboard) {
+        dashboardToggle.classList.add('active');
+        dashboardToggle.setAttribute('aria-checked', 'true');
+    } else {
+        dashboardToggle.classList.remove('active');
+        dashboardToggle.setAttribute('aria-checked', 'false');
+    }
+
     // Gemini Walker is disabled/placeholder
 }
 
@@ -86,12 +96,13 @@ async function init(): Promise<void> {
     document.getElementById('phantom-master-label')!.textContent = t('phantom_mode_master');
     document.getElementById('domain-protocols-title')!.textContent = t('domain_protocols_title');
     document.getElementById('x-timeline-label')!.textContent = t('x_timeline_walker');
+    document.getElementById('x-dashboard-label')!.textContent = t('x_dashboard_walker');
     document.getElementById('gemini-label')!.textContent = t('gemini_walker');
 
     // Read initial states
     const result = await browser.storage.local.get(['global', 'phantom']);
     const globalConfig: GlobalConfig = result.global || {};
-    const phantomConfig: PhantomConfig = result.phantom || { master: true, xWalker: true, geminiWalker: false }; // Defaults
+    const phantomConfig: PhantomConfig = result.phantom || { master: true, xWalker: true, xDashboard: false, geminiWalker: false }; // Defaults
 
     updateGlobalUI(globalConfig);
     updatePhantomUI(phantomConfig);
@@ -128,6 +139,15 @@ async function init(): Promise<void> {
         const res = await browser.storage.local.get('phantom');
         const config: PhantomConfig = res.phantom || {};
         config.xWalker = !config.xWalker;
+        await browser.storage.local.set({ phantom: config });
+        updatePhantomUI(config);
+    });
+
+    // Phantom: X Dashboard toggle
+    document.getElementById('phantom-dashboard-toggle')!.addEventListener('click', async () => {
+        const res = await browser.storage.local.get('phantom');
+        const config: PhantomConfig = res.phantom || {};
+        config.xDashboard = !config.xDashboard;
         await browser.storage.local.set({ phantom: config });
         updatePhantomUI(config);
     });

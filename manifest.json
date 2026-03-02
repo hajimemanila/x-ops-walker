@@ -45,7 +45,8 @@
             ],
             "js": [
                 "content/phantom.js",
-                "content/domains/x-timeline.js"
+                "content/domains/x-timeline.js",
+                "content/domains/x-dashboard.js"
             ],
             "run_at": "document_idle"
         }

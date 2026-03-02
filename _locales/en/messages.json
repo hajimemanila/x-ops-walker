@@ -116,6 +116,9 @@
     "x_timeline_walker": {
         "message": "X Timeline Walker"
     },
+    "x_dashboard_walker": {
+        "message": "Right Column Dashboard"
+    },
     "block_google_one_tap": {
         "message": "Block Google One Tap"
     },
