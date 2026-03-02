@@ -361,6 +361,13 @@ window.addEventListener('x-ops-next-star', () => {
     }
 });
 
+window.addEventListener('x-ops-go-profile', () => {
+    const profileUrl = getMyProfileUrl();
+    if (profileUrl && window.location.href !== profileUrl) {
+        window.location.href = profileUrl;
+    }
+});
+
 // ── Initialization ──
 console.log("[X-Ops Walker X-Dashboard] Loaded. Waiting for PhantomState...");
 

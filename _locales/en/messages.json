@@ -172,5 +172,14 @@
     },
     "cs_phantom_section": {
         "message": "Phantom Mode (Domain)"
+    },
+    "cs_x_n_star": {
+        "message": "Toggle Star (Bookmark)"
+    },
+    "cs_x_m_star": {
+        "message": "Jump to Next Star"
+    },
+    "cs_x_y_profile": {
+        "message": "Go to Your Profile"
     }
 }

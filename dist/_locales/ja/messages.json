@@ -175,5 +175,14 @@
     },
     "cs_phantom_section": {
         "message": "ファントムモード (ドメイン)"
+    },
+    "cs_x_n_star": {
+        "message": "スター切替 (ブックマーク)"
+    },
+    "cs_x_m_star": {
+        "message": "次のスターへ移動"
+    },
+    "cs_x_y_profile": {
+        "message": "自分のプロフィールへ"
     }
 }

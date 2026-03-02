@@ -285,6 +285,12 @@
       window.location.href = nextUrl;
     }
   });
+  window.addEventListener("x-ops-go-profile", () => {
+    const profileUrl = getMyProfileUrl();
+    if (profileUrl && window.location.href !== profileUrl) {
+      window.location.href = profileUrl;
+    }
+  });
   console.log("[X-Ops Walker X-Dashboard] Loaded. Waiting for PhantomState...");
   var checkPhantomDashboard = setInterval(() => {
     if (window.FoxPhantom) {

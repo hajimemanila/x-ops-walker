@@ -169,7 +169,7 @@
     if (!isActive) return;
     if (isInputActive()) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-    if (["KeyI", "KeyU", "KeyK", "KeyJ", "KeyL", "KeyO", "KeyN", "KeyM"].includes(e.code)) {
+    if (["KeyI", "KeyU", "KeyK", "KeyJ", "KeyL", "KeyO", "KeyN", "KeyM", "KeyY"].includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
     }
@@ -242,6 +242,9 @@
         break;
       case "KeyM":
         window.dispatchEvent(new CustomEvent("x-ops-next-star"));
+        break;
+      case "KeyY":
+        window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
         break;
     }
   }, true);

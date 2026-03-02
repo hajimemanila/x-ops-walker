@@ -320,6 +320,9 @@
           addRow(["L"], "cs_x_l");
           addRow(["O"], "cs_x_o");
           addRow(["Backspace"], "cs_x_backspace");
+          addRow(["N"], "cs_x_n_star");
+          addRow(["M"], "cs_x_m_star");
+          addRow(["Y"], "cs_x_y_profile");
         } else if (host2 === "gemini.google.com") {
           hTitle.textContent = t("cheatsheet_title_gemini");
           addSection("cs_phantom_section");
