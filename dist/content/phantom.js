@@ -3,21 +3,33 @@
   // src/content/phantom.ts
   var PhantomState = class {
     config = { master: false, xWalker: false, geminiWalker: false };
+    isWalkerActive = false;
     callbacks = [];
     constructor() {
       this.init();
     }
     async init() {
       try {
-        const result = await browser.storage.local.get("phantom");
+        const result = await browser.storage.local.get(["phantom", "global"]);
         this.config = result.phantom || { master: true, xWalker: true, geminiWalker: false };
-        console.log("[X-Ops Walker PhantomState] Initializing. Config:", this.config);
+        this.isWalkerActive = !!result.global?.walkerMode;
+        console.log("[X-Ops Walker PhantomState] Initializing. Config:", this.config, "WalkerActive:", this.isWalkerActive);
         this.notify();
         browser.storage.onChanged.addListener((changes, area) => {
-          if (area === "local" && changes.phantom) {
-            this.config = changes.phantom.newValue || { master: true, xWalker: true, geminiWalker: false };
-            console.log("[X-Ops Walker PhantomState] State Changed:", this.config);
-            this.notify();
+          if (area === "local") {
+            let changed = false;
+            if (changes.phantom) {
+              this.config = changes.phantom.newValue || { master: true, xWalker: true, geminiWalker: false };
+              changed = true;
+            }
+            if (changes.global) {
+              this.isWalkerActive = !!changes.global.newValue?.walkerMode;
+              changed = true;
+            }
+            if (changed) {
+              console.log("[X-Ops Walker PhantomState] State Changed:", this.config, "WalkerActive:", this.isWalkerActive);
+              this.notify();
+            }
           }
         });
       } catch (e) {
@@ -26,10 +38,10 @@
     }
     onChange(callback) {
       this.callbacks.push(callback);
-      callback(this.config);
+      callback(this.config, this.isWalkerActive);
     }
     notify() {
-      this.callbacks.forEach((cb) => cb(this.config));
+      this.callbacks.forEach((cb) => cb(this.config, this.isWalkerActive));
     }
   };
   var PhantomUI = class {
@@ -76,7 +88,29 @@
     }
   };
   if (typeof window !== "undefined") {
+    let isPhantomInputActive = function() {
+      const activeEl = document.activeElement;
+      if (!activeEl) return false;
+      return ["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable;
+    };
+    isPhantomInputActive2 = isPhantomInputActive;
     window.FoxPhantom = new PhantomState();
     window.PhantomUI = PhantomUI;
+    window.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      if (isPhantomInputActive()) return;
+      const phantomInstance = window.FoxPhantom;
+      if (!phantomInstance || !phantomInstance.isWalkerActive) return;
+      if (e.key === "p" || e.key === "P") {
+        e.preventDefault();
+        e.stopPropagation();
+        browser.storage.local.get("phantom").then((res) => {
+          const config = res.phantom || { master: true, xWalker: true, geminiWalker: false };
+          config.master = !config.master;
+          browser.storage.local.set({ phantom: config });
+        });
+      }
+    }, true);
   }
+  var isPhantomInputActive2;
 })();

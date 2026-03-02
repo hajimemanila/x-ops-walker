@@ -63,7 +63,7 @@
         "message": "タブを複製"
     },
     "cs_sys_esc": {
-        "message": "Walker Mode 切替"
+        "message": "Walker Mode 切替 (Master)"
     },
     "cs_sys_f": {
         "message": "チートシートを開閉"
@@ -111,7 +111,7 @@
         "message": "Phantom Mode"
     },
     "phantom_mode_master": {
-        "message": "ファントムモード (Master)"
+        "message": "Phantom Mode (Master)"
     },
     "domain_protocols_title": {
         "message": "ドメインプロトコル"
@@ -133,5 +133,44 @@
     },
     "extension_description": {
         "message": "パワーユーザー向けの超高速キーボードナビゲーション。DOM操作特化。"
+    },
+    "cheatsheet_title_x": {
+        "message": "X-Ops Walker: X タイムライン"
+    },
+    "cheatsheet_title_gemini": {
+        "message": "X-Ops Walker: Gemini"
+    },
+    "cheatsheet_close_global": {
+        "message": "F または Esc で閉じる"
+    },
+    "cheatsheet_close_domain": {
+        "message": "Hキーで閉じる"
+    },
+    "cheatsheet_no_domain": {
+        "message": "このドメインのウォーカーはありません"
+    },
+    "cs_x_jk": {
+        "message": "次/前のポストにフォーカス"
+    },
+    "cs_x_l": {
+        "message": "いいね"
+    },
+    "cs_x_o": {
+        "message": "リポスト"
+    },
+    "cs_x_backspace": {
+        "message": "高速削除 (DRS)"
+    },
+    "cs_x_z": {
+        "message": "ビューポートのリセット"
+    },
+    "cs_x_shift_p": {
+        "message": "Walker Mode 切替 (Master)"
+    },
+    "cs_x_p_toggle": {
+        "message": "Phantom Mode 切替"
+    },
+    "cs_phantom_section": {
+        "message": "ファントムモード (ドメイン)"
     }
 }

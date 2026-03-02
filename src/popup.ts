@@ -18,16 +18,20 @@ function updateGlobalUI(config: GlobalConfig): void {
     const walkerToggle = document.getElementById('toggle')!;
     const statusText = document.getElementById('status-text')!;
 
+    const phantomCard = document.getElementById('phantom-mode-card')!;
+
     if (config.walkerMode) {
         walkerToggle.classList.add('active');
         walkerToggle.setAttribute('aria-checked', 'true');
         statusText.textContent = 'ON';
         statusText.className = 'on';
+        phantomCard.classList.remove('disabled-section');
     } else {
         walkerToggle.classList.remove('active');
         walkerToggle.setAttribute('aria-checked', 'false');
         statusText.textContent = 'OFF';
         statusText.className = 'off';
+        phantomCard.classList.add('disabled-section');
     }
 
     const blockerToggle = document.getElementById('blocker-toggle')!;

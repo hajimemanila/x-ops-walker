@@ -60,7 +60,7 @@
         "message": "Duplicate Tab"
     },
     "cs_sys_esc": {
-        "message": "Toggle Walker Mode"
+        "message": "Toggle Walker Mode (Master)"
     },
     "cs_sys_f": {
         "message": "Toggle Cheatsheet"
@@ -130,5 +130,44 @@
     },
     "extension_description": {
         "message": "Ultra-fast, keyboard-driven navigation and DOM management for power users."
+    },
+    "cheatsheet_title_x": {
+        "message": "X-Ops Walker: X Timeline"
+    },
+    "cheatsheet_title_gemini": {
+        "message": "X-Ops Walker: Gemini"
+    },
+    "cheatsheet_close_global": {
+        "message": "Press F or Esc to close"
+    },
+    "cheatsheet_close_domain": {
+        "message": "Press H to Close"
+    },
+    "cheatsheet_no_domain": {
+        "message": "No active Walker for this domain"
+    },
+    "cs_x_jk": {
+        "message": "Focus Next/Prev Post"
+    },
+    "cs_x_l": {
+        "message": "Like"
+    },
+    "cs_x_o": {
+        "message": "Repost"
+    },
+    "cs_x_backspace": {
+        "message": "Fast Delete (DRS)"
+    },
+    "cs_x_z": {
+        "message": "Reset Viewport"
+    },
+    "cs_x_shift_p": {
+        "message": "Toggle Walker Mode (Master)"
+    },
+    "cs_x_p_toggle": {
+        "message": "Toggle Phantom Mode"
+    },
+    "cs_phantom_section": {
+        "message": "Phantom Mode (Domain)"
     }
 }

@@ -1,6 +1,6 @@
 const SCROLL_AMOUNT = 380;
 
-const WALKER_KEYS = new Set(['a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c']);
+const WALKER_KEYS = new Set(['a', 'd', 's', 'w', 'f', 'h', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c']);
 
 // Shift+キー: background 送信アクション（旧: ダブルタップ）
 const SHIFT_ACTIONS: Record<string, string> = {
@@ -241,7 +241,7 @@ const hud: HudController = (() => {
 
 // ── Cheatsheet (Shadow DOM) ───────────────────────────────────────────────────
 interface CheatsheetController {
-    toggle(): void;
+    toggle(mode: 'global' | 'domain'): void;
     hide(): void;
     isVisible(): boolean;
 }
@@ -367,41 +367,72 @@ const cheatsheet: CheatsheetController = (() => {
         table.appendChild(tr);
     }
 
-    addSection('cs_section_nav');
-    addRow(['A', 'D'], 'cs_nav_ad');
-    addRow(['Space'], 'cs_nav_space');
-    addRow(['W', 'S'], 'cs_nav_ws');
-    addRow(['Q', 'E'], 'cs_nav_qe');
-
-    addSection('cs_section_tab');
-    addRow(['Shift', 'X'], 'cs_tab_xx');
-    addRow(['Shift', 'Z'], 'cs_tab_zz');
-    addRow(['Shift', 'R'], 'cs_tab_rr');
-    addRow(['Shift', 'M'], 'cs_tab_mm');
-    addRow(['Shift', 'G'], 'cs_tab_gg');
-    addRow(['Shift', 'T'], 'cs_tab_tt');
-    addRow(['Shift', 'W'], 'cs_tab_ww');
-    addRow(['Shift', 'S'], 'cs_tab_ss');
-    addRow(['Shift', 'C'], 'cs_tab_cc');
-
-    addSection('cs_section_sys');
-    addRow(['Esc'], 'cs_sys_esc');
-    addRow(['F'], 'cs_sys_f');
-    addRow(['Z'], 'cs_sys_z');
-
-    panel.appendChild(table);
-
     // Footer
     const footer = document.createElement('div');
     footer.id = 'footer';
-    footer.textContent = t('cs_footer');
     panel.appendChild(footer);
+
+    function renderTable(mode: 'global' | 'domain'): void {
+        table.innerHTML = '';
+        const host = window.location.hostname;
+
+        if (mode === 'domain') {
+            footer.textContent = t('cheatsheet_close_domain');
+            if (host === 'x.com' || host === 'twitter.com') {
+                hTitle.textContent = t('cheatsheet_title_x');
+                addSection('cs_phantom_section');
+                addRow(['J', 'K'], 'cs_x_jk');
+                addRow(['L'], 'cs_x_l');
+                addRow(['O'], 'cs_x_o');
+                addRow(['Backspace'], 'cs_x_backspace');
+            } else if (host === 'gemini.google.com') {
+                hTitle.textContent = t('cheatsheet_title_gemini');
+                addSection('cs_phantom_section');
+                // Placeholder Gemini shortcuts
+                addRow(['Coming'], 'cs_nav_space');
+            } else {
+                hTitle.textContent = t('extension_name');
+                addSection('cs_phantom_section');
+                addRow(['-'], 'cheatsheet_no_domain');
+            }
+        } else {
+            hTitle.textContent = t('extension_name');
+            footer.textContent = t('cheatsheet_close_global');
+
+            addSection('cs_section_nav');
+            addRow(['A', 'D'], 'cs_nav_ad');
+            addRow(['Space'], 'cs_nav_space');
+            addRow(['W', 'S'], 'cs_nav_ws');
+            addRow(['Q', 'E'], 'cs_nav_qe');
+
+            addSection('cs_section_tab');
+            addRow(['Shift', 'X'], 'cs_tab_xx');
+            addRow(['Shift', 'Z'], 'cs_tab_zz');
+            addRow(['Shift', 'R'], 'cs_tab_rr');
+            addRow(['Shift', 'M'], 'cs_tab_mm');
+            addRow(['Shift', 'G'], 'cs_tab_gg');
+            addRow(['Shift', 'T'], 'cs_tab_tt');
+            addRow(['Shift', 'W'], 'cs_tab_ww');
+            addRow(['Shift', 'S'], 'cs_tab_ss');
+            addRow(['Shift', 'C'], 'cs_tab_cc');
+
+            addSection('cs_section_sys');
+            addRow(['Esc'], 'cs_sys_esc');
+            addRow(['Shift', 'P'], 'cs_x_shift_p');
+            addRow(['F'], 'cs_sys_f');
+            addRow(['Z'], 'cs_sys_z');
+            addRow(['P', '(Phantom)'], 'cs_x_p_toggle');
+        }
+    }
+
+    panel.insertBefore(table, footer);
 
     overlay.appendChild(panel);
     shadow.appendChild(style);
     shadow.appendChild(overlay);
 
     let visible = false;
+    let currentMode: 'global' | 'domain' | null = null;
 
     function mount(): void {
         if (document.body) {
@@ -413,7 +444,9 @@ const cheatsheet: CheatsheetController = (() => {
 
     let csHideTimer: ReturnType<typeof setTimeout> | null = null;
 
-    function show(): void {
+    function show(mode: 'global' | 'domain'): void {
+        currentMode = mode;
+        renderTable(mode);
         if (csHideTimer !== null) { clearTimeout(csHideTimer); csHideTimer = null; }
         visible = true;
         host.style.display = 'flex';  // ファーストにレイアウトツリーに復帰
@@ -422,14 +455,25 @@ const cheatsheet: CheatsheetController = (() => {
 
     function hide(): void {
         visible = false;
+        currentMode = null;
         panel.classList.remove('visible');
         // パネルのフェードアウト後に host をレイアウトツリーから完全除外
         csHideTimer = setTimeout(() => { if (!visible) host.style.display = 'none'; }, 240);
     }
 
-    function toggle(): void { visible ? hide() : show(); }
+    function toggle(mode: 'global' | 'domain'): void {
+        if (visible && currentMode === mode) {
+            hide();
+        } else {
+            show(mode);
+        }
+    }
+
     function isVisible(): boolean { return visible; }
 
+    window.addEventListener('x-ops-global-reset', () => {
+        if (visible) hide();
+    });
     mount();
     return { toggle, hide, isVisible };
 })();
@@ -465,6 +509,7 @@ browser.storage.onChanged.addListener((changes, area) => {
             hud.setState(isWalkerMode);
             // ポップアップから ON にした際も入力欄ブラーを発火
             if (isWalkerMode && !document.hidden) blurActiveInput();
+            window.dispatchEvent(new CustomEvent('x-ops-global-reset'));
         }
 
         if (newVal.oneTap !== oldVal.oneTap) {
@@ -525,10 +570,17 @@ function handleKeyInput(event: KeyboardEvent): void {
         return;
     }
 
-    // F: チートシート開閉
+    // F: チートシート (global) 開閉
     if (key === 'f') {
         event.preventDefault();
-        cheatsheet.toggle();
+        cheatsheet.toggle('global');
+        return;
+    }
+
+    // H: チートシート (domain) 開閉
+    if (key === 'h') {
+        event.preventDefault();
+        cheatsheet.toggle('domain');
         return;
     }
 
@@ -567,11 +619,18 @@ window.addEventListener('keydown', (event: KeyboardEvent): void => {
 
     if (document.fullscreenElement !== null && event.key === 'Escape') return;
 
-    if (event.key === 'Escape') {
-        if (cheatsheet.isVisible()) {
+    if (event.key === 'Escape' || (event.key.toLowerCase() === 'p' && event.shiftKey)) {
+        if (event.key === 'Escape' && cheatsheet.isVisible()) {
             cheatsheet.hide();
             return;
         }
+
+        // Prevent default for Shift+P if it's not Escape
+        if (event.key.toLowerCase() === 'p') {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
         isWalkerMode = !isWalkerMode;
         browser.storage.local.get(['global']).then((res) => {
             const globalConfig = res.global || {};
@@ -579,7 +638,7 @@ window.addEventListener('keydown', (event: KeyboardEvent): void => {
             browser.storage.local.set({ global: globalConfig });
         });
         hud.setState(isWalkerMode);
-        // Esc で ON になった際だけ入力欄ブラーを発火（OFF時は実行しない）
+        // Esc / Shift+P で ON になった際だけ入力欄ブラーを発火（OFF時は実行しない）
         if (isWalkerMode) blurActiveInput();
         return;
     }

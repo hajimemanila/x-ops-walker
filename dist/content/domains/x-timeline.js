@@ -155,11 +155,6 @@
       }
     }
   }
-  function xOpsOpenDetail(article) {
-    if (!article) return;
-    const timeLink = article.querySelector("time")?.closest("a");
-    if (timeLink) timeLink.click();
-  }
   window.addEventListener("x-ops-global-reset", () => {
     if (!isActive) return;
     forceClearFocus();
@@ -238,11 +233,6 @@
         e.preventDefault();
         executeAction("repost");
         break;
-      case "KeyP":
-        e.preventDefault();
-        resyncCurrentIndex();
-        xOpsOpenDetail(targetArticles[currentIndex]);
-        break;
     }
   }, true);
   window.addEventListener("keyup", (e) => {
@@ -266,9 +256,9 @@
     if (window.FoxPhantom) {
       clearInterval(checkPhantom);
       console.log("[X-Ops Walker X-Timeline] PhantomState connected. Current config:", window.FoxPhantom.config);
-      window.FoxPhantom.onChange((config) => {
-        console.log("[X-Ops Walker X-Timeline] PhantomState onChange fired:", config);
-        const active = !!(config?.master && config?.xWalker);
+      window.FoxPhantom.onChange((config, isWalkerActive) => {
+        console.log("[X-Ops Walker X-Timeline] PhantomState onChange fired:", config, isWalkerActive);
+        const active = !!(isWalkerActive && config?.master && config?.xWalker);
         setWalkerState(active);
       });
     }

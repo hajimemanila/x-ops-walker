@@ -2,7 +2,7 @@
 (() => {
   // src/kernel.ts
   var SCROLL_AMOUNT = 380;
-  var WALKER_KEYS = /* @__PURE__ */ new Set(["a", "d", "s", "w", "f", "x", "z", "r", "m", "g", "t", "9", " ", "q", "e", "c"]);
+  var WALKER_KEYS = /* @__PURE__ */ new Set(["a", "d", "s", "w", "f", "h", "x", "z", "r", "m", "g", "t", "9", " ", "q", "e", "c"]);
   var SHIFT_ACTIONS = {
     "x": "CLOSE_TAB",
     "z": "UNDO_CLOSE",
@@ -305,34 +305,62 @@
       tr.appendChild(descTd);
       table.appendChild(tr);
     }
-    addSection("cs_section_nav");
-    addRow(["A", "D"], "cs_nav_ad");
-    addRow(["Space"], "cs_nav_space");
-    addRow(["W", "S"], "cs_nav_ws");
-    addRow(["Q", "E"], "cs_nav_qe");
-    addSection("cs_section_tab");
-    addRow(["Shift", "X"], "cs_tab_xx");
-    addRow(["Shift", "Z"], "cs_tab_zz");
-    addRow(["Shift", "R"], "cs_tab_rr");
-    addRow(["Shift", "M"], "cs_tab_mm");
-    addRow(["Shift", "G"], "cs_tab_gg");
-    addRow(["Shift", "T"], "cs_tab_tt");
-    addRow(["Shift", "W"], "cs_tab_ww");
-    addRow(["Shift", "S"], "cs_tab_ss");
-    addRow(["Shift", "C"], "cs_tab_cc");
-    addSection("cs_section_sys");
-    addRow(["Esc"], "cs_sys_esc");
-    addRow(["F"], "cs_sys_f");
-    addRow(["Z"], "cs_sys_z");
-    panel.appendChild(table);
     const footer = document.createElement("div");
     footer.id = "footer";
-    footer.textContent = t("cs_footer");
     panel.appendChild(footer);
+    function renderTable(mode) {
+      table.innerHTML = "";
+      const host2 = window.location.hostname;
+      if (mode === "domain") {
+        footer.textContent = t("cheatsheet_close_domain");
+        if (host2 === "x.com" || host2 === "twitter.com") {
+          hTitle.textContent = t("cheatsheet_title_x");
+          addSection("cs_phantom_section");
+          addRow(["J", "K"], "cs_x_jk");
+          addRow(["L"], "cs_x_l");
+          addRow(["O"], "cs_x_o");
+          addRow(["Backspace"], "cs_x_backspace");
+        } else if (host2 === "gemini.google.com") {
+          hTitle.textContent = t("cheatsheet_title_gemini");
+          addSection("cs_phantom_section");
+          addRow(["Coming"], "cs_nav_space");
+        } else {
+          hTitle.textContent = t("extension_name");
+          addSection("cs_phantom_section");
+          addRow(["-"], "cheatsheet_no_domain");
+        }
+      } else {
+        hTitle.textContent = t("extension_name");
+        footer.textContent = t("cheatsheet_close_global");
+        addSection("cs_section_nav");
+        addRow(["A", "D"], "cs_nav_ad");
+        addRow(["Space"], "cs_nav_space");
+        addRow(["W", "S"], "cs_nav_ws");
+        addRow(["Q", "E"], "cs_nav_qe");
+        addSection("cs_section_tab");
+        addRow(["Shift", "X"], "cs_tab_xx");
+        addRow(["Shift", "Z"], "cs_tab_zz");
+        addRow(["Shift", "R"], "cs_tab_rr");
+        addRow(["Shift", "M"], "cs_tab_mm");
+        addRow(["Shift", "G"], "cs_tab_gg");
+        addRow(["Shift", "T"], "cs_tab_tt");
+        addRow(["Shift", "W"], "cs_tab_ww");
+        addRow(["Shift", "S"], "cs_tab_ss");
+        addRow(["Shift", "C"], "cs_tab_cc");
+        addSection("cs_section_sys");
+        addRow(["Esc"], "cs_sys_esc");
+        addRow(["Shift", "P"], "cs_x_shift_p");
+        addRow(["F"], "cs_sys_f");
+        addRow(["Z"], "cs_sys_z");
+        addRow(["P", "(Phantom)"], "cs_x_p_toggle");
+      }
+    }
+    panel.insertBefore(table, footer);
     overlay.appendChild(panel);
     shadow.appendChild(style);
     shadow.appendChild(overlay);
     let visible = false;
+    let currentMode = null;
     function mount() {
       if (document.body) {
         document.body.appendChild(host);
@@ -341,7 +369,9 @@
       }
     }
     let csHideTimer = null;
-    function show() {
+    function show(mode) {
+      currentMode = mode;
+      renderTable(mode);
       if (csHideTimer !== null) {
         clearTimeout(csHideTimer);
         csHideTimer = null;
@@ -352,17 +382,25 @@
     }
     function hide() {
       visible = false;
+      currentMode = null;
       panel.classList.remove("visible");
       csHideTimer = setTimeout(() => {
         if (!visible) host.style.display = "none";
       }, 240);
     }
-    function toggle() {
-      visible ? hide() : show();
+    function toggle(mode) {
+      if (visible && currentMode === mode) {
+        hide();
+      } else {
+        show(mode);
+      }
     }
     function isVisible() {
       return visible;
     }
+    window.addEventListener("x-ops-global-reset", () => {
+      if (visible) hide();
+    });
     mount();
     return { toggle, hide, isVisible };
   })();
@@ -388,6 +426,7 @@
         isWalkerMode = !!newVal.walkerMode;
         hud.setState(isWalkerMode);
         if (isWalkerMode && !document.hidden) blurActiveInput();
+        window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
       }
       if (newVal.oneTap !== oldVal.oneTap) {
         applyOneTapBlocker(!!newVal.oneTap);
@@ -431,7 +470,12 @@
     }
     if (key === "f") {
       event.preventDefault();
-      cheatsheet.toggle();
+      cheatsheet.toggle("global");
+      return;
+    }
+    if (key === "h") {
+      event.preventDefault();
+      cheatsheet.toggle("domain");
       return;
     }
     if (key === " ") {
@@ -466,10 +510,14 @@
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
     if (document.fullscreenElement !== null && event.key === "Escape") return;
-    if (event.key === "Escape") {
-      if (cheatsheet.isVisible()) {
+    if (event.key === "Escape" || event.key.toLowerCase() === "p" && event.shiftKey) {
+      if (event.key === "Escape" && cheatsheet.isVisible()) {
         cheatsheet.hide();
         return;
+      }
+      if (event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        event.stopPropagation();
       }
       isWalkerMode = !isWalkerMode;
       browser.storage.local.get(["global"]).then((res) => {

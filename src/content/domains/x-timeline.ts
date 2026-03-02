@@ -159,12 +159,6 @@ function executeAction(actionType: string) {
     }
 }
 
-function xOpsOpenDetail(article: HTMLElement) {
-    if (!article) return;
-    const timeLink = article.querySelector('time')?.closest('a');
-    if (timeLink) timeLink.click();
-}
-
 // Global reset handled by kernel.ts via 'x-ops-global-reset' event
 window.addEventListener('x-ops-global-reset', () => {
     if (!isActive) return;
@@ -246,7 +240,6 @@ window.addEventListener('keydown', (e) => {
         case 'KeyK': case 'KeyJ': e.preventDefault(); resyncCurrentIndex(); focusArticle(currentIndex + 1); break;
         case 'KeyL': e.preventDefault(); executeAction('like'); break;
         case 'KeyO': e.preventDefault(); executeAction('repost'); break;
-        case 'KeyP': e.preventDefault(); resyncCurrentIndex(); xOpsOpenDetail(targetArticles[currentIndex]); break;
     }
 }, true);
 
@@ -281,9 +274,9 @@ const checkPhantom = setInterval(() => {
     if ((window as any).FoxPhantom) {
         clearInterval(checkPhantom);
         console.log("[X-Ops Walker X-Timeline] PhantomState connected. Current config:", (window as any).FoxPhantom.config);
-        (window as any).FoxPhantom.onChange((config: any) => {
-            console.log("[X-Ops Walker X-Timeline] PhantomState onChange fired:", config);
-            const active = !!(config?.master && config?.xWalker);
+        (window as any).FoxPhantom.onChange((config: any, isWalkerActive: boolean) => {
+            console.log("[X-Ops Walker X-Timeline] PhantomState onChange fired:", config, isWalkerActive);
+            const active = !!(isWalkerActive && config?.master && config?.xWalker);
             setWalkerState(active);
         });
     }
