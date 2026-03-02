@@ -60,8 +60,8 @@
             padding: 1px 7px;
         }
 
-        /* ── Mode card ── */
-        #mode-card {
+        /* ── Base Card Style ── */
+        .settings-card {
             margin: 12px 12px 0;
             padding: 14px 16px;
             background: rgba(255, 255, 255, 0.04);
@@ -69,28 +69,47 @@
             border-radius: 12px;
         }
 
-        #mode-card .row {
+        .card-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.10em;
+            text-transform: uppercase;
+            color: rgba(255, 140, 0, 0.85);
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 6px;
+        }
+
+        .setting-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            margin-bottom: 10px;
         }
 
-        #mode-card .label-group {
+        .setting-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .label-group {
             display: flex;
             flex-direction: column;
             gap: 3px;
         }
 
-        #mode-card .mode-label {
+        .setting-label {
             font-size: 11px;
+            color: rgba(255, 255, 255, 0.65);
+            letter-spacing: 0.04em;
+        }
+
+        .setting-label.bold {
             font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.45);
+            color: rgba(255, 255, 255, 0.85);
         }
 
         #status-text {
-            font-size: 16px;
+            font-size: 10px;
             font-weight: 700;
             letter-spacing: 0.04em;
             transition: color 0.2s;
@@ -104,132 +123,7 @@
             color: rgba(255, 255, 255, 0.35);
         }
 
-        /* Toggle switch */
-        #toggle {
-            position: relative;
-            width: 52px;
-            height: 28px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 999px;
-            cursor: pointer;
-            transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
-            flex-shrink: 0;
-        }
-
-        #toggle::after {
-            content: '';
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 20px;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.50);
-            border-radius: 50%;
-            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.25s;
-        }
-
-        #toggle.active {
-            background: rgba(255, 140, 0, 0.25);
-            border-color: rgba(255, 140, 0, 0.50);
-            box-shadow: 0 0 12px rgba(255, 140, 0, 0.20);
-        }
-
-        #toggle.active::after {
-            transform: translateX(24px);
-            background: #ffac30;
-        }
-
-        /* Status dot */
-        #status-row {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-        }
-
-        #status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            transition: background 0.25s, box-shadow 0.25s;
-        }
-
-        #status-dot.on {
-            background: #4ade80;
-            box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
-        }
-
-        #status-dot.off {
-            background: rgba(255, 255, 255, 0.20);
-        }
-
-        #status-detail {
-            font-size: 10px;
-            letter-spacing: 0.05em;
-            color: rgba(255, 255, 255, 0.30);
-        }
-
-        /* ── Shortcuts card ── */
-        #shortcuts-card {
-            margin: 8px 12px 0;
-            padding: 12px 14px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-        }
-
-        #shortcuts-card .sc-title {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.10em;
-            text-transform: uppercase;
-            color: rgba(255, 140, 0, 0.55);
-            margin-bottom: 6px;
-        }
-
-        #shortcuts-card .sc-hint {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.45);
-            line-height: 1.5;
-        }
-
-        .key-badge {
-            display: inline-block;
-            font-family: 'Cascadia Code', 'Consolas', monospace;
-            font-size: 10px;
-            font-weight: 700;
-            color: #ffac30;
-            background: rgba(255, 140, 0, 0.12);
-            border: 1px solid rgba(255, 140, 0, 0.25);
-            border-radius: 4px;
-            padding: 0 5px;
-        }
-
-        /* ── Settings card ── */
-        #settings-card {
-            margin: 8px 12px 0;
-            padding: 10px 14px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 12px;
-        }
-
-        .setting-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .setting-label {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.50);
-            letter-spacing: 0.04em;
-        }
-
-        /* Mini toggle — same design language as #toggle but smaller */
+        /* Mini toggle */
         .mini-toggle {
             position: relative;
             width: 36px;
@@ -265,6 +159,37 @@
             background: #ffac30;
         }
 
+        /* Disabled states */
+        .disabled-row {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .disabled-section {
+            opacity: 0.4;
+            pointer-events: none;
+            filter: grayscale(1);
+        }
+
+        /* ── Sub-section (Domain Protocols) ── */
+        .sub-section {
+            margin-top: 12px;
+            padding-top: 10px;
+            padding-left: 12px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.1);
+            border-left: 2px solid rgba(255, 140, 0, 0.3);
+            transition: opacity 0.3s ease, filter 0.3s ease;
+        }
+
+        .sub-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.45);
+            margin-bottom: 8px;
+        }
+
         /* ── Footer ── */
         #footer {
             padding: 10px 16px 12px;
@@ -285,32 +210,49 @@
         <span class="version" id="version-badge"></span>
     </div>
 
-    <!-- Mode Card -->
-    <div id="mode-card">
-        <div class="row">
+    <!-- Global Operations Card -->
+    <div id="global-ops-card" class="settings-card">
+        <div class="card-title" id="global-ops-title"></div>
+
+        <div class="setting-row">
             <div class="label-group">
-                <span class="mode-label" id="mode-label">Walker Mode</span>
+                <span class="setting-label bold" id="walker-master-label"></span>
                 <span id="status-text" class="off">—</span>
             </div>
-            <div id="toggle" role="switch" aria-checked="false"></div>
+            <div id="toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
         </div>
-        <div id="status-row">
-            <div id="status-dot" class="off"></div>
-            <span id="status-detail"></span>
-        </div>
-    </div>
 
-    <!-- Shortcuts Card -->
-    <div id="shortcuts-card">
-        <div class="sc-title" id="sc-title"></div>
-        <div class="sc-hint" id="sc-hint"></div>
-    </div>
-
-    <!-- Settings Card -->
-    <div id="settings-card">
         <div class="setting-row">
             <span class="setting-label" id="blocker-label"></span>
             <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+        </div>
+
+        <div class="setting-row disabled-row">
+            <span class="setting-label" id="safety-label"></span>
+            <div id="safety-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+        </div>
+    </div>
+
+    <!-- Phantom Mode Card -->
+    <div id="phantom-mode-card" class="settings-card">
+        <div class="card-title" id="phantom-mode-title"></div>
+
+        <div class="setting-row">
+            <span class="setting-label bold" id="phantom-master-label"></span>
+            <div id="phantom-master-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+        </div>
+
+        <div id="domain-protocols" class="sub-section disabled-section">
+            <div class="sub-title" id="domain-protocols-title"></div>
+            <div class="setting-row">
+                <span class="setting-label" id="x-timeline-label"></span>
+                <div id="phantom-x-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+            </div>
+
+            <div class="setting-row disabled-row">
+                <span class="setting-label" id="gemini-label"></span>
+                <div id="phantom-gemini-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+            </div>
         </div>
     </div>
 

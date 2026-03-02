@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "X-Ops Walker",
+    "name": "__MSG_extension_name__",
     "version": "1.1.0",
-    "description": "Ultra-fast, keyboard-driven navigation and DOM management for power users.",
+    "description": "__MSG_extension_description__",
     "default_locale": "en",
     "permissions": [
         "storage",
@@ -35,6 +35,17 @@
             ],
             "js": [
                 "kernel.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "*://x.com/*",
+                "*://twitter.com/*"
+            ],
+            "js": [
+                "content/phantom.js",
+                "content/domains/x-timeline.js"
             ],
             "run_at": "document_idle"
         }

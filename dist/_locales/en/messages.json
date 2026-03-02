@@ -100,5 +100,35 @@
     },
     "popup_blocker_label": {
         "message": "Block Google One Tap"
+    },
+    "global_ops_section": {
+        "message": "Global Operations"
+    },
+    "phantom_mode_section": {
+        "message": "Phantom Mode"
+    },
+    "phantom_mode_master": {
+        "message": "Phantom Mode (Master)"
+    },
+    "domain_protocols_title": {
+        "message": "Domain Protocols"
+    },
+    "x_timeline_walker": {
+        "message": "X Timeline Walker"
+    },
+    "block_google_one_tap": {
+        "message": "Block Google One Tap"
+    },
+    "chat_safety_enter": {
+        "message": "Chat SafetyEnter"
+    },
+    "gemini_walker": {
+        "message": "Gemini Walker"
+    },
+    "extension_name": {
+        "message": "X-Ops Walker"
+    },
+    "extension_description": {
+        "message": "Ultra-fast, keyboard-driven navigation and DOM management for power users."
     }
 }

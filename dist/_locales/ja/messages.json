@@ -103,5 +103,35 @@
     },
     "popup_blocker_label": {
         "message": "Google One Tap をブロック"
+    },
+    "global_ops_section": {
+        "message": "全般設定"
+    },
+    "phantom_mode_section": {
+        "message": "Phantom Mode"
+    },
+    "phantom_mode_master": {
+        "message": "ファントムモード (Master)"
+    },
+    "domain_protocols_title": {
+        "message": "ドメインプロトコル"
+    },
+    "x_timeline_walker": {
+        "message": "X タイムライン・ウォーカー"
+    },
+    "block_google_one_tap": {
+        "message": "Google One Tap 遮断"
+    },
+    "chat_safety_enter": {
+        "message": "チャット SafetyEnter"
+    },
+    "gemini_walker": {
+        "message": "Gemini ウォーカー"
+    },
+    "extension_name": {
+        "message": "X-Ops Walker"
+    },
+    "extension_description": {
+        "message": "パワーユーザー向けの超高速キーボードナビゲーション。DOM操作特化。"
     }
 }

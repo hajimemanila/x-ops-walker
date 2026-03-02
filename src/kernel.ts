@@ -1,4 +1,3 @@
-const STORAGE_KEY = 'isWalkerMode';
 const SCROLL_AMOUNT = 380;
 
 const WALKER_KEYS = new Set(['a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c']);
@@ -28,7 +27,6 @@ const NAV_ACTIONS: Record<string, () => void> = {
 // Google One Tap iframe によるフォーカス強奪を防ぎ、
 // X-Ops Walker のキーバインドを死守するための迎撃 CSS。
 // ストレージ設定に応じて動的に有効/無効を切り替える。デフォルト OFF。
-const BLOCKER_KEY = 'blockGoogleOneTap';
 
 const oneTapBlockStyle = document.createElement('style');
 oneTapBlockStyle.textContent = [
@@ -418,24 +416,29 @@ function blurActiveInput(): void {
 }
 
 // ── Storage logic ─────────────────────────────────────────────────────────────
-browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
-    isWalkerMode = !!result[STORAGE_KEY];
+browser.storage.local.get(['global']).then((result) => {
+    const globalConfig = result.global || {};
+    isWalkerMode = !!globalConfig.walkerMode;
     hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!result[BLOCKER_KEY]);  // デフォルト false (OFF)
+    applyOneTapBlocker(!!globalConfig.oneTap);  // デフォルト false (OFF)
 });
 
 browser.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (STORAGE_KEY in changes) {
-        isWalkerMode = !!changes[STORAGE_KEY].newValue;
-        hud.setState(isWalkerMode);
-        // ポップアップから ON にした際も入力欄ブラーを発火
-        // document.hidden チェック：バックグラウンドタブが window.focus() を呼んで
-        // タブが勝手に切り替わる問題を防ぐ。前景タブのみ実行。
-        if (isWalkerMode && !document.hidden) blurActiveInput();
-    }
-    if (BLOCKER_KEY in changes) {
-        applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    if ('global' in changes) {
+        const newVal = changes.global.newValue || {};
+        const oldVal = changes.global.oldValue || {};
+
+        if (newVal.walkerMode !== oldVal.walkerMode) {
+            isWalkerMode = !!newVal.walkerMode;
+            hud.setState(isWalkerMode);
+            // ポップアップから ON にした際も入力欄ブラーを発火
+            if (isWalkerMode && !document.hidden) blurActiveInput();
+        }
+
+        if (newVal.oneTap !== oldVal.oneTap) {
+            applyOneTapBlocker(!!newVal.oneTap);
+        }
     }
 });
 
@@ -530,7 +533,11 @@ window.addEventListener('keydown', (event: KeyboardEvent): void => {
             return;
         }
         isWalkerMode = !isWalkerMode;
-        browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
+        browser.storage.local.get(['global']).then((res) => {
+            const globalConfig = res.global || {};
+            globalConfig.walkerMode = isWalkerMode;
+            browser.storage.local.set({ global: globalConfig });
+        });
         hud.setState(isWalkerMode);
         // Esc で ON になった際だけ入力欄ブラーを発火（OFF時は実行しない）
         if (isWalkerMode) blurActiveInput();

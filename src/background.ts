@@ -63,7 +63,7 @@ function sendArrivalBlur(tabId: number): void {
     }, 50);
 }
 
-type FoxWalkerCommand =
+type XOpsWalkerCommand =
     | 'NEXT_TAB'
     | 'PREV_TAB'
     | 'CLOSE_TAB'
@@ -75,14 +75,14 @@ type FoxWalkerCommand =
     | 'DUPLICATE_TAB'
     | 'CLEAN_UP';
 
-interface FoxWalkerMessage {
-    command: FoxWalkerCommand;
+interface XOpsWalkerMessage {
+    command: XOpsWalkerCommand;
 }
 
 /**
  * メインリスナー
  */
-browser.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
+browser.runtime.onMessage.addListener((message: XOpsWalkerMessage, sender) => {
     // sender.tab は content script からのメッセージにのみ存在する
     const tabId = sender.tab?.id;
 
@@ -173,10 +173,10 @@ browser.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                 }
 
                 default:
-                    console.warn('[FoxWalker] Unknown command:', message.command);
+                    console.warn('[X-Ops Walker] Unknown command:', message.command);
             }
         } catch (err) {
-            console.error(`[FoxWalker] Error [${message.command}]:`, err);
+            console.error(`[X-Ops Walker] Error [${message.command}]:`, err);
         }
     })();
 

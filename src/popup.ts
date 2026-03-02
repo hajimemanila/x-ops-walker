@@ -1,85 +1,131 @@
-const STORAGE_KEY = 'isWalkerMode';
-const BLOCKER_KEY = 'blockGoogleOneTap';
-
 function t(key: string): string {
     return browser.i18n.getMessage(key) || key;
 }
 
-function updateUI(active: boolean): void {
-    const toggle = document.getElementById('toggle')!;
-    const statusText = document.getElementById('status-text')!;
-    const statusDot = document.getElementById('status-dot')!;
-    const detail = document.getElementById('status-detail')!;
-
-    if (active) {
-        toggle.classList.add('active');
-        toggle.setAttribute('aria-checked', 'true');
-        statusText.textContent = t('popup_status_on');
-        statusText.className = 'on';
-        statusDot.className = 'on';
-        detail.textContent = t('popup_detail_on');
-    } else {
-        toggle.classList.remove('active');
-        toggle.setAttribute('aria-checked', 'false');
-        statusText.textContent = t('popup_status_off');
-        statusText.className = 'off';
-        statusDot.className = 'off';
-        detail.textContent = t('popup_detail_off');
-    }
+interface GlobalConfig {
+    walkerMode?: boolean;
+    oneTap?: boolean;
+    safetyEnter?: boolean;
 }
 
-function updateBlockerUI(active: boolean): void {
-    const toggle = document.getElementById('blocker-toggle')!;
-    if (active) {
-        toggle.classList.add('active');
-        toggle.setAttribute('aria-checked', 'true');
+interface PhantomConfig {
+    master?: boolean;
+    xWalker?: boolean;
+    geminiWalker?: boolean;
+}
+
+function updateGlobalUI(config: GlobalConfig): void {
+    const walkerToggle = document.getElementById('toggle')!;
+    const statusText = document.getElementById('status-text')!;
+
+    if (config.walkerMode) {
+        walkerToggle.classList.add('active');
+        walkerToggle.setAttribute('aria-checked', 'true');
+        statusText.textContent = 'ON';
+        statusText.className = 'on';
     } else {
-        toggle.classList.remove('active');
-        toggle.setAttribute('aria-checked', 'false');
+        walkerToggle.classList.remove('active');
+        walkerToggle.setAttribute('aria-checked', 'false');
+        statusText.textContent = 'OFF';
+        statusText.className = 'off';
     }
+
+    const blockerToggle = document.getElementById('blocker-toggle')!;
+    if (config.oneTap) {
+        blockerToggle.classList.add('active');
+        blockerToggle.setAttribute('aria-checked', 'true');
+    } else {
+        blockerToggle.classList.remove('active');
+        blockerToggle.setAttribute('aria-checked', 'false');
+    }
+
+    // Safety Enter is disabled/placeholder
+}
+
+function updatePhantomUI(config: PhantomConfig): void {
+    const masterToggle = document.getElementById('phantom-master-toggle')!;
+    const xToggle = document.getElementById('phantom-x-toggle')!;
+    const geminiToggle = document.getElementById('phantom-gemini-toggle')!;
+    const domainProtocols = document.getElementById('domain-protocols')!;
+
+    if (config.master) {
+        masterToggle.classList.add('active');
+        masterToggle.setAttribute('aria-checked', 'true');
+        domainProtocols.classList.remove('disabled-section');
+    } else {
+        masterToggle.classList.remove('active');
+        masterToggle.setAttribute('aria-checked', 'false');
+        domainProtocols.classList.add('disabled-section');
+    }
+
+    if (config.xWalker) {
+        xToggle.classList.add('active');
+        xToggle.setAttribute('aria-checked', 'true');
+    } else {
+        xToggle.classList.remove('active');
+        xToggle.setAttribute('aria-checked', 'false');
+    }
+
+    // Gemini Walker is disabled/placeholder
 }
 
 async function init(): Promise<void> {
-    // バージョンを manifest.json から動的取得
     const manifest = browser.runtime.getManifest();
     document.getElementById('version-badge')!.textContent = `v${manifest.version}`;
 
-    // i18n（textContent で安全に注入）
-    document.getElementById('mode-label')!.textContent = t('popup_mode_label');
-    document.getElementById('sc-title')!.textContent = t('popup_sc_title');
-    document.getElementById('footer')!.textContent = t('popup_footer_hint');
-    document.getElementById('blocker-label')!.textContent = t('popup_blocker_label');
+    document.getElementById('global-ops-title')!.textContent = t('global_ops_section');
+    document.getElementById('walker-master-label')!.textContent = t('popup_mode_label') + ' (Master)';
+    document.getElementById('blocker-label')!.textContent = t('block_google_one_tap');
+    document.getElementById('safety-label')!.textContent = t('chat_safety_enter');
 
-    // sc-hint: "Press [F] on any page…" を DOM で構築（innerHTML 回避）
-    const scHint = document.getElementById('sc-hint')!;
-    const beforeText = document.createTextNode(t('popup_sc_hint_before') + ' ');
-    const keyBadge = document.createElement('span');
-    keyBadge.className = 'key-badge';
-    keyBadge.textContent = 'F';
-    const afterText = document.createTextNode(' ' + t('popup_sc_hint_after'));
-    scHint.appendChild(beforeText);
-    scHint.appendChild(keyBadge);
-    scHint.appendChild(afterText);
+    document.getElementById('phantom-mode-title')!.textContent = t('phantom_mode_section');
+    document.getElementById('phantom-master-label')!.textContent = t('phantom_mode_master');
+    document.getElementById('domain-protocols-title')!.textContent = t('domain_protocols_title');
+    document.getElementById('x-timeline-label')!.textContent = t('x_timeline_walker');
+    document.getElementById('gemini-label')!.textContent = t('gemini_walker');
 
-    // Walker Mode の初期状態読み込み
-    const result = await browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
-    updateUI(!!result[STORAGE_KEY]);
-    updateBlockerUI(!!result[BLOCKER_KEY]); // デフォルト false (OFF)
+    // Read initial states
+    const result = await browser.storage.local.get(['global', 'phantom']);
+    const globalConfig: GlobalConfig = result.global || {};
+    const phantomConfig: PhantomConfig = result.phantom || { master: true, xWalker: true, geminiWalker: false }; // Defaults
 
-    // Walker Mode トグル
+    updateGlobalUI(globalConfig);
+    updatePhantomUI(phantomConfig);
+
+    // Global: Walker Mode toggle
     document.getElementById('toggle')!.addEventListener('click', async () => {
-        const res = await browser.storage.local.get(STORAGE_KEY);
-        const next = !res[STORAGE_KEY];
-        await browser.storage.local.set({ [STORAGE_KEY]: next });
-        updateUI(next);
+        const res = await browser.storage.local.get('global');
+        const config: GlobalConfig = res.global || {};
+        config.walkerMode = !config.walkerMode;
+        await browser.storage.local.set({ global: config });
+        updateGlobalUI(config);
     });
 
-    // Google One Tap ブロッカー トグル
+    // Global: One Tap Blocker toggle
     document.getElementById('blocker-toggle')!.addEventListener('click', async () => {
-        const res = await browser.storage.local.get(BLOCKER_KEY);
-        const next = !res[BLOCKER_KEY];
-        await browser.storage.local.set({ [BLOCKER_KEY]: next });
-        updateBlockerUI(next);
+        const res = await browser.storage.local.get('global');
+        const config: GlobalConfig = res.global || {};
+        config.oneTap = !config.oneTap;
+        await browser.storage.local.set({ global: config });
+        updateGlobalUI(config);
+    });
+
+    // Phantom: Master toggle
+    document.getElementById('phantom-master-toggle')!.addEventListener('click', async () => {
+        const res = await browser.storage.local.get('phantom');
+        const config: PhantomConfig = res.phantom || {};
+        config.master = !config.master;
+        await browser.storage.local.set({ phantom: config });
+        updatePhantomUI(config);
+    });
+
+    // Phantom: X Timeline Walker toggle
+    document.getElementById('phantom-x-toggle')!.addEventListener('click', async () => {
+        const res = await browser.storage.local.get('phantom');
+        const config: PhantomConfig = res.phantom || {};
+        config.xWalker = !config.xWalker;
+        await browser.storage.local.set({ phantom: config });
+        updatePhantomUI(config);
     });
 }
 

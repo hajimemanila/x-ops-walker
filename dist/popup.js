@@ -1,72 +1,98 @@
 "use strict";
 (() => {
   // src/popup.ts
-  var STORAGE_KEY = "isWalkerMode";
-  var BLOCKER_KEY = "blockGoogleOneTap";
   function t(key) {
     return browser.i18n.getMessage(key) || key;
   }
-  function updateUI(active) {
-    const toggle = document.getElementById("toggle");
+  function updateGlobalUI(config) {
+    const walkerToggle = document.getElementById("toggle");
     const statusText = document.getElementById("status-text");
-    const statusDot = document.getElementById("status-dot");
-    const detail = document.getElementById("status-detail");
-    if (active) {
-      toggle.classList.add("active");
-      toggle.setAttribute("aria-checked", "true");
-      statusText.textContent = t("popup_status_on");
+    if (config.walkerMode) {
+      walkerToggle.classList.add("active");
+      walkerToggle.setAttribute("aria-checked", "true");
+      statusText.textContent = "ON";
       statusText.className = "on";
-      statusDot.className = "on";
-      detail.textContent = t("popup_detail_on");
     } else {
-      toggle.classList.remove("active");
-      toggle.setAttribute("aria-checked", "false");
-      statusText.textContent = t("popup_status_off");
+      walkerToggle.classList.remove("active");
+      walkerToggle.setAttribute("aria-checked", "false");
+      statusText.textContent = "OFF";
       statusText.className = "off";
-      statusDot.className = "off";
-      detail.textContent = t("popup_detail_off");
+    }
+    const blockerToggle = document.getElementById("blocker-toggle");
+    if (config.oneTap) {
+      blockerToggle.classList.add("active");
+      blockerToggle.setAttribute("aria-checked", "true");
+    } else {
+      blockerToggle.classList.remove("active");
+      blockerToggle.setAttribute("aria-checked", "false");
     }
   }
-  function updateBlockerUI(active) {
-    const toggle = document.getElementById("blocker-toggle");
-    if (active) {
-      toggle.classList.add("active");
-      toggle.setAttribute("aria-checked", "true");
+  function updatePhantomUI(config) {
+    const masterToggle = document.getElementById("phantom-master-toggle");
+    const xToggle = document.getElementById("phantom-x-toggle");
+    const geminiToggle = document.getElementById("phantom-gemini-toggle");
+    const domainProtocols = document.getElementById("domain-protocols");
+    if (config.master) {
+      masterToggle.classList.add("active");
+      masterToggle.setAttribute("aria-checked", "true");
+      domainProtocols.classList.remove("disabled-section");
     } else {
-      toggle.classList.remove("active");
-      toggle.setAttribute("aria-checked", "false");
+      masterToggle.classList.remove("active");
+      masterToggle.setAttribute("aria-checked", "false");
+      domainProtocols.classList.add("disabled-section");
+    }
+    if (config.xWalker) {
+      xToggle.classList.add("active");
+      xToggle.setAttribute("aria-checked", "true");
+    } else {
+      xToggle.classList.remove("active");
+      xToggle.setAttribute("aria-checked", "false");
     }
   }
   async function init() {
     const manifest = browser.runtime.getManifest();
     document.getElementById("version-badge").textContent = `v${manifest.version}`;
-    document.getElementById("mode-label").textContent = t("popup_mode_label");
-    document.getElementById("sc-title").textContent = t("popup_sc_title");
-    document.getElementById("footer").textContent = t("popup_footer_hint");
-    document.getElementById("blocker-label").textContent = t("popup_blocker_label");
-    const scHint = document.getElementById("sc-hint");
-    const beforeText = document.createTextNode(t("popup_sc_hint_before") + " ");
-    const keyBadge = document.createElement("span");
-    keyBadge.className = "key-badge";
-    keyBadge.textContent = "F";
-    const afterText = document.createTextNode(" " + t("popup_sc_hint_after"));
-    scHint.appendChild(beforeText);
-    scHint.appendChild(keyBadge);
-    scHint.appendChild(afterText);
-    const result = await browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
-    updateUI(!!result[STORAGE_KEY]);
-    updateBlockerUI(!!result[BLOCKER_KEY]);
+    document.getElementById("global-ops-title").textContent = t("global_ops_section");
+    document.getElementById("walker-master-label").textContent = t("popup_mode_label") + " (Master)";
+    document.getElementById("blocker-label").textContent = t("block_google_one_tap");
+    document.getElementById("safety-label").textContent = t("chat_safety_enter");
+    document.getElementById("phantom-mode-title").textContent = t("phantom_mode_section");
+    document.getElementById("phantom-master-label").textContent = t("phantom_mode_master");
+    document.getElementById("domain-protocols-title").textContent = t("domain_protocols_title");
+    document.getElementById("x-timeline-label").textContent = t("x_timeline_walker");
+    document.getElementById("gemini-label").textContent = t("gemini_walker");
+    const result = await browser.storage.local.get(["global", "phantom"]);
+    const globalConfig = result.global || {};
+    const phantomConfig = result.phantom || { master: true, xWalker: true, geminiWalker: false };
+    updateGlobalUI(globalConfig);
+    updatePhantomUI(phantomConfig);
     document.getElementById("toggle").addEventListener("click", async () => {
-      const res = await browser.storage.local.get(STORAGE_KEY);
-      const next = !res[STORAGE_KEY];
-      await browser.storage.local.set({ [STORAGE_KEY]: next });
-      updateUI(next);
+      const res = await browser.storage.local.get("global");
+      const config = res.global || {};
+      config.walkerMode = !config.walkerMode;
+      await browser.storage.local.set({ global: config });
+      updateGlobalUI(config);
     });
     document.getElementById("blocker-toggle").addEventListener("click", async () => {
-      const res = await browser.storage.local.get(BLOCKER_KEY);
-      const next = !res[BLOCKER_KEY];
-      await browser.storage.local.set({ [BLOCKER_KEY]: next });
-      updateBlockerUI(next);
+      const res = await browser.storage.local.get("global");
+      const config = res.global || {};
+      config.oneTap = !config.oneTap;
+      await browser.storage.local.set({ global: config });
+      updateGlobalUI(config);
+    });
+    document.getElementById("phantom-master-toggle").addEventListener("click", async () => {
+      const res = await browser.storage.local.get("phantom");
+      const config = res.phantom || {};
+      config.master = !config.master;
+      await browser.storage.local.set({ phantom: config });
+      updatePhantomUI(config);
+    });
+    document.getElementById("phantom-x-toggle").addEventListener("click", async () => {
+      const res = await browser.storage.local.get("phantom");
+      const config = res.phantom || {};
+      config.xWalker = !config.xWalker;
+      await browser.storage.local.set({ phantom: config });
+      updatePhantomUI(config);
     });
   }
   document.addEventListener("DOMContentLoaded", init);

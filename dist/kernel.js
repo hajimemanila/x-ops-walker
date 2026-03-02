@@ -1,7 +1,6 @@
 "use strict";
 (() => {
   // src/kernel.ts
-  var STORAGE_KEY = "isWalkerMode";
   var SCROLL_AMOUNT = 380;
   var WALKER_KEYS = /* @__PURE__ */ new Set(["a", "d", "s", "w", "f", "x", "z", "r", "m", "g", "t", "9", " ", "q", "e", "c"]);
   var SHIFT_ACTIONS = {
@@ -24,7 +23,6 @@
     "a": () => browser.runtime.sendMessage({ command: "PREV_TAB" }),
     "d": () => browser.runtime.sendMessage({ command: "NEXT_TAB" })
   };
-  var BLOCKER_KEY = "blockGoogleOneTap";
   var oneTapBlockStyle = document.createElement("style");
   oneTapBlockStyle.textContent = [
     'iframe[src*="accounts.google.com/gsi/"]',
@@ -349,20 +347,25 @@
     }
     window.focus();
   }
-  browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
-    isWalkerMode = !!result[STORAGE_KEY];
+  browser.storage.local.get(["global"]).then((result) => {
+    const globalConfig = result.global || {};
+    isWalkerMode = !!globalConfig.walkerMode;
     hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!result[BLOCKER_KEY]);
+    applyOneTapBlocker(!!globalConfig.oneTap);
   });
   browser.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (STORAGE_KEY in changes) {
-      isWalkerMode = !!changes[STORAGE_KEY].newValue;
-      hud.setState(isWalkerMode);
-      if (isWalkerMode && !document.hidden) blurActiveInput();
-    }
-    if (BLOCKER_KEY in changes) {
-      applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    if ("global" in changes) {
+      const newVal = changes.global.newValue || {};
+      const oldVal = changes.global.oldValue || {};
+      if (newVal.walkerMode !== oldVal.walkerMode) {
+        isWalkerMode = !!newVal.walkerMode;
+        hud.setState(isWalkerMode);
+        if (isWalkerMode && !document.hidden) blurActiveInput();
+      }
+      if (newVal.oneTap !== oldVal.oneTap) {
+        applyOneTapBlocker(!!newVal.oneTap);
+      }
     }
   });
   browser.runtime.onMessage.addListener((message) => {
@@ -436,7 +439,11 @@
         return;
       }
       isWalkerMode = !isWalkerMode;
-      browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
+      browser.storage.local.get(["global"]).then((res) => {
+        const globalConfig = res.global || {};
+        globalConfig.walkerMode = isWalkerMode;
+        browser.storage.local.set({ global: globalConfig });
+      });
       hud.setState(isWalkerMode);
       if (isWalkerMode) blurActiveInput();
       return;

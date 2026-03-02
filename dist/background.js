@@ -102,10 +102,10 @@
             break;
           }
           default:
-            console.warn("[FoxWalker] Unknown command:", message.command);
+            console.warn("[X-Ops Walker] Unknown command:", message.command);
         }
       } catch (err) {
-        console.error(`[FoxWalker] Error [${message.command}]:`, err);
+        console.error(`[X-Ops Walker] Error [${message.command}]:`, err);
       }
     })();
     return true;
