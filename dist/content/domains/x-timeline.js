@@ -169,6 +169,10 @@
     if (!isActive) return;
     if (isInputActive()) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (["KeyI", "KeyU", "KeyK", "KeyJ", "KeyL", "KeyO", "KeyN", "KeyM"].includes(e.code)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (e.code === "Backspace") {
       e.preventDefault();
       e.stopPropagation();
@@ -232,6 +236,12 @@
       case "KeyO":
         e.preventDefault();
         executeAction("repost");
+        break;
+      case "KeyN":
+        window.dispatchEvent(new CustomEvent("x-ops-toggle-star"));
+        break;
+      case "KeyM":
+        window.dispatchEvent(new CustomEvent("x-ops-next-star"));
         break;
     }
   }, true);

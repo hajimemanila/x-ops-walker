@@ -4,6 +4,29 @@
   var isDashboardEnabled = false;
   var pollingInterval = null;
   var currentBookmarks = [];
+  var STORAGE_KEY_HIGHLIGHTS = "x_bookmark_highlights";
+  function getHighlights() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY_HIGHLIGHTS) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveHighlight(url, isActive) {
+    const data = getHighlights();
+    if (isActive) data[url] = true;
+    else delete data[url];
+    localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(data));
+  }
+  function cleanUrl(url) {
+    if (!url) return "";
+    try {
+      const u = new URL(url, window.location.origin);
+      return u.pathname.replace(/\/$/, "").toLowerCase();
+    } catch (e) {
+      return url.toLowerCase();
+    }
+  }
   chrome.storage.local.get(["xOpsBookmarks"], (result) => {
     currentBookmarks = result.xOpsBookmarks || [];
   });
@@ -31,7 +54,11 @@
   function createBookmarkItem(name, url) {
     const item = document.createElement("div");
     item.className = "x-ops-bm-item";
-    item.onclick = () => {
+    const star = document.createElement("span");
+    star.className = "x-ops-bm-star";
+    star.textContent = "\u2606";
+    item.onclick = (e) => {
+      if (e.target === star) return;
       window.location.href = url;
     };
     const link = document.createElement("a");
@@ -39,9 +66,23 @@
     link.textContent = name;
     link.href = url;
     link.onclick = (e) => e.preventDefault();
-    const star = document.createElement("span");
-    star.className = "x-ops-bm-star";
-    star.textContent = "\u2606";
+    const highlights = getHighlights();
+    const isActive = highlights[url];
+    if (isActive) {
+      item.classList.add("active");
+    }
+    star.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      const myProfileUrl = cleanUrl(getMyProfileUrl());
+      if (cleanUrl(url) === myProfileUrl) return;
+      const newState = item.classList.toggle("active");
+      saveHighlight(url, newState);
+      star.classList.remove("popping");
+      void star.offsetWidth;
+      star.classList.add("popping");
+    };
     item.appendChild(link);
     item.appendChild(star);
     return item;
@@ -124,7 +165,10 @@
             .x-ops-bm-item:hover { background-color: rgba(255, 255, 255, 0.03); }
             .x-ops-bm-item.target-lock { border: 1px solid #00ba7c; background: rgba(0, 186, 124, 0.1); box-shadow: 0 0 10px rgba(0, 186, 124, 0.2) inset; }
             .x-ops-bm-link { flex-grow: 1; font-size: 15px; font-weight: 500; color: rgb(231, 233, 234); text-decoration: none; display: block; }
-            .x-ops-bm-star { font-size: 18px; color: #71767b; padding: 6px; border-radius: 50%; margin-left: 8px; }
+            .x-ops-bm-star { font-size: 18px; color: #71767b; padding: 6px; border-radius: 50%; margin-left: 8px; transition: color 0.2s; }
+            .x-ops-bm-item.active .x-ops-bm-star { color: #ffac30; }
+            .x-ops-bm-star.popping { animation: starPop 0.3s ease-out; }
+            @keyframes starPop { 0% { transform: scale(1); } 50% { transform: scale(1.5); } 100% { transform: scale(1); } }
         `;
       box.appendChild(style);
       const container = document.createElement("div");
@@ -163,6 +207,84 @@
     }
     updateTargetHighlight();
   }
+  window.addEventListener("x-ops-toggle-star", () => {
+    const currentPath = cleanUrl(window.location.href);
+    const myProfilePath = cleanUrl(getMyProfileUrl());
+    if (currentPath === myProfilePath) return;
+    const box = document.getElementById("x-ops-dashboard-box");
+    if (!box) return;
+    const items = Array.from(box.querySelectorAll(".x-ops-bm-item"));
+    const targetItem = items.find((item) => cleanUrl(item.querySelector(".x-ops-bm-link")?.href) === currentPath);
+    if (targetItem) {
+      const link = targetItem.querySelector(".x-ops-bm-link").href;
+      const newState = targetItem.classList.toggle("active");
+      saveHighlight(link, newState);
+      const star = targetItem.querySelector(".x-ops-bm-star");
+      if (star) {
+        star.classList.remove("popping");
+        void star.offsetWidth;
+        star.classList.add("popping");
+      }
+    }
+  });
+  window.addEventListener("x-ops-next-star", () => {
+    const box = document.getElementById("x-ops-dashboard-box");
+    if (!box) return;
+    const links = Array.from(box.querySelectorAll(".x-ops-bm-link"));
+    if (links.length === 0) return;
+    const targets = links.map((a) => a.href);
+    const highlights = getHighlights();
+    const currentPath = cleanUrl(window.location.href);
+    const myProfilePath = cleanUrl(getMyProfileUrl());
+    let currentIdx = targets.findIndex((url) => cleanUrl(url) === currentPath);
+    let nextUrl = null;
+    if (currentIdx !== -1 && highlights[targets[currentIdx]]) {
+      let i = 1;
+      while (i < targets.length) {
+        let candidateIdx = (currentIdx + i) % targets.length;
+        let candidateUrl = targets[candidateIdx];
+        if (cleanUrl(candidateUrl) !== myProfilePath) {
+          nextUrl = candidateUrl;
+          break;
+        }
+        i++;
+      }
+    } else {
+      let starredIdx = targets.findIndex((url) => highlights[url]);
+      if (starredIdx !== -1) {
+        nextUrl = targets[starredIdx];
+      } else {
+        let i = 1;
+        while (i < targets.length) {
+          let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
+          let candidateUrl = targets[candidateIdx];
+          if (cleanUrl(candidateUrl) !== myProfilePath) {
+            nextUrl = candidateUrl;
+            break;
+          }
+          i++;
+        }
+      }
+    }
+    if (nextUrl && cleanUrl(nextUrl) !== currentPath) {
+      let modified = false;
+      if (currentIdx !== -1) {
+        const originUrl = targets[currentIdx];
+        if (cleanUrl(originUrl) !== myProfilePath && highlights[originUrl]) {
+          delete highlights[originUrl];
+          modified = true;
+        }
+      }
+      if (cleanUrl(nextUrl) !== myProfilePath && !highlights[nextUrl]) {
+        highlights[nextUrl] = true;
+        modified = true;
+      }
+      if (modified) {
+        localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(highlights));
+      }
+      window.location.href = nextUrl;
+    }
+  });
   console.log("[X-Ops Walker X-Dashboard] Loaded. Waiting for PhantomState...");
   var checkPhantomDashboard = setInterval(() => {
     if (window.FoxPhantom) {
