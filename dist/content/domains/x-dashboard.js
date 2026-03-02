@@ -3,6 +3,66 @@
   // src/content/domains/x-dashboard.ts
   var isDashboardEnabled = false;
   var pollingInterval = null;
+  var currentBookmarks = [];
+  chrome.storage.local.get(["xOpsBookmarks"], (result) => {
+    currentBookmarks = result.xOpsBookmarks || [];
+  });
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "local" && changes.xOpsBookmarks) {
+      currentBookmarks = changes.xOpsBookmarks.newValue || [];
+      renderBookmarkList();
+    }
+  });
+  function getMyProfileUrl() {
+    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    return profileLink ? profileLink.href : "https://x.com/home";
+  }
+  function renderBookmarkList() {
+    const container = document.getElementById("x-ops-bookmark-container");
+    if (!container) return;
+    container.innerHTML = "";
+    const profileUrl = getMyProfileUrl();
+    container.appendChild(createBookmarkItem("My Profile (\u81EA\u5206\u306E\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB)", profileUrl));
+    currentBookmarks.forEach((bm) => {
+      container.appendChild(createBookmarkItem(bm.name, bm.url));
+    });
+    updateTargetHighlight();
+  }
+  function createBookmarkItem(name, url) {
+    const item = document.createElement("div");
+    item.className = "x-ops-bm-item";
+    item.onclick = () => {
+      window.location.href = url;
+    };
+    const link = document.createElement("a");
+    link.className = "x-ops-bm-link";
+    link.textContent = name;
+    link.href = url;
+    link.onclick = (e) => e.preventDefault();
+    const star = document.createElement("span");
+    star.className = "x-ops-bm-star";
+    star.textContent = "\u2606";
+    item.appendChild(link);
+    item.appendChild(star);
+    return item;
+  }
+  function updateTargetHighlight() {
+    const container = document.getElementById("x-ops-bookmark-container");
+    if (!container) return;
+    const currentUrl = window.location.href.replace(/\/$/, "");
+    const items = container.querySelectorAll(".x-ops-bm-item");
+    items.forEach((item) => {
+      const link = item.querySelector(".x-ops-bm-link");
+      if (link) {
+        const linkUrl = link.href.replace(/\/$/, "");
+        if (currentUrl === linkUrl) {
+          item.classList.add("target-lock");
+        } else {
+          item.classList.remove("target-lock");
+        }
+      }
+    });
+  }
   function installDashboard() {
     if (pollingInterval) clearInterval(pollingInterval);
     pollingInterval = window.setInterval(pollAndSync, 500);
@@ -58,11 +118,19 @@
       title.style.borderBottom = "1px solid rgba(255, 140, 0, 0.2)";
       title.style.paddingBottom = "8px";
       box.appendChild(title);
-      const placeholder = document.createElement("div");
-      placeholder.textContent = "Stats & Bookmarks will appear here...";
-      placeholder.style.color = "rgba(255, 255, 255, 0.5)";
-      placeholder.style.fontSize = "12px";
-      box.appendChild(placeholder);
+      const style = document.createElement("style");
+      style.textContent = `
+            .x-ops-bm-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; cursor: pointer; transition: background-color 0.2s; border-bottom: 1px solid rgb(56, 68, 77); }
+            .x-ops-bm-item:hover { background-color: rgba(255, 255, 255, 0.03); }
+            .x-ops-bm-item.target-lock { border: 1px solid #00ba7c; background: rgba(0, 186, 124, 0.1); box-shadow: 0 0 10px rgba(0, 186, 124, 0.2) inset; }
+            .x-ops-bm-link { flex-grow: 1; font-size: 15px; font-weight: 500; color: rgb(231, 233, 234); text-decoration: none; display: block; }
+            .x-ops-bm-star { font-size: 18px; color: #71767b; padding: 6px; border-radius: 50%; margin-left: 8px; }
+        `;
+      box.appendChild(style);
+      const container = document.createElement("div");
+      container.id = "x-ops-bookmark-container";
+      box.appendChild(container);
+      setTimeout(renderBookmarkList, 100);
       document.body.appendChild(box);
     }
     const searchBar = sidebar.querySelector('[role="search"]');
@@ -93,6 +161,7 @@
     } else {
       box.style.display = "none";
     }
+    updateTargetHighlight();
   }
   console.log("[X-Ops Walker X-Dashboard] Loaded. Waiting for PhantomState...");
   var checkPhantomDashboard = setInterval(() => {
