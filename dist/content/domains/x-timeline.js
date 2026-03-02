@@ -12,42 +12,26 @@
   var isActive = false;
   var currentIndex = -1;
   var targetArticles = [];
-  var indicatorDiv = null;
   var backspacePressTime = 0;
   var style = document.createElement("style");
   style.textContent = `
     body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
     body.x-walker-active article[data-testid="tweet"].x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
-    #x-walker-indicator {
-        position: fixed; bottom: 20px; right: 20px;
-        background: rgba(0, 0, 0, 0.9); color: #00ba7c;
-        border: 1px solid #00ba7c; padding: 8px 16px; border-radius: 20px;
-        font-weight: bold; font-size: 14px;
-        z-index: 9999; pointer-events: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        display: none; user-select: none;
-    }
-    #x-walker-indicator.visible { display: block; }
 `;
   document.head.appendChild(style);
-  function createIndicator() {
-    if (document.getElementById("x-walker-indicator")) return;
-    indicatorDiv = document.createElement("div");
-    indicatorDiv.id = "x-walker-indicator";
-    indicatorDiv.innerHTML = "\u{1F3AE} Walker (Phantom)";
-    document.body.appendChild(indicatorDiv);
-  }
   function setWalkerState(enabled) {
     if (isActive === enabled) return;
     isActive = enabled;
+    if (window.PhantomUI) {
+      window.PhantomUI.update(enabled);
+    }
     if (isActive) {
       document.body.classList.add("x-walker-active");
-      if (indicatorDiv) indicatorDiv.classList.add("visible");
       updateTargets();
       if (window.scrollY < 200) currentIndex = -1;
       else findClosestIndex();
     } else {
       document.body.classList.remove("x-walker-active");
-      if (indicatorDiv) indicatorDiv.classList.remove("visible");
       forceClearFocus();
       currentIndex = -1;
       targetArticles = [];
@@ -268,7 +252,6 @@
       e.preventDefault();
     }
   }, true);
-  createIndicator();
   console.log("[X-Ops Walker X-Timeline] Loaded. Waiting for PhantomState...");
   var checkPhantom = setInterval(() => {
     if (window.FoxPhantom) {

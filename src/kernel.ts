@@ -100,11 +100,12 @@ function isInputActive(): boolean {
 // ── HUD (Shadow DOM) ──────────────────────────────────────────────────────────
 interface HudController {
     setState(active: boolean): void;
+    setPhantomState(isPhantom: boolean): void;
 }
 
 const hud: HudController = (() => {
     const host = document.createElement('div');
-    host.id = 'fox-walker-host';
+    host.id = 'x-ops-walker-host';
     Object.assign(host.style, {
         all: 'initial', position: 'fixed', zIndex: '2147483647',
         pointerEvents: 'none', bottom: '24px', right: '24px',
@@ -115,7 +116,7 @@ const hud: HudController = (() => {
     const style = document.createElement('style');
     style.textContent = `
     :host { all: initial; }
-    #hud {
+    #x-ops-hud {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
       display: flex; align-items: center; gap: 8px;
@@ -129,9 +130,9 @@ const hud: HudController = (() => {
       transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
       pointer-events: none; user-select: none;
     }
-    #hud.visible { opacity: 1; transform: translateY(0) scale(1); }
+    #x-ops-hud.visible { opacity: 1; transform: translateY(0) scale(1); }
     .icon { width: 16px; height: 16px; object-fit: contain; vertical-align: middle; }
-    .label { color: rgba(255, 255, 255, 0.55); text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em; }
+    .hud-label { color: rgba(255, 255, 255, 0.55); text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em; }
     .status { font-size: 12px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; transition: background 0.18s, color 0.18s; }
     .status.on  { background: rgba(255, 140, 0, 0.18); color: #ffac30; box-shadow: 0 0 10px rgba(255, 140, 0, 0.25); }
     .status.off { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.35); }
@@ -140,11 +141,11 @@ const hud: HudController = (() => {
       70%  { box-shadow: 0 0 0 8px rgba(255, 140, 0, 0.00); }
       100% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.00); }
     }
-    #hud.pulse { animation: pulse-ring 0.55s ease-out; }
+    #x-ops-hud.pulse { animation: pulse-ring 0.55s ease-out; }
   `;
 
     const hudEl = document.createElement('div');
-    hudEl.id = 'hud';
+    hudEl.id = 'x-ops-hud';
 
     // DOM 操作で構築（innerHTML 回避）
     const iconImg = document.createElement('img');
@@ -153,7 +154,7 @@ const hud: HudController = (() => {
     iconImg.alt = '';
 
     const labelSpan = document.createElement('span');
-    labelSpan.className = 'label';
+    labelSpan.className = 'hud-label';
     labelSpan.textContent = t('hud_label');
 
     const statusSpan = document.createElement('span');
@@ -204,8 +205,38 @@ const hud: HudController = (() => {
         }
     }
 
+    function setPhantomState(isPhantom: boolean): void {
+        if (isPhantom) {
+            hudEl.style.setProperty('border', '2px solid #a855f7', 'important');
+            hudEl.style.setProperty('box-shadow', '0 0 15px #a855f7', 'important');
+            labelSpan.textContent = '🎮 PHANTOM';
+            labelSpan.style.setProperty('color', '#a855f7', 'important');
+            statusSpan.textContent = 'ACTIVE';
+            statusSpan.style.setProperty('background', 'rgba(168, 85, 247, 0.25)', 'important');
+            statusSpan.style.setProperty('color', '#a855f7', 'important');
+            statusSpan.style.setProperty('box-shadow', '0 0 14px rgba(168, 85, 247, 0.35)', 'important');
+            iconImg.style.setProperty('filter', 'hue-rotate(270deg) drop-shadow(0 0 6px rgba(168,85,247,0.6))', 'important');
+
+            host.style.display = 'block';
+            hudEl.classList.add('visible');
+            hudEl.style.opacity = '1';
+        } else {
+            hudEl.style.removeProperty('border');
+            hudEl.style.removeProperty('box-shadow');
+            labelSpan.textContent = t('hud_label');
+            labelSpan.style.removeProperty('color');
+            statusSpan.style.removeProperty('background');
+            statusSpan.style.removeProperty('color');
+            statusSpan.style.removeProperty('box-shadow');
+            iconImg.style.removeProperty('filter');
+
+            // Revert state back to current Walker Mode status
+            setState(isWalkerMode);
+        }
+    }
+
     mount();
-    return { setState };
+    return { setState, setPhantomState };
 })();
 
 // ── Cheatsheet (Shadow DOM) ───────────────────────────────────────────────────
@@ -217,7 +248,7 @@ interface CheatsheetController {
 
 const cheatsheet: CheatsheetController = (() => {
     const host = document.createElement('div');
-    host.id = 'fox-walker-cheatsheet';
+    host.id = 'x-ops-walker-cheatsheet';
     Object.assign(host.style, {
         all: 'initial',
         position: 'fixed',
@@ -454,6 +485,13 @@ browser.runtime.onMessage.addListener((message: { command: string }) => {
     }
     window.focus();
 });
+
+// ── Phantom State Custom Event Listener ───────────────────────────────────────
+window.addEventListener('x-ops-state-change', ((e: CustomEvent<{ isPhantom: boolean }>) => {
+    if (e.detail && typeof e.detail.isPhantom === 'boolean') {
+        hud.setPhantomState(e.detail.isPhantom);
+    }
+}) as EventListener);
 
 // ── normalizeKey: 修飾キーに依存しない物理キーの正規化 ────────────────────────
 // event.key は Shift押下時に記号文字に変化する（Shift+0→')'、Shift+9→'('等）。

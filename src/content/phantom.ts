@@ -45,7 +45,57 @@ export class PhantomState {
     }
 }
 
+export class PhantomUI {
+    private static observer: MutationObserver | null = null;
+    private static isPrefixing: boolean = false;
+
+    public static update(isActive: boolean) {
+        console.log("[X-Ops Walker PhantomState] UI Updated. isPhantom:", isActive);
+        this.updateIndicator(isActive);
+        this.updateTitle(isActive);
+    }
+
+    private static updateIndicator(isActive: boolean) {
+        // Dispatch CustomEvent to kernel.ts which owns the closed Shadow DOM
+        const event = new CustomEvent('x-ops-state-change', {
+            detail: { isPhantom: isActive }
+        });
+        window.dispatchEvent(event);
+    }
+
+    private static updateTitle(isActive: boolean) {
+        if (isActive) {
+            if (!this.observer) {
+                this.observer = new MutationObserver(() => this.enforceTitlePrefix());
+                const titleEl = document.querySelector('title');
+                if (titleEl) {
+                    this.observer.observe(titleEl, { childList: true, subtree: true, characterData: true });
+                }
+            }
+            this.enforceTitlePrefix();
+        } else {
+            if (this.observer) {
+                this.observer.disconnect();
+                this.observer = null;
+            }
+            if (document.title.startsWith('🎮')) {
+                document.title = document.title.replace(/^🎮/, '');
+            }
+        }
+    }
+
+    private static enforceTitlePrefix() {
+        if (this.isPrefixing) return;
+        if (!document.title.startsWith('🎮')) {
+            this.isPrefixing = true;
+            document.title = '🎮' + document.title;
+            this.isPrefixing = false;
+        }
+    }
+}
+
 // Expose globally for domain scripts
 if (typeof window !== 'undefined') {
     (window as any).FoxPhantom = new PhantomState();
+    (window as any).PhantomUI = PhantomUI;
 }
