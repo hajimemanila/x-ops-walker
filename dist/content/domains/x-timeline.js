@@ -160,6 +160,11 @@
     const timeLink = article.querySelector("time")?.closest("a");
     if (timeLink) timeLink.click();
   }
+  window.addEventListener("x-ops-global-reset", () => {
+    if (!isActive) return;
+    forceClearFocus();
+    currentIndex = -1;
+  });
   function isInputActive() {
     const activeEl = document.activeElement;
     if (!activeEl) return false;

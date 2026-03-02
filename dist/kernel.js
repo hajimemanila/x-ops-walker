@@ -451,8 +451,10 @@
     }
     if (key === "z" && !shift) {
       event.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       window.focus();
+      window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
       return;
     }
     if (!shift && NAV_ACTIONS[key]) {
@@ -483,7 +485,6 @@
     const key = normalizeKey(event);
     if (WALKER_KEYS.has(key)) {
       event.stopPropagation();
-      event.stopImmediatePropagation();
     }
     handleKeyInput(event);
   }, { capture: true });

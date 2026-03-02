@@ -543,11 +543,13 @@ function handleKeyInput(event: KeyboardEvent): void {
     if (key === 'q') { event.preventDefault(); window.history.back(); return; }
     if (key === 'e') { event.preventDefault(); window.history.forward(); return; }
 
-    // Z (単押し): DOMリセット—Shift+Z は UNDO_CLOSE として上で先処理済み
+    // Z (単押し): DOMリセット (グローバル)
     if (key === 'z' && !shift) {
         event.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         window.focus();
+        window.dispatchEvent(new CustomEvent('x-ops-global-reset'));
         return;
     }
 
@@ -588,7 +590,6 @@ window.addEventListener('keydown', (event: KeyboardEvent): void => {
 
     if (WALKER_KEYS.has(key)) {
         event.stopPropagation();
-        event.stopImmediatePropagation();
     }
 
     handleKeyInput(event);

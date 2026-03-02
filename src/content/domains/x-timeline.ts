@@ -165,6 +165,13 @@ function xOpsOpenDetail(article: HTMLElement) {
     if (timeLink) timeLink.click();
 }
 
+// Global reset handled by kernel.ts via 'x-ops-global-reset' event
+window.addEventListener('x-ops-global-reset', () => {
+    if (!isActive) return;
+    forceClearFocus();
+    currentIndex = -1;
+});
+
 // Removed xOpsHandleDelete to be replaced by inline Backspace Overdrive
 
 function isInputActive(): boolean {
