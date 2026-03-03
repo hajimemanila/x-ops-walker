@@ -59,8 +59,8 @@
   function selfDestruct() {
     window.__XOPS_WALKER_ALIVE__ = false;
     window.removeEventListener("keydown", keydownHandler, { capture: true });
-    window.removeEventListener("keyup", silentKillHandler, { capture: true });
-    window.removeEventListener("keypress", silentKillHandler, { capture: true });
+    window.removeEventListener("keyup", walkerKeyUpHandler, { capture: true });
+    window.removeEventListener("keypress", walkerKeyUpHandler, { capture: true });
     window.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("focus", onWindowFocus);
   }
@@ -472,9 +472,13 @@
   }
   function keydownHandler(event) {
     if (isOrphan()) return;
-    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
-    if (event.repeat) return;
+    if (!isWalkerMode && event.key !== "Escape") return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
     if (event.isComposing) return;
+    if (isInputActive()) return;
+    if (event.repeat) return;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (document.fullscreenElement !== null && event.key === "Escape") return;
     const key = normalizeKey(event);
     if (event.key === "Escape") {
@@ -491,8 +495,7 @@
       if (isWalkerMode) blurActiveInput();
       return;
     }
-    if (!isWalkerMode || isInputActive()) return;
-    if (WALKER_KEYS.has(key)) {
+    if (isWalkerMode && WALKER_KEYS.has(key)) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -550,15 +553,15 @@
   }
   window.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("focus", onWindowFocus);
-  function silentKillHandler(event) {
+  function walkerKeyUpHandler(event) {
     if (isOrphan()) return;
     if (!isWalkerMode) return;
-    const target = event.target;
-    const isTargetInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
-    if (isTargetInput || isInputActive()) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
+    if (event.isComposing) return;
+    if (isInputActive()) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
-    if (event.isComposing) return;
     const key = normalizeKey(event);
     if (WALKER_KEYS.has(key)) {
       event.preventDefault();
@@ -566,6 +569,6 @@
       event.stopImmediatePropagation();
     }
   }
-  window.addEventListener("keyup", silentKillHandler, { capture: true });
-  window.addEventListener("keypress", silentKillHandler, { capture: true });
+  window.addEventListener("keyup", walkerKeyUpHandler, { capture: true });
+  window.addEventListener("keypress", walkerKeyUpHandler, { capture: true });
 })();

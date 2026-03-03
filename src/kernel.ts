@@ -89,8 +89,8 @@ function isOrphan(): boolean {
 function selfDestruct(): void {
     window.__XOPS_WALKER_ALIVE__ = false;
     window.removeEventListener('keydown', keydownHandler, { capture: true });
-    window.removeEventListener('keyup', silentKillHandler, { capture: true });
-    window.removeEventListener('keypress', silentKillHandler, { capture: true });
+    window.removeEventListener('keyup', walkerKeyUpHandler, { capture: true });
+    window.removeEventListener('keypress', walkerKeyUpHandler, { capture: true });
     window.removeEventListener('visibilitychange', onVisibilityChange);
     window.removeEventListener('focus', onWindowFocus);
 }
@@ -595,32 +595,49 @@ function dispatchWalkerAction(event: KeyboardEvent, key: string): void {
 // GeminiやXのキャプチャリスナーすら上書きできる最強の位置取りになる。
 function keydownHandler(event: KeyboardEvent): void {
     // ── P1: Orphan（亡霊）フェイルセーフ ────────────────────────────────────
-    // extension context が無効化されているなら、即座にリスナーを解除して終了。
     if (isOrphan()) return;
 
-    // 修飾キー単独はスキップ
-    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 【絶対的パススルー層】
+    // 以下の条件のいずれかに合致する場合は stopPropagation / preventDefault を
+    // 一切呼ばずに即 return。ブラウザ標準動作（コピー・ペースト・IME 等）を完全保護。
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // キーリピートはスキップ（長押しの連射を防ぐ）
+    // Walker が OFF の時は何もしない（Escape だけは後段で処理するため除外）
+    if (!isWalkerMode && event.key !== 'Escape') return;
+
+    // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
+    // 例: Ctrl+C (コピー), Ctrl+V (ペースト), Alt+← (戻る) 等を保護
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    // テキストが選択されている場合は干渉しない（コピー等の選択操作を保護）
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
+
+    // IME（日本語変換等）入力中はスリープ（変換候補のキー操作を誤捕捉しない）
+    if (event.isComposing) return;
+
+    // 入力欄にフォーカスがある場合は干渉しない
+    if (isInputActive()) return;
+
+    // キーリピートはスキップ（長押し連射を防ぐ）
     if (event.repeat) return;
 
-    // IME（日本語変換等）入力中はウォーカーを完全スリープさせる
-    // 変換中のキーイベントを誤短訕して殺してしまうのを防ぐ
-    if (event.isComposing) return;
+    // 修飾キー単独のキーダウンはスキップ
+    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
 
     // フルスクリーン中の Escape はブラウザに委ねる
     if (document.fullscreenElement !== null && event.key === 'Escape') return;
 
     // ── キー正規化: event.code ベースで修飾キー非依存な小文字キーを取得 ────────
-    // event.code は Shift/Alt 修飾の影響を受けない（Shift+'g' → code='KeyG' → 'g')
-    // Digit9 → '9'（Shift+'9' でも code='Digit9' のまま）などを正確に取り扱うため
-    // event.key.toLowerCase() ではなく必ず normalizeKey を使用する。
-    // この一度の計算を WALKER_KEYS 判定と dispatchWalkerAction の両方で共有する。
     const key = normalizeKey(event);
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 【Opt-in Block 層】
+    // ここから下は「Walker が使うキーと確定した瞬間に初めて」ブロックする。
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
     // ── Escape: チートシート閉じる or Walker トグル ──────────────────────────
-    // Escape は Walker OFF 状態でも必ず捕捉する（チートシートを閉じるため）。
-    // P3強奪3点セットを先に実行してからロジックに入る。
+    // Walker OFF/ON どちらでも Escape だけは捕捉してチートシートを閉じる。
     if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -639,19 +656,12 @@ function keydownHandler(event: KeyboardEvent): void {
         return;
     }
 
-    // Walker OFF または入力中はここで終了（強奪もしない）
-    if (!isWalkerMode || isInputActive()) return;
-
-    // ── P3: 絶対的イベント強奪 ───────────────────────────────────────────────
-    // Walker キーと判定された瞬間、非同期処理（sendMessage等）より前に
-    // 同期的に3つを全て実行する。サイト側のリスナーへの伝播を完全に遮断する。
-    if (WALKER_KEYS.has(key)) {
+    // Walker ON 確定 & WALKER_KEYS に含まれるキー → この瞬間に初めてブロック
+    if (isWalkerMode && WALKER_KEYS.has(key)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        // ↑ この3行はいかなる非同期処理・条件分岐よりも先に実行される
 
-        // key はハンドラ先頭で済みの正規化値をそのまま渡す（二重計算なし）
         dispatchWalkerAction(event, key);
     }
 }
@@ -752,49 +762,54 @@ function onWindowFocus(): void {
 window.addEventListener('visibilitychange', onVisibilityChange);
 window.addEventListener('focus', onWindowFocus);
 
-// ── P3追加: keyup / keypress のサイレントキル（三段防壁）───────────────────────
+// ── keyup / keypress: ホワイトリスト方式サイレントキル ───────────────────────
 // 問題: Gemini 等のサイトは keydown ではなく keyup や keypress でショートカットを
 //       発火させる場合がある。keydown だけ握りつぶしても keyup/keypress が漏れると
 //       サイト側ハンドラが動いてしまう。
-// 解決: Walker ON かつ WALKER_KEYS のキーであれば、keyup/keypress も
-//       キャプチャフェーズの最上流で3点セットを実行し、アクションは一切行わず
-//       ただ「握りつぶす」だけにする（サイレントキル）。
+// 解決: keydown と同一の「絶対的パススルー層」を最上部で評価し、
+//       Walker が確実に使うキーと判定された場合のみ止める（ホワイトリスト）。
 // 注意: keypress は非推奨だが、レガシーサイト対策として引き続き登録する。
-function silentKillHandler(event: KeyboardEvent): void {
+function walkerKeyUpHandler(event: KeyboardEvent): void {
     // P1: 亡霊チェック
     if (isOrphan()) return;
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 【絶対的パススルー層】— keydown と完全に同一の条件セット
+    // これらを通過するイベントにはいかなるブロックも行わない。
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     // Walker OFF なら一切介入しない
     if (!isWalkerMode) return;
 
-    // ── 入力欄ガード（絶対原則）────────────────────────────────────────────────
-    // テキスト入力中はWalkerを完全に無効化し、ブラウザの標準動作に委ねる。
-    // event.target ベースで判定（shadow DOM 内の activeElement も isInputActive でカバー）
-    const target = event.target as HTMLElement;
-    const isTargetInput = target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable;
-    if (isTargetInput || isInputActive()) return;
+    // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-    // 修飾キー単独・リピートはスキップ
+    // テキストが選択されている場合は干渉しない
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
+
+    // IME 変換中はスキップ
+    if (event.isComposing) return;
+
+    // 入力欄にフォーカスがある場合は干渉しない
+    if (isInputActive()) return;
+
+    // 修飾キー単独はスキップ
     if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
     if (event.repeat) return;
 
-    // IME 入力中はサイレントキルもスキップ（変換候補キーを捕捉しない）
-    if (event.isComposing) return;
-
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 【Opt-in Block 層】— Walker キーと確定した瞬間にのみブロック
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const key = normalizeKey(event);
 
-    // WALKER_KEYS に含まれるキーならサイレントキル（アクション実行なし）
     if (WALKER_KEYS.has(key)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
-        // ↑ Geminiや X のサイト側 keyup/keypress リスナーへの伝播を完全遮断
         // dispatchWalkerAction は呼ばない（keydown で実行済み）
     }
 }
 
 // keyup / keypress ともにキャプチャフェーズの最上流（window）に配備する
-window.addEventListener('keyup', silentKillHandler, { capture: true });
-window.addEventListener('keypress', silentKillHandler, { capture: true });
+window.addEventListener('keyup', walkerKeyUpHandler, { capture: true });
+window.addEventListener('keypress', walkerKeyUpHandler, { capture: true });
