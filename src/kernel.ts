@@ -30,7 +30,6 @@ window.__XOPS_WALKER_ALIVE__ = true;
 // ── 定数 ─────────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
-const SCROLL_AMOUNT = 380;
 
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const WALKER_KEYS = new Set([
@@ -49,16 +48,92 @@ const SHIFT_ACTIONS: Record<string, string> = {
     'c': 'DUPLICATE_TAB',
 };
 
-// Shift+W / Shift+S → ローカルスクロール（background 不要）
+// ── スクロールユーティリティ（GCM準拠 + Gemini フォールバック強化）────────────────────────────
+//
+// Stage 1 — GCM コア: activeElement.parentElement から上へ歩き、
+//           overflowY=auto/scroll の最初の親を返す（GCMと完全同一）。
+// Stage 2 — コンテンツアンカー: Stage 1 が documentElement を返した場合、
+//           Gemini メッセージ等の既知セレクタを querySelector で掴み、再度 Stage 1。
+//           GCM が messageList[0] を起点にするのと同じ思想。
+// Stage 3 — DOM スキャン: Stage 1/2 が失敗した場合、全要素から最大 scrollHeight の
+//           overflow 要素を探す（重いが最後の Element 捕捉手段）。
+// Stage 4 — window: 静的ページ用の最終手段。
+
+const CONTENT_ANCHOR_SELECTORS = [
+    'user-message',
+    'model-response',
+    'infinite-scroller',
+    '.conversations-container',
+    'main',
+    'article',
+    '[role="main"]',
+] as const;
+
+function walkToScrollParent(el: Element | null): Element | null {
+    let parent = el?.parentElement ?? null;
+    while (parent) {
+        const ov = window.getComputedStyle(parent).overflowY;
+        if (ov === 'auto' || ov === 'scroll') return parent;
+        parent = parent.parentElement;
+    }
+    return null;
+}
+
+function findScrollContainer(el: Element | null): Element {
+    // Stage 1: GCM コア
+    const s1 = walkToScrollParent(el);
+    if (s1) return s1;
+
+    // Stage 2: コンテンツアンカー起点の再探索
+    for (const sel of CONTENT_ANCHOR_SELECTORS) {
+        const anchor = document.querySelector(sel);
+        if (anchor) {
+            const s2 = walkToScrollParent(anchor);
+            if (s2) return s2;
+        }
+    }
+
+    // Stage 3: DOM 全体から最大 scrollHeight の overflow 要素をスキャン
+    let best: Element | null = null;
+    let bestHeight = 0;
+    document.querySelectorAll<Element>('*').forEach(node => {
+        const ov = window.getComputedStyle(node).overflowY;
+        if ((ov === 'auto' || ov === 'scroll') && node.scrollHeight > node.clientHeight) {
+            if (node.scrollHeight > bestHeight) { bestHeight = node.scrollHeight; best = node; }
+        }
+    });
+    if (best) return best;
+
+    return document.documentElement;
+}
+
+// スクロール実行。documentElement が返った（= html:overflow:hidden 系 SPA）場合は
+// window にフォールバックする。
+function walkerScroll(delta: number): void {
+    const c = findScrollContainer(document.activeElement);
+    if (c === document.documentElement) {
+        window.scrollBy({ top: delta, behavior: 'smooth' });
+    } else {
+        c.scrollBy({ top: delta, behavior: 'smooth' });
+    }
+}
+
+// Shift+W / Shift+S → ページ先頭・末尾へスクロール
 const SHIFT_LOCAL_ACTIONS: Record<string, () => void> = {
-    'w': () => window.scrollTo({ top: 0, behavior: 'smooth' }),
-    's': () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
+    'w': () => {
+        const c = findScrollContainer(document.activeElement);
+        c.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    's': () => {
+        const c = findScrollContainer(document.activeElement);
+        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+    },
 };
 
 // 無修飾キー → ローカルスクロール / background タブ移動
 const NAV_ACTIONS: Record<string, () => void> = {
-    'w': () => window.scrollBy({ top: -SCROLL_AMOUNT, behavior: 'smooth' }),
-    's': () => window.scrollBy({ top: SCROLL_AMOUNT, behavior: 'smooth' }),
+    'w': () => walkerScroll(-window.innerHeight * 0.8),
+    's': () => walkerScroll(window.innerHeight * 0.8),
     'a': () => safeSendMessage({ command: 'PREV_TAB' }),
     'd': () => safeSendMessage({ command: 'NEXT_TAB' }),
 };
@@ -174,26 +249,46 @@ let isWalkerMode = false;
 
 
 // ── Security Guard: 機密入力フィールドの検出 ──────────────────────────────────
+// 【設計注意】isContentEditable は DOM ツリーの継承で true になる。
+// Gemini の外側コンテナ div が contenteditable="false" でも
+// 親が contenteditable="true" なら isContentEditable === true を返し、
+// スクロールキー（W/S）が全滅する。
+// 修正: getAttribute('contentEditable') === 'true' で「自身が明示的に編集可能」
+// と指定されているものだけを対象にする。
+function isEditableElement(el: Element): boolean {
+    const htmlEl = el as HTMLElement;
+    // <input>, <textarea>, <select> タグは常に入力欄として扱う
+    const tag = el.tagName.toUpperCase();
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
+    // contenteditable="true" が自身に明示されている要素のみ対象（継承値は無視）
+    if (htmlEl.getAttribute('contentEditable') === 'true') return true;
+    return false;
+}
+
 function isSensitiveElement(el: Element): boolean {
     const htmlEl = el as HTMLElement;
     if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'password') return true;
     const ac = htmlEl.getAttribute('autocomplete') ?? '';
     if (ac.includes('password') || ac.startsWith('cc-')) return true;
-    if (htmlEl.isContentEditable) return true;
+    // isContentEditable（継承値）ではなく明示的属性で判定
+    if (htmlEl.getAttribute('contentEditable') === 'true') return true;
     return false;
 }
 
 function isInputActive(): boolean {
     const el = document.activeElement;
-    if (!el) return false;
+    // フォーカスなし, body, html はセーフ
+    if (!el || el === document.body || el === document.documentElement) return false;
+    // 機密要素チェック（パスワード欄等）
     if (isSensitiveElement(el)) return true;
-    const tag = el.tagName.toUpperCase();
-    if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'].includes(tag)) return true;
+    // 標準タグ
+    if (isEditableElement(el)) return true;
+    // Shadow DOM を1段潜る（Gemini 等の SPA は closed shadow の内側に入力欄を置く）
     if (el.shadowRoot) {
         const inner = el.shadowRoot.activeElement;
         if (inner) {
             if (isSensitiveElement(inner)) return true;
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(inner.tagName.toUpperCase())) return true;
+            if (isEditableElement(inner)) return true;
         }
     }
     return false;
@@ -701,17 +796,28 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
 });
 
-// ── FORCE_BLUR_ON_ARRIVAL: タブ切り替え到着時のフォーカス制御 ────────────────
-// background.ts の sendArrivalBlur() からのみ受け取る。
+// ── FORCE_BLUR_ON_ARRIVAL + MARK_SLEEPING: background メッセージハンドラ ───────────
+// FORCE_BLUR_ON_ARRIVAL — background.ts の sendArrivalBlur() からのみ受け取る。
+// MARK_SLEEPING       — background.ts の DISCARD_TAB ハンドラから受け取る。
+//   → document.title に 💤 プレフィックスを付与（Chrome/Firefox 両対応）
 // ★ FORCE_STATE_SYNC 等の状態管理Push通知は意図的に一切実装しない (P2)
 chrome.runtime.onMessage.addListener((message: { command: string }) => {
-    if (message.command !== 'FORCE_BLUR_ON_ARRIVAL') return;
-    if (!isWalkerMode) return;
-
-    if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
+    if (message.command === 'FORCE_BLUR_ON_ARRIVAL') {
+        if (!isWalkerMode) return;
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+        window.focus();
+        return;
     }
-    window.focus();
+
+    if (message.command === 'MARK_SLEEPING') {
+        // 💤 プレフィックスの付与 — discard 前にバックグラウンドから指示される
+        // content script 内で実行するので Chrome/Firefox 両方で完全動作する
+        if (!document.title.startsWith('💤 ')) {
+            document.title = '💤 ' + document.title;
+        }
+    }
 });
 
 // ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────

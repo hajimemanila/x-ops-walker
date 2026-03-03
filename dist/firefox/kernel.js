@@ -1,0 +1,1672 @@
+"use strict";
+(() => {
+  var __create = Object.create;
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getProtoOf = Object.getPrototypeOf;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
+  var __commonJS = (cb, mod) => function __require() {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+    // If the importer is in node compatibility mode or this is not an ESM
+    // file that has been converted to a CommonJS file using a Babel-
+    // compatible transform (i.e. "__esModule" has not been set), then set
+    // "default" to the CommonJS "module.exports" for node compatibility.
+    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+    mod
+  ));
+
+  // node_modules/webextension-polyfill/dist/browser-polyfill.js
+  var require_browser_polyfill = __commonJS({
+    "node_modules/webextension-polyfill/dist/browser-polyfill.js"(exports, module) {
+      init_browser_polyfill_entry();
+      (function(global, factory) {
+        if (typeof define === "function" && define.amd) {
+          define("webextension-polyfill", ["module"], factory);
+        } else if (typeof exports !== "undefined") {
+          factory(module);
+        } else {
+          var mod = {
+            exports: {}
+          };
+          factory(mod);
+          global.browser = mod.exports;
+        }
+      })(typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : exports, function(module2) {
+        "use strict";
+        if (!(globalThis.chrome && globalThis.chrome.runtime && globalThis.chrome.runtime.id)) {
+          throw new Error("This script should only be loaded in a browser extension.");
+        }
+        if (!(globalThis.browser && globalThis.browser.runtime && globalThis.browser.runtime.id)) {
+          const CHROME_SEND_MESSAGE_CALLBACK_NO_RESPONSE_MESSAGE = "The message port closed before a response was received.";
+          const wrapAPIs = (extensionAPIs) => {
+            const apiMetadata = {
+              "alarms": {
+                "clear": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "clearAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "get": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "bookmarks": {
+                "create": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "get": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getChildren": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getRecent": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getSubTree": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getTree": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "move": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                },
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeTree": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "search": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "update": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                }
+              },
+              "browserAction": {
+                "disable": {
+                  "minArgs": 0,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "enable": {
+                  "minArgs": 0,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "getBadgeBackgroundColor": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getBadgeText": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getPopup": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getTitle": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "openPopup": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "setBadgeBackgroundColor": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "setBadgeText": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "setIcon": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "setPopup": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "setTitle": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                }
+              },
+              "browsingData": {
+                "remove": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                },
+                "removeCache": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeCookies": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeDownloads": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeFormData": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeHistory": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeLocalStorage": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removePasswords": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removePluginData": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "settings": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "commands": {
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "contextMenus": {
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "update": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                }
+              },
+              "cookies": {
+                "get": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getAll": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getAllCookieStores": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "set": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "devtools": {
+                "inspectedWindow": {
+                  "eval": {
+                    "minArgs": 1,
+                    "maxArgs": 2,
+                    "singleCallbackArg": false
+                  }
+                },
+                "panels": {
+                  "create": {
+                    "minArgs": 3,
+                    "maxArgs": 3,
+                    "singleCallbackArg": true
+                  },
+                  "elements": {
+                    "createSidebarPane": {
+                      "minArgs": 1,
+                      "maxArgs": 1
+                    }
+                  }
+                }
+              },
+              "downloads": {
+                "cancel": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "download": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "erase": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getFileIcon": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "open": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "pause": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeFile": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "resume": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "search": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "show": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                }
+              },
+              "extension": {
+                "isAllowedFileSchemeAccess": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "isAllowedIncognitoAccess": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "history": {
+                "addUrl": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "deleteAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "deleteRange": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "deleteUrl": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getVisits": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "search": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "i18n": {
+                "detectLanguage": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getAcceptLanguages": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "identity": {
+                "launchWebAuthFlow": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "idle": {
+                "queryState": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "management": {
+                "get": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "getSelf": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "setEnabled": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                },
+                "uninstallSelf": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                }
+              },
+              "notifications": {
+                "clear": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "create": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "getPermissionLevel": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "update": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                }
+              },
+              "pageAction": {
+                "getPopup": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getTitle": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "hide": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "setIcon": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "setPopup": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "setTitle": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                },
+                "show": {
+                  "minArgs": 1,
+                  "maxArgs": 1,
+                  "fallbackToNoCallback": true
+                }
+              },
+              "permissions": {
+                "contains": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "request": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "runtime": {
+                "getBackgroundPage": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "getPlatformInfo": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "openOptionsPage": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "requestUpdateCheck": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "sendMessage": {
+                  "minArgs": 1,
+                  "maxArgs": 3
+                },
+                "sendNativeMessage": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                },
+                "setUninstallURL": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "sessions": {
+                "getDevices": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "getRecentlyClosed": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "restore": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                }
+              },
+              "storage": {
+                "local": {
+                  "clear": {
+                    "minArgs": 0,
+                    "maxArgs": 0
+                  },
+                  "get": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  },
+                  "getBytesInUse": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  },
+                  "remove": {
+                    "minArgs": 1,
+                    "maxArgs": 1
+                  },
+                  "set": {
+                    "minArgs": 1,
+                    "maxArgs": 1
+                  }
+                },
+                "managed": {
+                  "get": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  },
+                  "getBytesInUse": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  }
+                },
+                "sync": {
+                  "clear": {
+                    "minArgs": 0,
+                    "maxArgs": 0
+                  },
+                  "get": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  },
+                  "getBytesInUse": {
+                    "minArgs": 0,
+                    "maxArgs": 1
+                  },
+                  "remove": {
+                    "minArgs": 1,
+                    "maxArgs": 1
+                  },
+                  "set": {
+                    "minArgs": 1,
+                    "maxArgs": 1
+                  }
+                }
+              },
+              "tabs": {
+                "captureVisibleTab": {
+                  "minArgs": 0,
+                  "maxArgs": 2
+                },
+                "create": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "detectLanguage": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "discard": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "duplicate": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "executeScript": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "get": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getCurrent": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                },
+                "getZoom": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "getZoomSettings": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "goBack": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "goForward": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "highlight": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "insertCSS": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "move": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                },
+                "query": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "reload": {
+                  "minArgs": 0,
+                  "maxArgs": 2
+                },
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "removeCSS": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "sendMessage": {
+                  "minArgs": 2,
+                  "maxArgs": 3
+                },
+                "setZoom": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "setZoomSettings": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "update": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                }
+              },
+              "topSites": {
+                "get": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "webNavigation": {
+                "getAllFrames": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "getFrame": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                }
+              },
+              "webRequest": {
+                "handlerBehaviorChanged": {
+                  "minArgs": 0,
+                  "maxArgs": 0
+                }
+              },
+              "windows": {
+                "create": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "get": {
+                  "minArgs": 1,
+                  "maxArgs": 2
+                },
+                "getAll": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "getCurrent": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "getLastFocused": {
+                  "minArgs": 0,
+                  "maxArgs": 1
+                },
+                "remove": {
+                  "minArgs": 1,
+                  "maxArgs": 1
+                },
+                "update": {
+                  "minArgs": 2,
+                  "maxArgs": 2
+                }
+              }
+            };
+            if (Object.keys(apiMetadata).length === 0) {
+              throw new Error("api-metadata.json has not been included in browser-polyfill");
+            }
+            class DefaultWeakMap extends WeakMap {
+              constructor(createItem, items = void 0) {
+                super(items);
+                this.createItem = createItem;
+              }
+              get(key) {
+                if (!this.has(key)) {
+                  this.set(key, this.createItem(key));
+                }
+                return super.get(key);
+              }
+            }
+            const isThenable = (value) => {
+              return value && typeof value === "object" && typeof value.then === "function";
+            };
+            const makeCallback = (promise, metadata) => {
+              return (...callbackArgs) => {
+                if (extensionAPIs.runtime.lastError) {
+                  promise.reject(new Error(extensionAPIs.runtime.lastError.message));
+                } else if (metadata.singleCallbackArg || callbackArgs.length <= 1 && metadata.singleCallbackArg !== false) {
+                  promise.resolve(callbackArgs[0]);
+                } else {
+                  promise.resolve(callbackArgs);
+                }
+              };
+            };
+            const pluralizeArguments = (numArgs) => numArgs == 1 ? "argument" : "arguments";
+            const wrapAsyncFunction = (name, metadata) => {
+              return function asyncFunctionWrapper(target, ...args) {
+                if (args.length < metadata.minArgs) {
+                  throw new Error(`Expected at least ${metadata.minArgs} ${pluralizeArguments(metadata.minArgs)} for ${name}(), got ${args.length}`);
+                }
+                if (args.length > metadata.maxArgs) {
+                  throw new Error(`Expected at most ${metadata.maxArgs} ${pluralizeArguments(metadata.maxArgs)} for ${name}(), got ${args.length}`);
+                }
+                return new Promise((resolve, reject) => {
+                  if (metadata.fallbackToNoCallback) {
+                    try {
+                      target[name](...args, makeCallback({
+                        resolve,
+                        reject
+                      }, metadata));
+                    } catch (cbError) {
+                      console.warn(`${name} API method doesn't seem to support the callback parameter, falling back to call it without a callback: `, cbError);
+                      target[name](...args);
+                      metadata.fallbackToNoCallback = false;
+                      metadata.noCallback = true;
+                      resolve();
+                    }
+                  } else if (metadata.noCallback) {
+                    target[name](...args);
+                    resolve();
+                  } else {
+                    target[name](...args, makeCallback({
+                      resolve,
+                      reject
+                    }, metadata));
+                  }
+                });
+              };
+            };
+            const wrapMethod = (target, method, wrapper) => {
+              return new Proxy(method, {
+                apply(targetMethod, thisObj, args) {
+                  return wrapper.call(thisObj, target, ...args);
+                }
+              });
+            };
+            let hasOwnProperty = Function.call.bind(Object.prototype.hasOwnProperty);
+            const wrapObject = (target, wrappers = {}, metadata = {}) => {
+              let cache = /* @__PURE__ */ Object.create(null);
+              let handlers = {
+                has(proxyTarget2, prop) {
+                  return prop in target || prop in cache;
+                },
+                get(proxyTarget2, prop, receiver) {
+                  if (prop in cache) {
+                    return cache[prop];
+                  }
+                  if (!(prop in target)) {
+                    return void 0;
+                  }
+                  let value = target[prop];
+                  if (typeof value === "function") {
+                    if (typeof wrappers[prop] === "function") {
+                      value = wrapMethod(target, target[prop], wrappers[prop]);
+                    } else if (hasOwnProperty(metadata, prop)) {
+                      let wrapper = wrapAsyncFunction(prop, metadata[prop]);
+                      value = wrapMethod(target, target[prop], wrapper);
+                    } else {
+                      value = value.bind(target);
+                    }
+                  } else if (typeof value === "object" && value !== null && (hasOwnProperty(wrappers, prop) || hasOwnProperty(metadata, prop))) {
+                    value = wrapObject(value, wrappers[prop], metadata[prop]);
+                  } else if (hasOwnProperty(metadata, "*")) {
+                    value = wrapObject(value, wrappers[prop], metadata["*"]);
+                  } else {
+                    Object.defineProperty(cache, prop, {
+                      configurable: true,
+                      enumerable: true,
+                      get() {
+                        return target[prop];
+                      },
+                      set(value2) {
+                        target[prop] = value2;
+                      }
+                    });
+                    return value;
+                  }
+                  cache[prop] = value;
+                  return value;
+                },
+                set(proxyTarget2, prop, value, receiver) {
+                  if (prop in cache) {
+                    cache[prop] = value;
+                  } else {
+                    target[prop] = value;
+                  }
+                  return true;
+                },
+                defineProperty(proxyTarget2, prop, desc) {
+                  return Reflect.defineProperty(cache, prop, desc);
+                },
+                deleteProperty(proxyTarget2, prop) {
+                  return Reflect.deleteProperty(cache, prop);
+                }
+              };
+              let proxyTarget = Object.create(target);
+              return new Proxy(proxyTarget, handlers);
+            };
+            const wrapEvent = (wrapperMap) => ({
+              addListener(target, listener, ...args) {
+                target.addListener(wrapperMap.get(listener), ...args);
+              },
+              hasListener(target, listener) {
+                return target.hasListener(wrapperMap.get(listener));
+              },
+              removeListener(target, listener) {
+                target.removeListener(wrapperMap.get(listener));
+              }
+            });
+            const onRequestFinishedWrappers = new DefaultWeakMap((listener) => {
+              if (typeof listener !== "function") {
+                return listener;
+              }
+              return function onRequestFinished(req) {
+                const wrappedReq = wrapObject(req, {}, {
+                  getContent: {
+                    minArgs: 0,
+                    maxArgs: 0
+                  }
+                });
+                listener(wrappedReq);
+              };
+            });
+            const onMessageWrappers = new DefaultWeakMap((listener) => {
+              if (typeof listener !== "function") {
+                return listener;
+              }
+              return function onMessage(message, sender, sendResponse) {
+                let didCallSendResponse = false;
+                let wrappedSendResponse;
+                let sendResponsePromise = new Promise((resolve) => {
+                  wrappedSendResponse = function(response) {
+                    didCallSendResponse = true;
+                    resolve(response);
+                  };
+                });
+                let result;
+                try {
+                  result = listener(message, sender, wrappedSendResponse);
+                } catch (err) {
+                  result = Promise.reject(err);
+                }
+                const isResultThenable = result !== true && isThenable(result);
+                if (result !== true && !isResultThenable && !didCallSendResponse) {
+                  return false;
+                }
+                const sendPromisedResult = (promise) => {
+                  promise.then((msg) => {
+                    sendResponse(msg);
+                  }, (error) => {
+                    let message2;
+                    if (error && (error instanceof Error || typeof error.message === "string")) {
+                      message2 = error.message;
+                    } else {
+                      message2 = "An unexpected error occurred";
+                    }
+                    sendResponse({
+                      __mozWebExtensionPolyfillReject__: true,
+                      message: message2
+                    });
+                  }).catch((err) => {
+                    console.error("Failed to send onMessage rejected reply", err);
+                  });
+                };
+                if (isResultThenable) {
+                  sendPromisedResult(result);
+                } else {
+                  sendPromisedResult(sendResponsePromise);
+                }
+                return true;
+              };
+            });
+            const wrappedSendMessageCallback = ({
+              reject,
+              resolve
+            }, reply) => {
+              if (extensionAPIs.runtime.lastError) {
+                if (extensionAPIs.runtime.lastError.message === CHROME_SEND_MESSAGE_CALLBACK_NO_RESPONSE_MESSAGE) {
+                  resolve();
+                } else {
+                  reject(new Error(extensionAPIs.runtime.lastError.message));
+                }
+              } else if (reply && reply.__mozWebExtensionPolyfillReject__) {
+                reject(new Error(reply.message));
+              } else {
+                resolve(reply);
+              }
+            };
+            const wrappedSendMessage = (name, metadata, apiNamespaceObj, ...args) => {
+              if (args.length < metadata.minArgs) {
+                throw new Error(`Expected at least ${metadata.minArgs} ${pluralizeArguments(metadata.minArgs)} for ${name}(), got ${args.length}`);
+              }
+              if (args.length > metadata.maxArgs) {
+                throw new Error(`Expected at most ${metadata.maxArgs} ${pluralizeArguments(metadata.maxArgs)} for ${name}(), got ${args.length}`);
+              }
+              return new Promise((resolve, reject) => {
+                const wrappedCb = wrappedSendMessageCallback.bind(null, {
+                  resolve,
+                  reject
+                });
+                args.push(wrappedCb);
+                apiNamespaceObj.sendMessage(...args);
+              });
+            };
+            const staticWrappers = {
+              devtools: {
+                network: {
+                  onRequestFinished: wrapEvent(onRequestFinishedWrappers)
+                }
+              },
+              runtime: {
+                onMessage: wrapEvent(onMessageWrappers),
+                onMessageExternal: wrapEvent(onMessageWrappers),
+                sendMessage: wrappedSendMessage.bind(null, "sendMessage", {
+                  minArgs: 1,
+                  maxArgs: 3
+                })
+              },
+              tabs: {
+                sendMessage: wrappedSendMessage.bind(null, "sendMessage", {
+                  minArgs: 2,
+                  maxArgs: 3
+                })
+              }
+            };
+            const settingMetadata = {
+              clear: {
+                minArgs: 1,
+                maxArgs: 1
+              },
+              get: {
+                minArgs: 1,
+                maxArgs: 1
+              },
+              set: {
+                minArgs: 1,
+                maxArgs: 1
+              }
+            };
+            apiMetadata.privacy = {
+              network: {
+                "*": settingMetadata
+              },
+              services: {
+                "*": settingMetadata
+              },
+              websites: {
+                "*": settingMetadata
+              }
+            };
+            return wrapObject(extensionAPIs, staticWrappers, apiMetadata);
+          };
+          module2.exports = wrapAPIs(chrome);
+        } else {
+          module2.exports = globalThis.browser;
+        }
+      });
+    }
+  });
+
+  // src/browser-polyfill-entry.ts
+  var import_webextension_polyfill;
+  var init_browser_polyfill_entry = __esm({
+    "src/browser-polyfill-entry.ts"() {
+      "use strict";
+      import_webextension_polyfill = __toESM(require_browser_polyfill(), 1);
+    }
+  });
+
+  // src/kernel.ts
+  init_browser_polyfill_entry();
+  if (window.__XOPS_WALKER_ALIVE__) {
+    throw new Error("[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.");
+  }
+  window.__XOPS_WALKER_ALIVE__ = true;
+  var STORAGE_KEY = "isWalkerMode";
+  var BLOCKER_KEY = "blockGoogleOneTap";
+  var WALKER_KEYS = /* @__PURE__ */ new Set([
+    "a",
+    "d",
+    "s",
+    "w",
+    "f",
+    "x",
+    "z",
+    "r",
+    "m",
+    "g",
+    "t",
+    "9",
+    " ",
+    "q",
+    "e",
+    "c"
+  ]);
+  var SHIFT_ACTIONS = {
+    "x": "CLOSE_TAB",
+    "z": "UNDO_CLOSE",
+    "r": "RELOAD_TAB",
+    "m": "MUTE_TAB",
+    "g": "DISCARD_TAB",
+    "t": "CLEAN_UP",
+    "9": "GO_FIRST_TAB",
+    "c": "DUPLICATE_TAB"
+  };
+  var CONTENT_ANCHOR_SELECTORS = [
+    "user-message",
+    "model-response",
+    "infinite-scroller",
+    ".conversations-container",
+    "main",
+    "article",
+    '[role="main"]'
+  ];
+  function walkToScrollParent(el) {
+    let parent = el?.parentElement ?? null;
+    while (parent) {
+      const ov = window.getComputedStyle(parent).overflowY;
+      if (ov === "auto" || ov === "scroll") return parent;
+      parent = parent.parentElement;
+    }
+    return null;
+  }
+  function findScrollContainer(el) {
+    const s1 = walkToScrollParent(el);
+    if (s1) return s1;
+    for (const sel of CONTENT_ANCHOR_SELECTORS) {
+      const anchor = document.querySelector(sel);
+      if (anchor) {
+        const s2 = walkToScrollParent(anchor);
+        if (s2) return s2;
+      }
+    }
+    let best = null;
+    let bestHeight = 0;
+    document.querySelectorAll("*").forEach((node) => {
+      const ov = window.getComputedStyle(node).overflowY;
+      if ((ov === "auto" || ov === "scroll") && node.scrollHeight > node.clientHeight) {
+        if (node.scrollHeight > bestHeight) {
+          bestHeight = node.scrollHeight;
+          best = node;
+        }
+      }
+    });
+    if (best) return best;
+    return document.documentElement;
+  }
+  function walkerScroll(delta) {
+    const c = findScrollContainer(document.activeElement);
+    if (c === document.documentElement) {
+      window.scrollBy({ top: delta, behavior: "smooth" });
+    } else {
+      c.scrollBy({ top: delta, behavior: "smooth" });
+    }
+  }
+  var SHIFT_LOCAL_ACTIONS = {
+    "w": () => {
+      const c = findScrollContainer(document.activeElement);
+      c.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    "s": () => {
+      const c = findScrollContainer(document.activeElement);
+      c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
+    }
+  };
+  var NAV_ACTIONS = {
+    "w": () => walkerScroll(-window.innerHeight * 0.8),
+    "s": () => walkerScroll(window.innerHeight * 0.8),
+    "a": () => safeSendMessage({ command: "PREV_TAB" }),
+    "d": () => safeSendMessage({ command: "NEXT_TAB" })
+  };
+  function isOrphan() {
+    try {
+      chrome.runtime.getManifest();
+      return false;
+    } catch {
+      window.removeEventListener("keydown", keydownHandler, { capture: true });
+      window.__XOPS_WALKER_ALIVE__ = false;
+      return true;
+    }
+  }
+  function selfDestruct() {
+    window.__XOPS_WALKER_ALIVE__ = false;
+    window.removeEventListener("keydown", keydownHandler, { capture: true });
+    window.removeEventListener("keyup", walkerKeyUpHandler, { capture: true });
+    window.removeEventListener("keypress", walkerKeyUpHandler, { capture: true });
+    window.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("focus", onWindowFocus);
+  }
+  function safeSendMessage(msg) {
+    try {
+      chrome.runtime.sendMessage(msg).catch((err) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes("Extension context invalidated") || errMsg.includes("message channel closed")) {
+          selfDestruct();
+          return;
+        }
+        console.error("[X-Ops Walker] sendMessage failed:", errMsg, msg);
+      });
+    } catch (e) {
+      console.error("[X-Ops Walker] sendMessage sync error:", e);
+      selfDestruct();
+    }
+  }
+  function safeStorageGet(keys, cb) {
+    try {
+      chrome.storage.local.get(keys).then(cb).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Extension context invalidated")) selfDestruct();
+      });
+    } catch {
+      selfDestruct();
+    }
+  }
+  function safeStorageSet(data) {
+    try {
+      chrome.storage.local.set(data).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Extension context invalidated")) selfDestruct();
+      });
+    } catch {
+      selfDestruct();
+    }
+  }
+  function t(key) {
+    const msg = chrome.i18n.getMessage(key);
+    return msg || key;
+  }
+  var oneTapBlockStyle = document.createElement("style");
+  oneTapBlockStyle.textContent = [
+    'iframe[src*="accounts.google.com/gsi/"]',
+    'iframe[src*="smartlock.google.com"]',
+    "#credential_picker_container",
+    "#google_one_tap_notification",
+    "#google-one-tap-popup"
+  ].join(",\n") + " { display: none !important; pointer-events: none !important; }";
+  function applyOneTapBlocker(enabled) {
+    if (enabled && !oneTapBlockStyle.isConnected) {
+      document.documentElement.appendChild(oneTapBlockStyle);
+    } else if (!enabled && oneTapBlockStyle.isConnected) {
+      oneTapBlockStyle.remove();
+    }
+  }
+  var isWalkerMode = false;
+  function isEditableElement(el) {
+    const htmlEl = el;
+    const tag = el.tagName.toUpperCase();
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
+    if (htmlEl.getAttribute("contentEditable") === "true") return true;
+    return false;
+  }
+  function isSensitiveElement(el) {
+    const htmlEl = el;
+    if (el.tagName === "INPUT" && el.type === "password") return true;
+    const ac = htmlEl.getAttribute("autocomplete") ?? "";
+    if (ac.includes("password") || ac.startsWith("cc-")) return true;
+    if (htmlEl.getAttribute("contentEditable") === "true") return true;
+    return false;
+  }
+  function isInputActive() {
+    const el = document.activeElement;
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (isSensitiveElement(el)) return true;
+    if (isEditableElement(el)) return true;
+    if (el.shadowRoot) {
+      const inner = el.shadowRoot.activeElement;
+      if (inner) {
+        if (isSensitiveElement(inner)) return true;
+        if (isEditableElement(inner)) return true;
+      }
+    }
+    return false;
+  }
+  var hud = (() => {
+    const host = document.createElement("div");
+    host.id = "fox-walker-host";
+    Object.assign(host.style, {
+      all: "initial",
+      position: "fixed",
+      zIndex: "2147483647",
+      pointerEvents: "none",
+      bottom: "24px",
+      right: "24px",
+      display: "none"
+    });
+    const shadow = host.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `
+    :host { all: initial; }
+    #hud {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 14px 7px 10px; border-radius: 999px;
+      background: rgba(18, 18, 28, 0.72);
+      backdrop-filter: blur(12px) saturate(160%);
+      -webkit-backdrop-filter: blur(12px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 140, 0, 0.15) inset;
+      opacity: 0; transform: translateY(8px) scale(0.96);
+      transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none; user-select: none;
+    }
+    #hud.visible { opacity: 1; transform: translateY(0) scale(1); }
+    .icon { width: 16px; height: 16px; object-fit: contain; vertical-align: middle; }
+    .label { color: rgba(255, 255, 255, 0.55); text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em; }
+    .status { font-size: 12px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; transition: background 0.18s, color 0.18s; }
+    .status.on  { background: rgba(255, 140, 0, 0.18); color: #ffac30; box-shadow: 0 0 10px rgba(255, 140, 0, 0.25); }
+    .status.off { background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.35); }
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.50); }
+      70%  { box-shadow: 0 0 0 8px rgba(255, 140, 0, 0.00); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.00); }
+    }
+    #hud.pulse { animation: pulse-ring 0.55s ease-out; }
+  `;
+    const hudEl = document.createElement("div");
+    hudEl.id = "hud";
+    const iconImg = document.createElement("img");
+    iconImg.src = chrome.runtime.getURL("icons/icon48.png");
+    iconImg.className = "icon";
+    iconImg.alt = "";
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "label";
+    labelSpan.textContent = t("hud_label");
+    const statusSpan = document.createElement("span");
+    statusSpan.className = "status off";
+    statusSpan.textContent = t("hud_off");
+    hudEl.appendChild(iconImg);
+    hudEl.appendChild(labelSpan);
+    hudEl.appendChild(statusSpan);
+    shadow.appendChild(style);
+    shadow.appendChild(hudEl);
+    const statusEl = hudEl.querySelector(".status");
+    let pulseTimer = null;
+    function triggerPulse() {
+      hudEl.classList.remove("pulse");
+      void hudEl.offsetWidth;
+      hudEl.classList.add("pulse");
+      if (pulseTimer !== null) clearTimeout(pulseTimer);
+      pulseTimer = setTimeout(() => hudEl.classList.remove("pulse"), 600);
+    }
+    let hideTimer = null;
+    function setState(active) {
+      if (hideTimer !== null) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+      if (active) {
+        host.style.display = "block";
+        hudEl.classList.add("visible");
+        statusEl.className = "status on";
+        statusEl.textContent = t("hud_on");
+        triggerPulse();
+      } else {
+        hudEl.classList.remove("visible");
+        statusEl.className = "status off";
+        statusEl.textContent = t("hud_off");
+        hideTimer = setTimeout(() => {
+          host.style.display = "none";
+        }, 250);
+      }
+    }
+    function mount() {
+      if (document.body) {
+        document.body.appendChild(host);
+      } else {
+        document.addEventListener("DOMContentLoaded", () => document.body.appendChild(host), { once: true });
+      }
+    }
+    mount();
+    return { setState };
+  })();
+  var cheatsheet = (() => {
+    const host = document.createElement("div");
+    host.id = "fox-walker-cheatsheet";
+    Object.assign(host.style, {
+      all: "initial",
+      position: "fixed",
+      inset: "0",
+      zIndex: "2147483646",
+      display: "none",
+      alignItems: "center",
+      justifyContent: "center"
+    });
+    const shadow = host.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = `
+    :host { all: initial; }
+    #overlay {
+      display: flex; align-items: center; justify-content: center;
+      inset: 0; position: fixed;
+      pointer-events: none;
+    }
+    #panel {
+      pointer-events: auto;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: rgba(12, 12, 20, 0.82);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 140, 0, 0.10) inset;
+      padding: 24px 28px;
+      min-width: 380px;
+      max-width: 480px;
+      opacity: 0;
+      transform: scale(0.94) translateY(10px);
+      transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+    }
+    #panel.visible { opacity: 1; transform: scale(1) translateY(0); }
+    #header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    #header .icon  { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; }
+    #header .title { font-size: 13px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: rgba(255, 255, 255, 0.85); }
+    #header .badge { margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #ffac30; background: rgba(255, 140, 0, 0.15); border-radius: 999px; padding: 2px 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    tr + tr td { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+    td { padding: 7px 4px; font-size: 12px; color: rgba(255, 255, 255, 0.55); vertical-align: middle; }
+    td.key-col { width: 110px; white-space: nowrap; }
+    .key {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      color: #ffac30; background: rgba(255, 140, 0, 0.12);
+      border: 1px solid rgba(255, 140, 0, 0.25); border-radius: 5px;
+      padding: 1px 7px; margin-right: 2px;
+    }
+    .desc { color: rgba(255, 255, 255, 0.70); }
+    .section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 140, 0, 0.55); padding: 10px 4px 4px; }
+    #footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.07); font-size: 10px; color: rgba(255, 255, 255, 0.25); text-align: center; letter-spacing: 0.06em; }
+  `;
+    const overlay = document.createElement("div");
+    overlay.id = "overlay";
+    const panel = document.createElement("div");
+    panel.id = "panel";
+    const header = document.createElement("div");
+    header.id = "header";
+    const hIcon = document.createElement("img");
+    hIcon.src = chrome.runtime.getURL("icons/icon48.png");
+    hIcon.className = "icon";
+    hIcon.alt = "";
+    const hTitle = document.createElement("span");
+    hTitle.className = "title";
+    hTitle.textContent = "X-Ops Walker";
+    const hBadge = document.createElement("span");
+    hBadge.className = "badge";
+    hBadge.textContent = t("cs_badge");
+    header.appendChild(hIcon);
+    header.appendChild(hTitle);
+    header.appendChild(hBadge);
+    panel.appendChild(header);
+    const table = document.createElement("table");
+    function addSection(labelKey) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.className = "section-label";
+      td.colSpan = 2;
+      td.textContent = t(labelKey);
+      tr.appendChild(td);
+      table.appendChild(tr);
+    }
+    function addRow(keys, descKey) {
+      const tr = document.createElement("tr");
+      const keyTd = document.createElement("td");
+      keyTd.className = "key-col";
+      for (const k of keys) {
+        const span = document.createElement("span");
+        span.className = "key";
+        span.textContent = k;
+        keyTd.appendChild(span);
+      }
+      const descTd = document.createElement("td");
+      descTd.className = "desc";
+      descTd.textContent = t(descKey);
+      tr.appendChild(keyTd);
+      tr.appendChild(descTd);
+      table.appendChild(tr);
+    }
+    addSection("cs_section_nav");
+    addRow(["A", "D"], "cs_nav_ad");
+    addRow(["Space"], "cs_nav_space");
+    addRow(["W", "S"], "cs_nav_ws");
+    addRow(["Q", "E"], "cs_nav_qe");
+    addSection("cs_section_tab");
+    addRow(["Shift", "X"], "cs_tab_xx");
+    addRow(["Shift", "Z"], "cs_tab_zz");
+    addRow(["Shift", "R"], "cs_tab_rr");
+    addRow(["Shift", "M"], "cs_tab_mm");
+    addRow(["Shift", "G"], "cs_tab_gg");
+    addRow(["Shift", "T"], "cs_tab_tt");
+    addRow(["Shift", "W"], "cs_tab_ww");
+    addRow(["Shift", "S"], "cs_tab_ss");
+    addRow(["Shift", "C"], "cs_tab_cc");
+    addSection("cs_section_sys");
+    addRow(["Esc"], "cs_sys_esc");
+    addRow(["F"], "cs_sys_f");
+    addRow(["Z"], "cs_sys_z");
+    panel.appendChild(table);
+    const footer = document.createElement("div");
+    footer.id = "footer";
+    footer.textContent = t("cs_footer");
+    panel.appendChild(footer);
+    overlay.appendChild(panel);
+    shadow.appendChild(style);
+    shadow.appendChild(overlay);
+    let visible = false;
+    function mount() {
+      if (document.body) {
+        document.body.appendChild(host);
+      } else {
+        document.addEventListener("DOMContentLoaded", () => document.body.appendChild(host), { once: true });
+      }
+    }
+    let csHideTimer = null;
+    function show() {
+      if (csHideTimer !== null) {
+        clearTimeout(csHideTimer);
+        csHideTimer = null;
+      }
+      visible = true;
+      host.style.display = "flex";
+      requestAnimationFrame(() => panel.classList.add("visible"));
+    }
+    function hide() {
+      visible = false;
+      panel.classList.remove("visible");
+      csHideTimer = setTimeout(() => {
+        if (!visible) host.style.display = "none";
+      }, 240);
+    }
+    function toggle() {
+      visible ? hide() : show();
+    }
+    function isVisible() {
+      return visible;
+    }
+    mount();
+    return { toggle, hide, isVisible };
+  })();
+  function deepBlur(root) {
+    if (!root) return;
+    let el = root;
+    while (el?.shadowRoot?.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    if (el instanceof HTMLElement && el !== document.body) {
+      el.blur();
+    }
+  }
+  function blurActiveInput() {
+    deepBlur(document.activeElement);
+    window.focus();
+  }
+  function normalizeKey(event) {
+    const code = event.code;
+    if (code.startsWith("Key")) return code.slice(3).toLowerCase();
+    if (code.startsWith("Digit")) return code.slice(5);
+    if (code === "Space") return " ";
+    return event.key.toLowerCase();
+  }
+  function dispatchWalkerAction(event, key) {
+    const shift = event.shiftKey;
+    if (shift && SHIFT_ACTIONS[key]) {
+      safeSendMessage({ command: SHIFT_ACTIONS[key] });
+      return;
+    }
+    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
+      SHIFT_LOCAL_ACTIONS[key]();
+      return;
+    }
+    if (key === "f") {
+      cheatsheet.toggle();
+      return;
+    }
+    if (key === " ") {
+      safeSendMessage({ command: shift ? "PREV_TAB" : "NEXT_TAB" });
+      return;
+    }
+    if (key === "q") {
+      window.history.back();
+      return;
+    }
+    if (key === "e") {
+      window.history.forward();
+      return;
+    }
+    if (key === "z" && !shift) {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      window.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (!shift && NAV_ACTIONS[key]) {
+      NAV_ACTIONS[key]();
+    }
+  }
+  function keydownHandler(event) {
+    if (isOrphan()) return;
+    if (!isWalkerMode && event.key !== "Escape") return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
+    if (event.isComposing) return;
+    if (isInputActive()) return;
+    if (event.repeat) return;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
+    if (document.fullscreenElement !== null && event.key === "Escape") return;
+    const key = normalizeKey(event);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (cheatsheet.isVisible()) {
+        cheatsheet.hide();
+        return;
+      }
+      isWalkerMode = !isWalkerMode;
+      safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
+      hud.setState(isWalkerMode);
+      if (isWalkerMode) blurActiveInput();
+      return;
+    }
+    if (isWalkerMode && WALKER_KEYS.has(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      dispatchWalkerAction(event, key);
+    }
+  }
+  window.addEventListener("keydown", keydownHandler, { capture: true });
+  safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+    isWalkerMode = !!result[STORAGE_KEY];
+    hud.setState(isWalkerMode);
+    applyOneTapBlocker(!!result[BLOCKER_KEY]);
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (STORAGE_KEY in changes) {
+      isWalkerMode = !!changes[STORAGE_KEY].newValue;
+      hud.setState(isWalkerMode);
+      if (isWalkerMode && !document.hidden) blurActiveInput();
+    }
+    if (BLOCKER_KEY in changes) {
+      applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    }
+  });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.command === "FORCE_BLUR_ON_ARRIVAL") {
+      if (!isWalkerMode) return;
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      window.focus();
+      return;
+    }
+    if (message.command === "MARK_SLEEPING") {
+      if (!document.title.startsWith("\u{1F4A4} ")) {
+        document.title = "\u{1F4A4} " + document.title;
+      }
+    }
+  });
+  function pullStateFromStorage() {
+    if (!window.__XOPS_WALKER_ALIVE__) return;
+    if (document.title.startsWith("\u{1F4A4} ")) {
+      document.title = document.title.slice("\u{1F4A4} ".length);
+    }
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+      isWalkerMode = !!result[STORAGE_KEY];
+      hud.setState(isWalkerMode);
+      applyOneTapBlocker(!!result[BLOCKER_KEY]);
+      if (isWalkerMode) {
+        setTimeout(() => {
+          if (!isWalkerMode) return;
+          if (!window.__XOPS_WALKER_ALIVE__) return;
+          blurActiveInput();
+        }, 150);
+      }
+    });
+  }
+  function onVisibilityChange() {
+    if (!document.hidden) pullStateFromStorage();
+  }
+  function onWindowFocus() {
+    pullStateFromStorage();
+  }
+  window.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("focus", onWindowFocus);
+  function walkerKeyUpHandler(event) {
+    if (isOrphan()) return;
+    if (!isWalkerMode) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
+    if (event.isComposing) return;
+    if (isInputActive()) return;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
+    if (event.repeat) return;
+    const key = normalizeKey(event);
+    if (WALKER_KEYS.has(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  }
+  window.addEventListener("keyup", walkerKeyUpHandler, { capture: true });
+  window.addEventListener("keypress", walkerKeyUpHandler, { capture: true });
+})();

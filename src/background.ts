@@ -1,6 +1,7 @@
 'use strict';
 
 // ── URL制限チェック ────────────────────────────────────────────────────────────
+// ① プロトコルベースの間騢ページ（Chrome: chrome://, Firefox: moz-extension:// 等）
 function isRestrictedUrl(url: string | undefined): boolean {
     if (!url) return true;
     return (
@@ -8,8 +9,33 @@ function isRestrictedUrl(url: string | undefined): boolean {
         url.startsWith('chrome-extension://') ||
         url.startsWith('devtools://') ||
         url.startsWith('about:') ||
-        url.startsWith('edge://')
+        url.startsWith('edge://') ||
+        url.startsWith('moz-extension://') ||
+        url.startsWith('firefox://')
     );
+}
+
+// ② ホストベースの間騢ページ（content script が定義上入るが実際には注入されない host_permissions 外）
+// Firefox: addons.mozilla.org, support.mozilla.org は拡張機能がブロックされる
+const FORBIDDEN_HOSTS = [
+    'addons.mozilla.org',
+    'support.mozilla.org',
+    'accounts.google.com',
+];
+
+function isForbiddenHost(url: string | undefined): boolean {
+    if (!url) return false;
+    try {
+        const hostname = new URL(url).hostname;
+        return FORBIDDEN_HOSTS.some(h => hostname === h || hostname.endsWith('.' + h));
+    } catch {
+        return false;
+    }
+}
+
+// 結合判定: プロットコルまたはホストでブロックするページのみスキップ
+function isSkippableTab(url: string | undefined): boolean {
+    return isRestrictedUrl(url) || isForbiddenHost(url);
 }
 
 // ── 拡張機能インストール・更新時: 既存タブへの強制注入 ─────────────────────────
@@ -17,6 +43,11 @@ function isRestrictedUrl(url: string | undefined): boolean {
 // 拡張機能のインストール・リロード直後に開かれているタブには
 // kernel.js が存在しない。onInstalled で既存タブへ強制注入する。
 chrome.runtime.onInstalled.addListener(async () => {
+    // chrome.scripting is only available in Chrome (MV3 + "scripting" permission).
+    // Firefox MV3 injects content scripts automatically via manifest declarations,
+    // so this block is intentionally skipped on Firefox.
+    if (!chrome.scripting) return;
+
     try {
         const tabs = await chrome.tabs.query({});
         const injectTargets = tabs.filter(tab =>
@@ -51,7 +82,8 @@ async function shiftTab(direction: 1 | -1): Promise<number | undefined> {
 
         for (let attempts = 0; attempts < tabs.length; attempts++) {
             const targetTab = tabs[nextPos];
-            if (!isRestrictedUrl(targetTab.url)) {
+            // isSkippableTab: プロトコルまたはホストでブロックされるページを除外
+            if (!isSkippableTab(targetTab.url)) {
                 await chrome.tabs.update(targetTab.id!, { active: true });
                 return targetTab.id;
             }
@@ -64,7 +96,7 @@ async function shiftTab(direction: 1 | -1): Promise<number | undefined> {
 }
 
 // ── Background → Content Script メッセージ型定義 ─────────────────────────────
-type BackgroundCommand = 'FORCE_BLUR_ON_ARRIVAL';
+type BackgroundCommand = 'FORCE_BLUR_ON_ARRIVAL' | 'MARK_SLEEPING';
 
 interface BackgroundMessage {
     command: BackgroundCommand;
@@ -133,8 +165,15 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                 }
 
                 case 'UNDO_CLOSE': {
-                    // Chrome: sessions.restore() で最後に閉じたタブを復元
-                    await chrome.sessions.restore();
+                    // sessions.restore() は Chrome では引数なしで動作するが、
+                    // Firefox では sessionId が必須。
+                    // getRecentlyClosed() で最新セッションを取得し、ID を渡すことで
+                    // Chrome / Firefox どちらでも確実に動作する。
+                    const recent = await chrome.sessions.getRecentlyClosed({ maxResults: 1 });
+                    if (recent.length > 0) {
+                        const sessionId = recent[0].tab?.sessionId ?? recent[0].window?.sessionId;
+                        if (sessionId) await chrome.sessions.restore(sessionId);
+                    }
                     break;
                 }
 
@@ -147,7 +186,6 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
 
                 case 'DISCARD_TAB': {
                     // GG: 非アクティブ・非ピン留め・未破棄のタブをスリープ（メモリ解放）
-                    // discarded: false — 既にスリープ中のタブは除外して難済エラーを防ぐ
                     const tabsToDiscard = await chrome.tabs.query({
                         currentWindow: true,
                         active: false,
@@ -157,24 +195,17 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
 
                     for (const tab of tabsToDiscard) {
                         if (tab.id === undefined) continue;
-
-                        // chrome:// edge:// about: の特権ページはスキップ
                         const url = tab.url ?? '';
-                        if (isRestrictedUrl(url)) continue;
+                        if (isSkippableTab(url)) continue;
 
                         try {
-                            // discard 前に 💤 プレフィックスを付与—スリープ中タブを視覚化するハック
-                            await chrome.scripting.executeScript({
-                                target: { tabId: tab.id },
-                                func: () => {
-                                    if (!document.title.startsWith('💤 ')) {
-                                        document.title = '💤 ' + document.title;
-                                    }
-                                },
-                            });
+                            // 💤 プレフィックス: content script 経由で付与（Chrome/Firefox 共通）
+                            // 重要: sendMessage の後、content script が処理するまでの少しのインターバルを許可するため
+                            // discard 実行前に 30ms yield する。これにより Chrome でのタイトル書き換えを保証する。
+                            chrome.tabs.sendMessage(tab.id, { command: 'MARK_SLEEPING' }).catch(() => { });
+                            await new Promise<void>(r => setTimeout(r, 30));
                             await chrome.tabs.discard(tab.id);
                         } catch (e) {
-                            // 音声再生中・スクリプト注入不可等 — ログして続行
                             console.warn(`[X-Ops Walker] discard(${tab.id}) skipped:`, e);
                         }
                     }

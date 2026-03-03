@@ -1,10 +1,18 @@
 {
   "devDependencies": {
     "@types/chrome": "^0.0.320",
-    "esbuild": "^0.27.3"
+    "@types/webextension-polyfill": "^0.12.5",
+    "esbuild": "^0.27.3",
+    "webextension-polyfill": "^0.12.0"
   },
   "scripts": {
-    "build": "esbuild src/*.ts --bundle --outdir=dist --target=chrome120 && copy manifest.json dist\\ && copy popup.html dist\\ && xcopy icons dist\\icons /E /I /Y && xcopy _locales dist\\_locales /E /I /Y",
-    "watch": "esbuild src/*.ts --bundle --outdir=dist --target=chrome120 --watch"
-  }
+    "build": "node scripts/build.mjs chrome",
+    "build:chrome": "node scripts/build.mjs chrome",
+    "build:firefox": "node scripts/build.mjs firefox",
+    "watch": "node scripts/build.mjs chrome --watch",
+    "watch:chrome": "node scripts/build.mjs chrome --watch",
+    "watch:firefox": "node scripts/build.mjs firefox --watch"
+  },
+  "type": "module",
+  "version": "1.1.2"
 }
