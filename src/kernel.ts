@@ -1,35 +1,153 @@
+// ============================================================================
+// X-Ops Walker — kernel.ts  (Chrome MV3 Hardened)
+// ============================================================================
+// 設計原則:
+//   P1. Orphan（亡霊）検知と自己終了
+//   P2. Service Worker 完全非依存の自立した状態管理
+//   P3. キャプチャフェーズ先頭での同期的イベント強奪
+// ============================================================================
+
+// ── P1: 多重注入ガード ────────────────────────────────────────────────────────
+// 拡張機能のリロード時、onInstalled による再注入で「古い kernel」と「新しい
+// kernel」が同一タブに共存する。グローバルフラグで先着したスクリプトが
+// 後発を弾き、後発スクリプトは自分自身を即座に終了させる。
+declare global {
+    interface Window {
+        __XOPS_WALKER_ALIVE__: boolean;
+    }
+}
+
+if (window.__XOPS_WALKER_ALIVE__) {
+    // 新しい kernel が注入された = 自分（今実行中の古い kernel）は役目を終えた。
+    // 何もせずここで停止する。以降のコードは一切実行されない。
+    // （イベントリスナーは addListener に到達していないので解除不要）
+    throw new Error('[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.');
+}
+
+// このスクリプトが「生きている唯一の kernel」であることを宣言する
+window.__XOPS_WALKER_ALIVE__ = true;
+
+// ── 定数 ─────────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'isWalkerMode';
+const BLOCKER_KEY = 'blockGoogleOneTap';
 const SCROLL_AMOUNT = 380;
 
-const WALKER_KEYS = new Set(['a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c']);
+// Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
+const WALKER_KEYS = new Set([
+    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
+]);
 
-// Shift+キー: background 送信アクション（旧: ダブルタップ）
+// Shift+キー → background へ送るコマンド
 const SHIFT_ACTIONS: Record<string, string> = {
-    'x': 'CLOSE_TAB', 'z': 'UNDO_CLOSE', 'r': 'RELOAD_TAB',
-    'm': 'MUTE_TAB', 'g': 'DISCARD_TAB', 't': 'CLEAN_UP',
-    '9': 'GO_FIRST_TAB', 'c': 'DUPLICATE_TAB',
+    'x': 'CLOSE_TAB',
+    'z': 'UNDO_CLOSE',
+    'r': 'RELOAD_TAB',
+    'm': 'MUTE_TAB',
+    'g': 'DISCARD_TAB',
+    't': 'CLEAN_UP',
+    '9': 'GO_FIRST_TAB',
+    'c': 'DUPLICATE_TAB',
 };
 
-// Shift+W / Shift+S: ローカルスクロール（送信不要）
+// Shift+W / Shift+S → ローカルスクロール（background 不要）
 const SHIFT_LOCAL_ACTIONS: Record<string, () => void> = {
     'w': () => window.scrollTo({ top: 0, behavior: 'smooth' }),
     's': () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
 };
 
+// 無修飾キー → ローカルスクロール / background タブ移動
 const NAV_ACTIONS: Record<string, () => void> = {
     'w': () => window.scrollBy({ top: -SCROLL_AMOUNT, behavior: 'smooth' }),
     's': () => window.scrollBy({ top: SCROLL_AMOUNT, behavior: 'smooth' }),
-    'a': () => browser.runtime.sendMessage({ command: 'PREV_TAB' }),
-    'd': () => browser.runtime.sendMessage({ command: 'NEXT_TAB' }),
+    'a': () => safeSendMessage({ command: 'PREV_TAB' }),
+    'd': () => safeSendMessage({ command: 'NEXT_TAB' }),
 };
 
 
-// ── Google One Tap 迎撃CSS ──────────────────────────────────────────────────────
-// Google One Tap iframe によるフォーカス強奪を防ぎ、
-// X-Ops Walker のキーバインドを死守するための迎撃 CSS。
-// ストレージ設定に応じて動的に有効/無効を切り替える。デフォルト OFF。
-const BLOCKER_KEY = 'blockGoogleOneTap';
+// ── P1: Orphan フェイルセーフ ─────────────────────────────────────────────────
+// キーダウンリスナーの先頭で必ず呼ぶ。
+// 自身が「無効化されたコンテキスト（=亡霊）」になっていた場合は
+// true を返し、呼び出し元はリスナーを解除して即 return する。
+function isOrphan(): boolean {
+    try {
+        chrome.runtime.getManifest();
+        return false;  // コンテキストは生きている
+    } catch {
+        // Extension context invalidated — 自分は亡霊
+        window.removeEventListener('keydown', keydownHandler, { capture: true });
+        window.__XOPS_WALKER_ALIVE__ = false;
+        return true;
+    }
+}
 
+
+// ── P1: 安全な API ラッパー群 ────────────────────────────────────────────────
+// すべての chrome.* API 呼び出しはこれらのラッパー経由で行う。
+// Extension context invalidated を検知した場合、エラーをコンソールに
+// 出力せず、自身を静かに終了させる（亡霊の完全封鎖）。
+
+function selfDestruct(): void {
+    window.__XOPS_WALKER_ALIVE__ = false;
+    window.removeEventListener('keydown', keydownHandler, { capture: true });
+    window.removeEventListener('keyup', silentKillHandler, { capture: true });
+    window.removeEventListener('keypress', silentKillHandler, { capture: true });
+    window.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', onWindowFocus);
+}
+
+// chrome.runtime.sendMessage の安全ラッパー
+function safeSendMessage(msg: object): void {
+    try {
+        chrome.runtime.sendMessage(msg).catch((err: unknown) => {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            if (errMsg.includes('Extension context invalidated') ||
+                errMsg.includes('message channel closed')) {
+                selfDestruct();
+                return;
+            }
+            // その他のエラーはデバッグ用に出力する（原因究明のため）
+            console.error('[X-Ops Walker] sendMessage failed:', errMsg, msg);
+        });
+    } catch (e) {
+        // 同期的な例外（context が既に死んでいる場合）
+        console.error('[X-Ops Walker] sendMessage sync error:', e);
+        selfDestruct();
+    }
+}
+
+// chrome.storage.local.get の安全ラッパー
+function safeStorageGet(keys: string[], cb: (result: Record<string, unknown>) => void): void {
+    try {
+        chrome.storage.local.get(keys).then(cb).catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes('Extension context invalidated')) selfDestruct();
+        });
+    } catch {
+        selfDestruct();
+    }
+}
+
+// chrome.storage.local.set の安全ラッパー
+function safeStorageSet(data: Record<string, unknown>): void {
+    try {
+        chrome.storage.local.set(data).catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes('Extension context invalidated')) selfDestruct();
+        });
+    } catch {
+        selfDestruct();
+    }
+}
+
+
+// ── i18n helper ───────────────────────────────────────────────────────────────
+function t(key: string): string {
+    const msg = chrome.i18n.getMessage(key);
+    return msg || key;
+}
+
+
+// ── Google One Tap 迎撃 CSS ───────────────────────────────────────────────────
 const oneTapBlockStyle = document.createElement('style');
 oneTapBlockStyle.textContent = [
     'iframe[src*="accounts.google.com/gsi/"]',
@@ -48,56 +166,39 @@ function applyOneTapBlocker(enabled: boolean): void {
 }
 
 
-
-// ── State ─────────────────────────────────────────────────────────────────────
+// ── P2: 自立した状態変数 ─────────────────────────────────────────────────────
+// isWalkerMode は kernel.ts 内でのみ管理する。
+// Service Worker からの Push 通知（FORCE_STATE_SYNC 等）は一切受け取らない。
+// 初期化時に storage から1度だけ読み込み、以降はローカルで完結させる。
 let isWalkerMode = false;
 
-// ── i18n helper ───────────────────────────────────────────────────────────────
-function t(key: string): string {
-    const msg = browser.i18n.getMessage(key);
-    return msg || key;
-}
 
-// ── Security Guard Clause (Input Guard) ──────────────────────────────────────
-// キーロガーの疑念を払拭し、機密入力時の意図しないスクロールを防止するため、
-// パスワード・クレジットカード・contentEditable 要素ではキー処理を一切行わず即座に return する。
+// ── Security Guard: 機密入力フィールドの検出 ──────────────────────────────────
 function isSensitiveElement(el: Element): boolean {
     const htmlEl = el as HTMLElement;
-
-    // type="password" — 最優先ガード
     if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'password') return true;
-
-    // autocomplete に "password" または "cc-" プレフィックスが含まれる要素
-    // （標準 INPUT 以外のカスタム要素でも確実にガードする）
     const ac = htmlEl.getAttribute('autocomplete') ?? '';
     if (ac.includes('password') || ac.startsWith('cc-')) return true;
-
-    // isContentEditable — テキスト編集中の可能性があるため除外
     if (htmlEl.isContentEditable) return true;
-
     return false;
 }
 
 function isInputActive(): boolean {
     const el = document.activeElement;
     if (!el) return false;
-
-    // Security Guard Clause: 機密フィールドでは即座に処理を中断
     if (isSensitiveElement(el)) return true;
-
     const tag = el.tagName.toUpperCase();
     if (['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'].includes(tag)) return true;
-
     if (el.shadowRoot) {
         const inner = el.shadowRoot.activeElement;
         if (inner) {
             if (isSensitiveElement(inner)) return true;
-            const innerTag = inner.tagName.toUpperCase();
-            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(innerTag)) return true;
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(inner.tagName.toUpperCase())) return true;
         }
     }
     return false;
 }
+
 
 // ── HUD (Shadow DOM) ──────────────────────────────────────────────────────────
 interface HudController {
@@ -110,7 +211,7 @@ const hud: HudController = (() => {
     Object.assign(host.style, {
         all: 'initial', position: 'fixed', zIndex: '2147483647',
         pointerEvents: 'none', bottom: '24px', right: '24px',
-        display: 'none',  // 初期状態: レイアウトツリーから完全除外
+        display: 'none',
     });
 
     const shadow = host.attachShadow({ mode: 'closed' });
@@ -148,9 +249,8 @@ const hud: HudController = (() => {
     const hudEl = document.createElement('div');
     hudEl.id = 'hud';
 
-    // DOM 操作で構築（innerHTML 回避）
     const iconImg = document.createElement('img');
-    iconImg.src = browser.runtime.getURL('icons/icon48.png');
+    iconImg.src = chrome.runtime.getURL('icons/icon48.png');
     iconImg.className = 'icon';
     iconImg.alt = '';
 
@@ -184,7 +284,7 @@ const hud: HudController = (() => {
     function setState(active: boolean): void {
         if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
         if (active) {
-            host.style.display = 'block';   // レイアウトツリーに復帰してからアニメ
+            host.style.display = 'block';
             hudEl.classList.add('visible');
             statusEl.className = 'status on';
             statusEl.textContent = t('hud_on');
@@ -193,7 +293,6 @@ const hud: HudController = (() => {
             hudEl.classList.remove('visible');
             statusEl.className = 'status off';
             statusEl.textContent = t('hud_off');
-            // フェードアウト完了待機後にレイアウトツリーから完全除外
             hideTimer = setTimeout(() => { host.style.display = 'none'; }, 250);
         }
     }
@@ -210,6 +309,7 @@ const hud: HudController = (() => {
     return { setState };
 })();
 
+
 // ── Cheatsheet (Shadow DOM) ───────────────────────────────────────────────────
 interface CheatsheetController {
     toggle(): void;
@@ -225,7 +325,7 @@ const cheatsheet: CheatsheetController = (() => {
         position: 'fixed',
         inset: '0',
         zIndex: '2147483646',
-        display: 'none',          // 初期状態: DOMに存在するがレイアウトツリー外
+        display: 'none',
         alignItems: 'center',
         justifyContent: 'center',
     });
@@ -285,7 +385,6 @@ const cheatsheet: CheatsheetController = (() => {
     const overlay = document.createElement('div');
     overlay.id = 'overlay';
 
-    // ── パネルを DOM 操作で構築（innerHTML 回避）────────────────────────────
     const panel = document.createElement('div');
     panel.id = 'panel';
 
@@ -293,7 +392,7 @@ const cheatsheet: CheatsheetController = (() => {
     const header = document.createElement('div');
     header.id = 'header';
     const hIcon = document.createElement('img');
-    hIcon.src = browser.runtime.getURL('icons/icon48.png');
+    hIcon.src = chrome.runtime.getURL('icons/icon48.png');
     hIcon.className = 'icon';
     hIcon.alt = '';
     const hTitle = document.createElement('span');
@@ -362,7 +461,6 @@ const cheatsheet: CheatsheetController = (() => {
 
     panel.appendChild(table);
 
-    // Footer
     const footer = document.createElement('div');
     footer.id = 'footer';
     footer.textContent = t('cs_footer');
@@ -387,14 +485,13 @@ const cheatsheet: CheatsheetController = (() => {
     function show(): void {
         if (csHideTimer !== null) { clearTimeout(csHideTimer); csHideTimer = null; }
         visible = true;
-        host.style.display = 'flex';  // ファーストにレイアウトツリーに復帰
+        host.style.display = 'flex';
         requestAnimationFrame(() => panel.classList.add('visible'));
     }
 
     function hide(): void {
         visible = false;
         panel.classList.remove('visible');
-        // パネルのフェードアウト後に host をレイアウトツリーから完全除外
         csHideTimer = setTimeout(() => { if (!visible) host.style.display = 'none'; }, 240);
     }
 
@@ -405,46 +502,185 @@ const cheatsheet: CheatsheetController = (() => {
     return { toggle, hide, isVisible };
 })();
 
-// ── Blur on Enable ヘルパー ───────────────────────────────────────────────────
-// 入力欄にフォーカスが残ったまま Walker Mode が ON になった際に、
-// 入力欄からフォーカスを強制的に外して操作の主導権を取り戻す。
+
+// ── Blur on Enable ────────────────────────────────────────────────────────────
 function blurActiveInput(): void {
     const el = document.activeElement;
-    // body は「フォーカスなし」のデフォルト状態なのでスキップ
     if (el instanceof HTMLElement && el !== document.body) {
         el.blur();
     }
     window.focus();
 }
 
-// ── Storage logic ─────────────────────────────────────────────────────────────
-browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
+
+// ── normalizeKey: 修飾キー非依存の物理キー正規化 ──────────────────────────────
+function normalizeKey(event: KeyboardEvent): string {
+    const code = event.code;
+    if (code.startsWith('Key')) return code.slice(3).toLowerCase(); // KeyA → 'a'
+    if (code.startsWith('Digit')) return code.slice(5);               // Digit9 → '9'
+    if (code === 'Space') return ' ';
+    return event.key.toLowerCase();
+}
+
+
+// ── P3: キーアクションハンドラ (完全なイベント強奪後に実行) ─────────────────
+// key は呼び元（keydownHandler）にて normalizeKey で正規化済みの文字列。
+// このメソッドは「P3強奪3点セットが確実に実行済み」の文脈からのみ呼ばれる。
+function dispatchWalkerAction(event: KeyboardEvent, key: string): void {
+    const shift = event.shiftKey;
+
+    // Shift+キー: background 送信コマンド（タブ操作）
+    if (shift && SHIFT_ACTIONS[key]) {
+        safeSendMessage({ command: SHIFT_ACTIONS[key] });
+        return;
+    }
+
+    // Shift+W / Shift+S: ページ先頭・末尾へスクロール
+    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
+        SHIFT_LOCAL_ACTIONS[key]();
+        return;
+    }
+
+    // F: チートシート開閉
+    if (key === 'f') {
+        cheatsheet.toggle();
+        return;
+    }
+
+    // Space: 次タブ / Shift+Space: 前タブ
+    if (key === ' ') {
+        safeSendMessage({ command: shift ? 'PREV_TAB' : 'NEXT_TAB' });
+        return;
+    }
+
+    // Q: 履歴戻る / E: 履歴進む
+    if (key === 'q') { window.history.back(); return; }
+    if (key === 'e') { window.history.forward(); return; }
+
+    // Z (単押し): DOMフォーカスリセット + スクロール最上部へ
+    // Shift+Z は上の UNDO_CLOSE で処理済み
+    if (key === 'z' && !shift) {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        window.focus();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
+    // W/S/A/D: スクロール・タブ移動
+    if (!shift && NAV_ACTIONS[key]) {
+        NAV_ACTIONS[key]();
+    }
+}
+
+
+// ── P3: メインキーダウンリスナー ──────────────────────────────────────────────
+// 【設計上の重要事項】
+// Chromeの capture フェーズでは、Chrome 拡張の isolated world と
+// ページの main world のリスナーが混在する。
+// されど stopImmediatePropagation() は「同一ターゲット・同一フェーズ」内の
+// 後続リスナー全てをブロックする——world の区別なく。
+// つまり capture: true + stopImmediatePropagation() の組み合わせは
+// GeminiやXのキャプチャリスナーすら上書きできる最強の位置取りになる。
+function keydownHandler(event: KeyboardEvent): void {
+    // ── P1: Orphan（亡霊）フェイルセーフ ────────────────────────────────────
+    // extension context が無効化されているなら、即座にリスナーを解除して終了。
+    if (isOrphan()) return;
+
+    // 修飾キー単独はスキップ
+    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
+
+    // キーリピートはスキップ（長押しの連射を防ぐ）
+    if (event.repeat) return;
+
+    // フルスクリーン中の Escape はブラウザに委ねる
+    if (document.fullscreenElement !== null && event.key === 'Escape') return;
+
+    // ── キー正規化: event.code ベースで修飾キー非依存な小文字キーを取得 ────────
+    // event.code は Shift/Alt 修飾の影響を受けない（Shift+'g' → code='KeyG' → 'g')
+    // Digit9 → '9'（Shift+'9' でも code='Digit9' のまま）などを正確に取り扱うため
+    // event.key.toLowerCase() ではなく必ず normalizeKey を使用する。
+    // この一度の計算を WALKER_KEYS 判定と dispatchWalkerAction の両方で共有する。
+    const key = normalizeKey(event);
+
+    // ── Escape: チートシート閉じる or Walker トグル ──────────────────────────
+    // Escape は Walker OFF 状態でも必ず捕捉する（チートシートを閉じるため）。
+    // P3強奪3点セットを先に実行してからロジックに入る。
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        if (cheatsheet.isVisible()) {
+            cheatsheet.hide();
+            return;
+        }
+
+        // P2: ローカル変数のみで状態を管理し、storage に Push するだけ
+        isWalkerMode = !isWalkerMode;
+        safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
+        hud.setState(isWalkerMode);
+        if (isWalkerMode) blurActiveInput();
+        return;
+    }
+
+    // Walker OFF または入力中はここで終了（強奪もしない）
+    if (!isWalkerMode || isInputActive()) return;
+
+    // ── P3: 絶対的イベント強奪 ───────────────────────────────────────────────
+    // Walker キーと判定された瞬間、非同期処理（sendMessage等）より前に
+    // 同期的に3つを全て実行する。サイト側のリスナーへの伝播を完全に遮断する。
+    if (WALKER_KEYS.has(key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        // ↑ この3行はいかなる非同期処理・条件分岐よりも先に実行される
+
+        // key はハンドラ先頭で済みの正規化値をそのまま渡す（二重計算なし）
+        dispatchWalkerAction(event, key);
+    }
+}
+
+// capture: true — DOMツリーのキャプチャフェーズ最上流でイベントを捕捉する
+window.addEventListener('keydown', keydownHandler, { capture: true });
+
+
+// ── P2: 初期化 — ストレージから1回だけ状態を読み込む ──────────────────────────
+// Service Worker の生死に関係なく、storage は独立したKVストアとして常に利用可能。
+// onInstalled による再注入後も、ここで正しいモード状態が復元される。
+safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     isWalkerMode = !!result[STORAGE_KEY];
     hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!result[BLOCKER_KEY]);  // デフォルト false (OFF)
+    applyOneTapBlocker(!!result[BLOCKER_KEY]);
 });
 
-browser.storage.onChanged.addListener((changes, area) => {
+// ── P2: ストレージ変更監視 ───────────────────────────────────────────────────
+// 2つの役割を担う:
+//   (A) ポップアップ（別コンテキスト）からのトグル操作をリアルタイムで反映する
+//   (B) 「競合状態（Race Condition）」の根本解決:
+//       Space/A/D でタブ移動した直後、移動先タブの isWalkerMode は古い値のままになる。
+//       onChanged は非アクティブタブにも発火するため、pull した pull より
+//       先に isWalkerMode を正しい値に更新できる（非同期 Pull のタイムラグを排除）。
+chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+
     if (STORAGE_KEY in changes) {
         isWalkerMode = !!changes[STORAGE_KEY].newValue;
         hud.setState(isWalkerMode);
-        // ポップアップから ON にした際も入力欄ブラーを発火
-        // document.hidden チェック：バックグラウンドタブが window.focus() を呼んで
-        // タブが勝手に切り替わる問題を防ぐ。前景タブのみ実行。
+        // バックグラウンドタブが window.focus() を呼んでタブが切り替わる問題を防ぐ
         if (isWalkerMode && !document.hidden) blurActiveInput();
     }
+
     if (BLOCKER_KEY in changes) {
         applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
     }
 });
 
-// ── Arrival Override リスナー（Background → Kernel）────────────────────────────
-// タブ到着直後にバックグラウンドから FORCE_BLUR_ON_ARRIVAL が送られてくる。
-// Walker Mode が無効な場合は何もしない（ユーザーの意図しないフォーカス奪取防止）。
-browser.runtime.onMessage.addListener((message: { command: string }) => {
+// ── FORCE_BLUR_ON_ARRIVAL: タブ切り替え到着時のフォーカス制御 ────────────────
+// background.ts の sendArrivalBlur() からのみ受け取る。
+// ★ FORCE_STATE_SYNC 等の状態管理Push通知は意図的に一切実装しない (P2)
+chrome.runtime.onMessage.addListener((message: { command: string }) => {
     if (message.command !== 'FORCE_BLUR_ON_ARRIVAL') return;
-    if (!isWalkerMode) return;  // Walker OFF 時は完全無視
+    if (!isWalkerMode) return;
 
     if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
@@ -452,99 +688,81 @@ browser.runtime.onMessage.addListener((message: { command: string }) => {
     window.focus();
 });
 
-// ── normalizeKey: 修飾キーに依存しない物理キーの正規化 ────────────────────────
-// event.key は Shift押下時に記号文字に変化する（Shift+0→')'、Shift+9→'('等）。
-// event.code （キーボード配列/修飾キー非依存）で物理キー名を得る。
-function normalizeKey(event: KeyboardEvent): string {
-    const code = event.code;
-    if (code.startsWith('Key')) return code.slice(3).toLowerCase(); // KeyA → 'a'
-    if (code.startsWith('Digit')) return code.slice(5);               // Digit0 → '0'
-    if (code === 'Space') return ' ';
-    return event.key.toLowerCase(); // その他は event.key にフォールバック
+// ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────
+// 問題: タブが非アクティブ（frozen/discarded）状態から復帰した直後、
+// chrome.storage.onChanged は発火しないため isWalkerMode が古い値のままになる。
+// 解決: visibilitychange と focus の両方でストレージをプル（Pull）し直す。
+// これにより Space/A/D キーでのタブ移動直後でもキーバインドが即座に機能する。
+function pullStateFromStorage(): void {
+    // 亡霊チェック: Orphan になっていたら同期も不要
+    if (!window.__XOPS_WALKER_ALIVE__) return;
+
+    // 💤 自動浄化 — 目覚めたタブのタイトルから "💤 " プレフィックを剥ぎ取る
+    // background.ts の DISCARD_TAB で discard 前に付与された識別子をクリーンアップする
+    if (document.title.startsWith('💤 ')) {
+        document.title = document.title.slice('💤 '.length);
+    }
+
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+        isWalkerMode = !!result[STORAGE_KEY];
+        hud.setState(isWalkerMode);
+        applyOneTapBlocker(!!result[BLOCKER_KEY]);
+    });
 }
 
-// ── Key handler ───────────────────────────────────────────────────────────────
-function handleKeyInput(event: KeyboardEvent): void {
-    const key = normalizeKey(event); // event.code ベースの正規化キー
-    const shift = event.shiftKey;
-
-    // Shift+キー: タブ操作（background 送信コマンド）
-    if (shift && SHIFT_ACTIONS[key]) {
-        event.preventDefault();
-        event.stopPropagation();
-        browser.runtime.sendMessage({ command: SHIFT_ACTIONS[key] });
-        return;
-    }
-
-    // Shift+W / Shift+V: ページ先頭・末尾へスクロール
-    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
-        event.preventDefault();
-        event.stopPropagation();
-        SHIFT_LOCAL_ACTIONS[key]();
-        return;
-    }
-
-    // F: チートシート開閉
-    if (key === 'f') {
-        event.preventDefault();
-        cheatsheet.toggle();
-        return;
-    }
-
-    // Space: 次タブ / Shift+Space: 前タブ
-    if (key === ' ') {
-        event.preventDefault();
-        browser.runtime.sendMessage({ command: shift ? 'PREV_TAB' : 'NEXT_TAB' });
-        return;
-    }
-
-    // Q: 履歴戻る / E: 履歴進む
-    if (key === 'q') { event.preventDefault(); window.history.back(); return; }
-    if (key === 'e') { event.preventDefault(); window.history.forward(); return; }
-
-    // Z (単押し): DOMリセット—Shift+Z は UNDO_CLOSE として上で先処理済み
-    if (key === 'z' && !shift) {
-        event.preventDefault();
-        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-        window.focus();
-        return;
-    }
-
-    // W/S/A/D: スクロール ・ タブ移動（Shiftなし）
-    if (!shift && NAV_ACTIONS[key]) {
-        event.preventDefault();
-        NAV_ACTIONS[key]();
-    }
+function onVisibilityChange(): void {
+    // document.hidden === false = タブが前景に来た
+    if (!document.hidden) pullStateFromStorage();
 }
 
-// ── メインリスナー（capture: true で最優先取得）────────────────────────────────
-window.addEventListener('keydown', (event: KeyboardEvent): void => {
+function onWindowFocus(): void {
+    // focus イベントは visibilitychange より早く発火することがあるため両方登録する
+    pullStateFromStorage();
+}
+
+window.addEventListener('visibilitychange', onVisibilityChange);
+window.addEventListener('focus', onWindowFocus);
+
+// ── P3追加: keyup / keypress のサイレントキル（三段防壁）───────────────────────
+// 問題: Gemini 等のサイトは keydown ではなく keyup や keypress でショートカットを
+//       発火させる場合がある。keydown だけ握りつぶしても keyup/keypress が漏れると
+//       サイト側ハンドラが動いてしまう。
+// 解決: Walker ON かつ WALKER_KEYS のキーであれば、keyup/keypress も
+//       キャプチャフェーズの最上流で3点セットを実行し、アクションは一切行わず
+//       ただ「握りつぶす」だけにする（サイレントキル）。
+// 注意: keypress は非推奨だが、レガシーサイト対策として引き続き登録する。
+function silentKillHandler(event: KeyboardEvent): void {
+    // P1: 亡霊チェック
+    if (isOrphan()) return;
+
+    // Walker OFF なら一切介入しない
+    if (!isWalkerMode) return;
+
+    // ── 入力欄ガード（絶対原則）────────────────────────────────────────────────
+    // テキスト入力中はWalkerを完全に無効化し、ブラウザの標準動作に委ねる。
+    // event.target ベースで判定（shadow DOM 内の activeElement も isInputActive でカバー）
+    const target = event.target as HTMLElement;
+    const isTargetInput = target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+    if (isTargetInput || isInputActive()) return;
+
+    // 修飾キー単独・リピートはスキップ
     if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
     if (event.repeat) return;
 
-    if (document.fullscreenElement !== null && event.key === 'Escape') return;
+    const key = normalizeKey(event);
 
-    if (event.key === 'Escape') {
-        if (cheatsheet.isVisible()) {
-            cheatsheet.hide();
-            return;
-        }
-        isWalkerMode = !isWalkerMode;
-        browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
-        hud.setState(isWalkerMode);
-        // Esc で ON になった際だけ入力欄ブラーを発火（OFF時は実行しない）
-        if (isWalkerMode) blurActiveInput();
-        return;
-    }
-
-    if (!isWalkerMode || isInputActive()) return;
-
-    const key = normalizeKey(event); // 修飾キー非依存の正規化
-
+    // WALKER_KEYS に含まれるキーならサイレントキル（アクション実行なし）
     if (WALKER_KEYS.has(key)) {
+        event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
+        // ↑ Geminiや X のサイト側 keyup/keypress リスナーへの伝播を完全遮断
+        // dispatchWalkerAction は呼ばない（keydown で実行済み）
     }
+}
 
-    handleKeyInput(event);
-}, { capture: true });
+// keyup / keypress ともにキャプチャフェーズの最上流（window）に配備する
+window.addEventListener('keyup', silentKillHandler, { capture: true });
+window.addEventListener('keypress', silentKillHandler, { capture: true });

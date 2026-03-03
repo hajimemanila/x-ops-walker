@@ -1,9 +1,31 @@
 "use strict";
 (() => {
   // src/background.ts
+  function isRestrictedUrl(url) {
+    if (!url) return true;
+    return url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("devtools://") || url.startsWith("about:") || url.startsWith("edge://");
+  }
+  chrome.runtime.onInstalled.addListener(async () => {
+    try {
+      const tabs = await chrome.tabs.query({});
+      const injectTargets = tabs.filter(
+        (tab) => tab.id !== void 0 && !isRestrictedUrl(tab.url)
+      );
+      await Promise.allSettled(
+        injectTargets.map(
+          (tab) => chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["kernel.js"]
+          })
+        )
+      );
+    } catch (e) {
+      console.error("[X-Ops Walker] onInstalled injection error:", e);
+    }
+  });
   async function shiftTab(direction) {
     try {
-      const tabs = await browser.tabs.query({ currentWindow: true });
+      const tabs = await chrome.tabs.query({ currentWindow: true });
       if (tabs.length <= 1) return void 0;
       tabs.sort((a, b) => a.index - b.index);
       const arrayPos = tabs.findIndex((t) => t.active);
@@ -11,10 +33,8 @@
       let nextPos = (arrayPos + direction + tabs.length) % tabs.length;
       for (let attempts = 0; attempts < tabs.length; attempts++) {
         const targetTab = tabs[nextPos];
-        const url = targetTab.url ?? "";
-        const isRestricted = url.startsWith("about:") || url.startsWith("chrome:") || url.startsWith("moz-extension:") || url.includes("addons.mozilla.org");
-        if (!isRestricted) {
-          await browser.tabs.update(targetTab.id, { active: true });
+        if (!isRestrictedUrl(targetTab.url)) {
+          await chrome.tabs.update(targetTab.id, { active: true });
           return targetTab.id;
         }
         nextPos = (nextPos + direction + tabs.length) % tabs.length;
@@ -27,11 +47,11 @@
   function sendArrivalBlur(tabId) {
     setTimeout(() => {
       const msg = { command: "FORCE_BLUR_ON_ARRIVAL" };
-      browser.tabs.sendMessage(tabId, msg).catch(() => {
+      chrome.tabs.sendMessage(tabId, msg).catch(() => {
       });
     }, 50);
   }
-  browser.runtime.onMessage.addListener((message, sender) => {
+  chrome.runtime.onMessage.addListener((message, sender) => {
     const tabId = sender.tab?.id;
     (async () => {
       try {
@@ -47,57 +67,72 @@
             break;
           }
           case "CLOSE_TAB": {
-            if (tabId !== void 0) await browser.tabs.remove(tabId);
+            if (tabId !== void 0) await chrome.tabs.remove(tabId);
             break;
           }
           case "RELOAD_TAB": {
-            if (tabId !== void 0) await browser.tabs.reload(tabId);
+            if (tabId !== void 0) await chrome.tabs.reload(tabId);
             break;
           }
           case "UNDO_CLOSE": {
-            await browser.sessions.restore();
+            await chrome.sessions.restore();
             break;
           }
           case "MUTE_TAB": {
             if (tabId === void 0) break;
-            const tab = await browser.tabs.get(tabId);
-            await browser.tabs.update(tabId, { muted: !tab.mutedInfo?.muted });
+            const tab = await chrome.tabs.get(tabId);
+            await chrome.tabs.update(tabId, { muted: !tab.mutedInfo?.muted });
             break;
           }
           case "DISCARD_TAB": {
-            const tabsToDiscard = await browser.tabs.query({
+            const tabsToDiscard = await chrome.tabs.query({
               currentWindow: true,
               active: false,
-              pinned: false
+              pinned: false,
+              discarded: false
             });
-            const discardIds = tabsToDiscard.map((t) => t.id).filter((id) => id !== void 0);
-            if (discardIds.length > 0) {
-              await browser.tabs.discard(discardIds);
+            for (const tab of tabsToDiscard) {
+              if (tab.id === void 0) continue;
+              const url = tab.url ?? "";
+              if (isRestrictedUrl(url)) continue;
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: () => {
+                    if (!document.title.startsWith("\u{1F4A4} ")) {
+                      document.title = "\u{1F4A4} " + document.title;
+                    }
+                  }
+                });
+                await chrome.tabs.discard(tab.id);
+              } catch (e) {
+                console.warn(`[X-Ops Walker] discard(${tab.id}) skipped:`, e);
+              }
             }
             break;
           }
           case "GO_FIRST_TAB": {
-            const allTabs = await browser.tabs.query({ currentWindow: true });
+            const allTabs = await chrome.tabs.query({ currentWindow: true });
             allTabs.sort((a, b) => a.index - b.index);
             if (allTabs[0]?.id !== void 0) {
-              await browser.tabs.update(allTabs[0].id, { active: true });
+              await chrome.tabs.update(allTabs[0].id, { active: true });
               sendArrivalBlur(allTabs[0].id);
             }
             break;
           }
           case "DUPLICATE_TAB": {
-            if (tabId !== void 0) await browser.tabs.duplicate(tabId);
+            if (tabId !== void 0) await chrome.tabs.duplicate(tabId);
             break;
           }
           case "CLEAN_UP": {
-            const tabsToKill = await browser.tabs.query({
+            const tabsToKill = await chrome.tabs.query({
               currentWindow: true,
               active: false,
               pinned: false
             });
             const targetIds = tabsToKill.map((t) => t.id).filter((id) => id !== void 0);
             if (targetIds.length > 0) {
-              await browser.tabs.remove(targetIds);
+              await chrome.tabs.remove(targetIds);
             }
             break;
           }

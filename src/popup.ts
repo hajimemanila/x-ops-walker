@@ -2,7 +2,7 @@ const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
 function t(key: string): string {
-    return browser.i18n.getMessage(key) || key;
+    return chrome.i18n.getMessage(key) || key;
 }
 
 function updateUI(active: boolean): void {
@@ -41,7 +41,7 @@ function updateBlockerUI(active: boolean): void {
 
 async function init(): Promise<void> {
     // バージョンを manifest.json から動的取得
-    const manifest = browser.runtime.getManifest();
+    const manifest = chrome.runtime.getManifest();
     document.getElementById('version-badge')!.textContent = `v${manifest.version}`;
 
     // i18n（textContent で安全に注入）
@@ -62,23 +62,23 @@ async function init(): Promise<void> {
     scHint.appendChild(afterText);
 
     // Walker Mode の初期状態読み込み
-    const result = await browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
+    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
     updateUI(!!result[STORAGE_KEY]);
     updateBlockerUI(!!result[BLOCKER_KEY]); // デフォルト false (OFF)
 
     // Walker Mode トグル
     document.getElementById('toggle')!.addEventListener('click', async () => {
-        const res = await browser.storage.local.get(STORAGE_KEY);
+        const res = await chrome.storage.local.get(STORAGE_KEY);
         const next = !res[STORAGE_KEY];
-        await browser.storage.local.set({ [STORAGE_KEY]: next });
+        await chrome.storage.local.set({ [STORAGE_KEY]: next });
         updateUI(next);
     });
 
     // Google One Tap ブロッカー トグル
     document.getElementById('blocker-toggle')!.addEventListener('click', async () => {
-        const res = await browser.storage.local.get(BLOCKER_KEY);
+        const res = await chrome.storage.local.get(BLOCKER_KEY);
         const next = !res[BLOCKER_KEY];
-        await browser.storage.local.set({ [BLOCKER_KEY]: next });
+        await chrome.storage.local.set({ [BLOCKER_KEY]: next });
         updateBlockerUI(next);
     });
 }

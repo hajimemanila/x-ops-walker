@@ -4,7 +4,7 @@
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
   function t(key) {
-    return browser.i18n.getMessage(key) || key;
+    return chrome.i18n.getMessage(key) || key;
   }
   function updateUI(active) {
     const toggle = document.getElementById("toggle");
@@ -38,7 +38,7 @@
     }
   }
   async function init() {
-    const manifest = browser.runtime.getManifest();
+    const manifest = chrome.runtime.getManifest();
     document.getElementById("version-badge").textContent = `v${manifest.version}`;
     document.getElementById("mode-label").textContent = t("popup_mode_label");
     document.getElementById("sc-title").textContent = t("popup_sc_title");
@@ -53,19 +53,19 @@
     scHint.appendChild(beforeText);
     scHint.appendChild(keyBadge);
     scHint.appendChild(afterText);
-    const result = await browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
+    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
     updateUI(!!result[STORAGE_KEY]);
     updateBlockerUI(!!result[BLOCKER_KEY]);
     document.getElementById("toggle").addEventListener("click", async () => {
-      const res = await browser.storage.local.get(STORAGE_KEY);
+      const res = await chrome.storage.local.get(STORAGE_KEY);
       const next = !res[STORAGE_KEY];
-      await browser.storage.local.set({ [STORAGE_KEY]: next });
+      await chrome.storage.local.set({ [STORAGE_KEY]: next });
       updateUI(next);
     });
     document.getElementById("blocker-toggle").addEventListener("click", async () => {
-      const res = await browser.storage.local.get(BLOCKER_KEY);
+      const res = await chrome.storage.local.get(BLOCKER_KEY);
       const next = !res[BLOCKER_KEY];
-      await browser.storage.local.set({ [BLOCKER_KEY]: next });
+      await chrome.storage.local.set({ [BLOCKER_KEY]: next });
       updateBlockerUI(next);
     });
   }

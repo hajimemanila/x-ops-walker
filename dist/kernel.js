@@ -1,9 +1,31 @@
 "use strict";
 (() => {
   // src/kernel.ts
+  if (window.__XOPS_WALKER_ALIVE__) {
+    throw new Error("[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.");
+  }
+  window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
+  var BLOCKER_KEY = "blockGoogleOneTap";
   var SCROLL_AMOUNT = 380;
-  var WALKER_KEYS = /* @__PURE__ */ new Set(["a", "d", "s", "w", "f", "x", "z", "r", "m", "g", "t", "9", " ", "q", "e", "c"]);
+  var WALKER_KEYS = /* @__PURE__ */ new Set([
+    "a",
+    "d",
+    "s",
+    "w",
+    "f",
+    "x",
+    "z",
+    "r",
+    "m",
+    "g",
+    "t",
+    "9",
+    " ",
+    "q",
+    "e",
+    "c"
+  ]);
   var SHIFT_ACTIONS = {
     "x": "CLOSE_TAB",
     "z": "UNDO_CLOSE",
@@ -21,10 +43,66 @@
   var NAV_ACTIONS = {
     "w": () => window.scrollBy({ top: -SCROLL_AMOUNT, behavior: "smooth" }),
     "s": () => window.scrollBy({ top: SCROLL_AMOUNT, behavior: "smooth" }),
-    "a": () => browser.runtime.sendMessage({ command: "PREV_TAB" }),
-    "d": () => browser.runtime.sendMessage({ command: "NEXT_TAB" })
+    "a": () => safeSendMessage({ command: "PREV_TAB" }),
+    "d": () => safeSendMessage({ command: "NEXT_TAB" })
   };
-  var BLOCKER_KEY = "blockGoogleOneTap";
+  function isOrphan() {
+    try {
+      chrome.runtime.getManifest();
+      return false;
+    } catch {
+      window.removeEventListener("keydown", keydownHandler, { capture: true });
+      window.__XOPS_WALKER_ALIVE__ = false;
+      return true;
+    }
+  }
+  function selfDestruct() {
+    window.__XOPS_WALKER_ALIVE__ = false;
+    window.removeEventListener("keydown", keydownHandler, { capture: true });
+    window.removeEventListener("keyup", silentKillHandler, { capture: true });
+    window.removeEventListener("keypress", silentKillHandler, { capture: true });
+    window.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("focus", onWindowFocus);
+  }
+  function safeSendMessage(msg) {
+    try {
+      chrome.runtime.sendMessage(msg).catch((err) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes("Extension context invalidated") || errMsg.includes("message channel closed")) {
+          selfDestruct();
+          return;
+        }
+        console.error("[X-Ops Walker] sendMessage failed:", errMsg, msg);
+      });
+    } catch (e) {
+      console.error("[X-Ops Walker] sendMessage sync error:", e);
+      selfDestruct();
+    }
+  }
+  function safeStorageGet(keys, cb) {
+    try {
+      chrome.storage.local.get(keys).then(cb).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Extension context invalidated")) selfDestruct();
+      });
+    } catch {
+      selfDestruct();
+    }
+  }
+  function safeStorageSet(data) {
+    try {
+      chrome.storage.local.set(data).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Extension context invalidated")) selfDestruct();
+      });
+    } catch {
+      selfDestruct();
+    }
+  }
+  function t(key) {
+    const msg = chrome.i18n.getMessage(key);
+    return msg || key;
+  }
   var oneTapBlockStyle = document.createElement("style");
   oneTapBlockStyle.textContent = [
     'iframe[src*="accounts.google.com/gsi/"]',
@@ -41,10 +119,6 @@
     }
   }
   var isWalkerMode = false;
-  function t(key) {
-    const msg = browser.i18n.getMessage(key);
-    return msg || key;
-  }
   function isSensitiveElement(el) {
     const htmlEl = el;
     if (el.tagName === "INPUT" && el.type === "password") return true;
@@ -63,8 +137,7 @@
       const inner = el.shadowRoot.activeElement;
       if (inner) {
         if (isSensitiveElement(inner)) return true;
-        const innerTag = inner.tagName.toUpperCase();
-        if (["INPUT", "TEXTAREA", "SELECT"].includes(innerTag)) return true;
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(inner.tagName.toUpperCase())) return true;
       }
     }
     return false;
@@ -80,7 +153,6 @@
       bottom: "24px",
       right: "24px",
       display: "none"
-      // 初期状態: レイアウトツリーから完全除外
     });
     const shadow = host.attachShadow({ mode: "closed" });
     const style = document.createElement("style");
@@ -116,7 +188,7 @@
     const hudEl = document.createElement("div");
     hudEl.id = "hud";
     const iconImg = document.createElement("img");
-    iconImg.src = browser.runtime.getURL("icons/icon48.png");
+    iconImg.src = chrome.runtime.getURL("icons/icon48.png");
     iconImg.className = "icon";
     iconImg.alt = "";
     const labelSpan = document.createElement("span");
@@ -179,7 +251,6 @@
       inset: "0",
       zIndex: "2147483646",
       display: "none",
-      // 初期状態: DOMに存在するがレイアウトツリー外
       alignItems: "center",
       justifyContent: "center"
     });
@@ -241,7 +312,7 @@
     const header = document.createElement("div");
     header.id = "header";
     const hIcon = document.createElement("img");
-    hIcon.src = browser.runtime.getURL("icons/icon48.png");
+    hIcon.src = chrome.runtime.getURL("icons/icon48.png");
     hIcon.className = "icon";
     hIcon.alt = "";
     const hTitle = document.createElement("span");
@@ -349,12 +420,84 @@
     }
     window.focus();
   }
-  browser.storage.local.get([STORAGE_KEY, BLOCKER_KEY]).then((result) => {
+  function normalizeKey(event) {
+    const code = event.code;
+    if (code.startsWith("Key")) return code.slice(3).toLowerCase();
+    if (code.startsWith("Digit")) return code.slice(5);
+    if (code === "Space") return " ";
+    return event.key.toLowerCase();
+  }
+  function dispatchWalkerAction(event, key) {
+    const shift = event.shiftKey;
+    if (shift && SHIFT_ACTIONS[key]) {
+      safeSendMessage({ command: SHIFT_ACTIONS[key] });
+      return;
+    }
+    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
+      SHIFT_LOCAL_ACTIONS[key]();
+      return;
+    }
+    if (key === "f") {
+      cheatsheet.toggle();
+      return;
+    }
+    if (key === " ") {
+      safeSendMessage({ command: shift ? "PREV_TAB" : "NEXT_TAB" });
+      return;
+    }
+    if (key === "q") {
+      window.history.back();
+      return;
+    }
+    if (key === "e") {
+      window.history.forward();
+      return;
+    }
+    if (key === "z" && !shift) {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      window.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (!shift && NAV_ACTIONS[key]) {
+      NAV_ACTIONS[key]();
+    }
+  }
+  function keydownHandler(event) {
+    if (isOrphan()) return;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
+    if (event.repeat) return;
+    if (document.fullscreenElement !== null && event.key === "Escape") return;
+    const key = normalizeKey(event);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (cheatsheet.isVisible()) {
+        cheatsheet.hide();
+        return;
+      }
+      isWalkerMode = !isWalkerMode;
+      safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
+      hud.setState(isWalkerMode);
+      if (isWalkerMode) blurActiveInput();
+      return;
+    }
+    if (!isWalkerMode || isInputActive()) return;
+    if (WALKER_KEYS.has(key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      dispatchWalkerAction(event, key);
+    }
+  }
+  window.addEventListener("keydown", keydownHandler, { capture: true });
+  safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     isWalkerMode = !!result[STORAGE_KEY];
     hud.setState(isWalkerMode);
     applyOneTapBlocker(!!result[BLOCKER_KEY]);
   });
-  browser.storage.onChanged.addListener((changes, area) => {
+  chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (STORAGE_KEY in changes) {
       isWalkerMode = !!changes[STORAGE_KEY].newValue;
@@ -365,7 +508,7 @@
       applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
     }
   });
-  browser.runtime.onMessage.addListener((message) => {
+  chrome.runtime.onMessage.addListener((message) => {
     if (message.command !== "FORCE_BLUR_ON_ARRIVAL") return;
     if (!isWalkerMode) return;
     if (document.activeElement instanceof HTMLElement) {
@@ -373,80 +516,40 @@
     }
     window.focus();
   });
-  function normalizeKey(event) {
-    const code = event.code;
-    if (code.startsWith("Key")) return code.slice(3).toLowerCase();
-    if (code.startsWith("Digit")) return code.slice(5);
-    if (code === "Space") return " ";
-    return event.key.toLowerCase();
+  function pullStateFromStorage() {
+    if (!window.__XOPS_WALKER_ALIVE__) return;
+    if (document.title.startsWith("\u{1F4A4} ")) {
+      document.title = document.title.slice("\u{1F4A4} ".length);
+    }
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+      isWalkerMode = !!result[STORAGE_KEY];
+      hud.setState(isWalkerMode);
+      applyOneTapBlocker(!!result[BLOCKER_KEY]);
+    });
   }
-  function handleKeyInput(event) {
-    const key = normalizeKey(event);
-    const shift = event.shiftKey;
-    if (shift && SHIFT_ACTIONS[key]) {
-      event.preventDefault();
-      event.stopPropagation();
-      browser.runtime.sendMessage({ command: SHIFT_ACTIONS[key] });
-      return;
-    }
-    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
-      event.preventDefault();
-      event.stopPropagation();
-      SHIFT_LOCAL_ACTIONS[key]();
-      return;
-    }
-    if (key === "f") {
-      event.preventDefault();
-      cheatsheet.toggle();
-      return;
-    }
-    if (key === " ") {
-      event.preventDefault();
-      browser.runtime.sendMessage({ command: shift ? "PREV_TAB" : "NEXT_TAB" });
-      return;
-    }
-    if (key === "q") {
-      event.preventDefault();
-      window.history.back();
-      return;
-    }
-    if (key === "e") {
-      event.preventDefault();
-      window.history.forward();
-      return;
-    }
-    if (key === "z" && !shift) {
-      event.preventDefault();
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      window.focus();
-      return;
-    }
-    if (!shift && NAV_ACTIONS[key]) {
-      event.preventDefault();
-      NAV_ACTIONS[key]();
-    }
+  function onVisibilityChange() {
+    if (!document.hidden) pullStateFromStorage();
   }
-  window.addEventListener("keydown", (event) => {
+  function onWindowFocus() {
+    pullStateFromStorage();
+  }
+  window.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("focus", onWindowFocus);
+  function silentKillHandler(event) {
+    if (isOrphan()) return;
+    if (!isWalkerMode) return;
+    const target = event.target;
+    const isTargetInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+    if (isTargetInput || isInputActive()) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
-    if (document.fullscreenElement !== null && event.key === "Escape") return;
-    if (event.key === "Escape") {
-      if (cheatsheet.isVisible()) {
-        cheatsheet.hide();
-        return;
-      }
-      isWalkerMode = !isWalkerMode;
-      browser.storage.local.set({ [STORAGE_KEY]: isWalkerMode });
-      hud.setState(isWalkerMode);
-      if (isWalkerMode) blurActiveInput();
-      return;
-    }
-    if (!isWalkerMode || isInputActive()) return;
     const key = normalizeKey(event);
     if (WALKER_KEYS.has(key)) {
+      event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
     }
-    handleKeyInput(event);
-  }, { capture: true });
+  }
+  window.addEventListener("keyup", silentKillHandler, { capture: true });
+  window.addEventListener("keypress", silentKillHandler, { capture: true });
 })();

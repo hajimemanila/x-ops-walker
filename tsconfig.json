@@ -14,7 +14,7 @@
     "rootDir": "./src",
     "moduleResolution": "node",
     "types": [
-      "@types/firefox-webext-browser"
+      "chrome"
     ],
     "isolatedModules": true,
     "moduleDetection": "force"

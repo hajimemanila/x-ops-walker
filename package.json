@@ -1,10 +1,10 @@
 {
   "devDependencies": {
-    "@types/firefox-webext-browser": "^143.0.0",
+    "@types/chrome": "^0.0.320",
     "esbuild": "^0.27.3"
   },
   "scripts": {
-    "build": "esbuild src/*.ts --bundle --outdir=dist --target=firefox100 && copy manifest.json dist\\ && copy popup.html dist\\ && xcopy icons dist\\icons /E /I /Y && xcopy _locales dist\\_locales /E /I /Y",
-    "watch": "esbuild src/*.ts --bundle --outdir=dist --target=firefox100 --watch"
+    "build": "esbuild src/*.ts --bundle --outdir=dist --target=chrome120 && copy manifest.json dist\\ && copy popup.html dist\\ && xcopy icons dist\\icons /E /I /Y && xcopy _locales dist\\_locales /E /I /Y",
+    "watch": "esbuild src/*.ts --bundle --outdir=dist --target=chrome120 --watch"
   }
 }
