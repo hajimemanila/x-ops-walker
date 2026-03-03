@@ -503,12 +503,24 @@ const cheatsheet: CheatsheetController = (() => {
 })();
 
 
-// ── Blur on Enable ────────────────────────────────────────────────────────────
-function blurActiveInput(): void {
-    const el = document.activeElement;
+// ── Deep Blur: Shadow DOM を再帰して最深層の activeElement を blur する ──────────
+// Gemini 等の SPA は入力欄を closed Shadow DOM の奥深くに置くため、
+// document.activeElement のみを blur() するだけでは不十分。
+// 処理可能な最深の shadow activeElement を辿り回して確実に blur() する。
+function deepBlur(root: Element | null): void {
+    if (!root) return;
+    let el: Element | null = root;
+    // shadow DOM を再帰的に潜り、最深層の activeElement まで辿り着く
+    while (el?.shadowRoot?.activeElement) {
+        el = el.shadowRoot.activeElement;
+    }
     if (el instanceof HTMLElement && el !== document.body) {
         el.blur();
     }
+}
+
+function blurActiveInput(): void {
+    deepBlur(document.activeElement);
     window.focus();
 }
 
@@ -591,6 +603,10 @@ function keydownHandler(event: KeyboardEvent): void {
 
     // キーリピートはスキップ（長押しの連射を防ぐ）
     if (event.repeat) return;
+
+    // IME（日本語変換等）入力中はウォーカーを完全スリープさせる
+    // 変換中のキーイベントを誤短訕して殺してしまうのを防ぐ
+    if (event.isComposing) return;
 
     // フルスクリーン中の Escape はブラウザに委ねる
     if (document.fullscreenElement !== null && event.key === 'Escape') return;
@@ -707,6 +723,19 @@ function pullStateFromStorage(): void {
         isWalkerMode = !!result[STORAGE_KEY];
         hud.setState(isWalkerMode);
         applyOneTapBlocker(!!result[BLOCKER_KEY]);
+
+        // ── SPA オートフォーカス潰し ───────────────────────────────────────────
+        // Gemini/Keep 等の SPA はタブ復帰後に遅延で入力欄にオートフォーカスする。
+        // Walker ON なら 150ms 待ってから deepBlur で上書きし、キーバインドを即座に届かせる。
+        // 注意: この遅延 setTimeout は User Gesture がないため window.focus() が
+        //        Chrome にブロックされる場合があるが、deepBlur 自体は実行される。
+        if (isWalkerMode) {
+            setTimeout(() => {
+                if (!isWalkerMode) return;  // 遅延中に OFF に切り替わった場合はキャンセル
+                if (!window.__XOPS_WALKER_ALIVE__) return;  // 亡霊化チェック
+                blurActiveInput();
+            }, 150);
+        }
     });
 }
 
@@ -750,6 +779,9 @@ function silentKillHandler(event: KeyboardEvent): void {
     // 修飾キー単独・リピートはスキップ
     if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
     if (event.repeat) return;
+
+    // IME 入力中はサイレントキルもスキップ（変換候補キーを捕捉しない）
+    if (event.isComposing) return;
 
     const key = normalizeKey(event);
 

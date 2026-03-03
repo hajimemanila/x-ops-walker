@@ -413,11 +413,18 @@
     mount();
     return { toggle, hide, isVisible };
   })();
-  function blurActiveInput() {
-    const el = document.activeElement;
+  function deepBlur(root) {
+    if (!root) return;
+    let el = root;
+    while (el?.shadowRoot?.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
     if (el instanceof HTMLElement && el !== document.body) {
       el.blur();
     }
+  }
+  function blurActiveInput() {
+    deepBlur(document.activeElement);
     window.focus();
   }
   function normalizeKey(event) {
@@ -467,6 +474,7 @@
     if (isOrphan()) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
+    if (event.isComposing) return;
     if (document.fullscreenElement !== null && event.key === "Escape") return;
     const key = normalizeKey(event);
     if (event.key === "Escape") {
@@ -525,6 +533,13 @@
       isWalkerMode = !!result[STORAGE_KEY];
       hud.setState(isWalkerMode);
       applyOneTapBlocker(!!result[BLOCKER_KEY]);
+      if (isWalkerMode) {
+        setTimeout(() => {
+          if (!isWalkerMode) return;
+          if (!window.__XOPS_WALKER_ALIVE__) return;
+          blurActiveInput();
+        }, 150);
+      }
     });
   }
   function onVisibilityChange() {
@@ -543,6 +558,7 @@
     if (isTargetInput || isInputActive()) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
+    if (event.isComposing) return;
     const key = normalizeKey(event);
     if (WALKER_KEYS.has(key)) {
       event.preventDefault();
