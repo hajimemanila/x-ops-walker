@@ -170,23 +170,42 @@ function selfDestruct(): void {
     window.removeEventListener('focus', onWindowFocus);
 }
 
-// chrome.runtime.sendMessage の安全ラッパー
-function safeSendMessage(msg: object): void {
-    try {
-        chrome.runtime.sendMessage(msg).catch((err: unknown) => {
+// chrome.runtime.sendMessage の安全ラッパー（非同期・リトライ付き）
+//
+// Service Worker は約30秒のアイドルで休止する（MV3 仕様）。
+// 休止中に sendMessage すると "Receiving end does not exist" が返る。
+// SW の再起動は通常 50-200ms のため、150ms × 最大2回リトライで確実に復旧する。
+//
+// 亡霊エラー (Extension context invalidated / message channel closed) は
+// リトライせず即座に selfDestruct() を呼ぶ — この挙動は維持する。
+async function safeSendMessage(msg: object): Promise<void> {
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 150;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            await chrome.runtime.sendMessage(msg);
+            return; // 送信成功
+        } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : String(err);
+
+            // 亡霊判定: 拡張機能が更新/無効化された → 即自殺、リトライ不要
             if (errMsg.includes('Extension context invalidated') ||
                 errMsg.includes('message channel closed')) {
                 selfDestruct();
                 return;
             }
-            // その他のエラーはデバッグ用に出力する（原因究明のため）
-            console.error('[X-Ops Walker] sendMessage failed:', errMsg, msg);
-        });
-    } catch (e) {
-        // 同期的な例外（context が既に死んでいる場合）
-        console.error('[X-Ops Walker] sendMessage sync error:', e);
-        selfDestruct();
+
+            // SW 休止判定: Service Worker が起床中 → 待機してリトライ
+            if (errMsg.includes('Receiving end does not exist') && attempt < MAX_RETRIES) {
+                await new Promise<void>(r => setTimeout(r, RETRY_DELAY_MS));
+                continue;
+            }
+
+            // リトライ上限超過、または未知のエラー → ログして終了（ハンドラは殺さない）
+            console.warn('[X-Ops Walker] sendMessage failed (final):', errMsg, msg);
+            return;
+        }
     }
 }
 

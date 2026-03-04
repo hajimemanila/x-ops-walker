@@ -1149,19 +1149,26 @@
     window.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("focus", onWindowFocus);
   }
-  function safeSendMessage(msg) {
-    try {
-      chrome.runtime.sendMessage(msg).catch((err) => {
+  async function safeSendMessage(msg) {
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 150;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await chrome.runtime.sendMessage(msg);
+        return;
+      } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         if (errMsg.includes("Extension context invalidated") || errMsg.includes("message channel closed")) {
           selfDestruct();
           return;
         }
-        console.error("[X-Ops Walker] sendMessage failed:", errMsg, msg);
-      });
-    } catch (e) {
-      console.error("[X-Ops Walker] sendMessage sync error:", e);
-      selfDestruct();
+        if (errMsg.includes("Receiving end does not exist") && attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+        console.warn("[X-Ops Walker] sendMessage failed (final):", errMsg, msg);
+        return;
+      }
     }
   }
   function safeStorageGet(keys, cb) {
