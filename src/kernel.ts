@@ -7,6 +7,13 @@
 //   P3. キャプチャフェーズ先頭での同期的イベント強奪
 // ============================================================================
 
+import { WalkerRouter } from './router';
+import { BaseProtocol } from './protocols/base';
+import { AiChatProtocol } from './protocols/ai-chat';
+
+const router = new WalkerRouter(new BaseProtocol());
+router.register(new AiChatProtocol());
+
 // ── P1: 多重注入ガード ────────────────────────────────────────────────────────
 // 拡張機能のリロード時、onInstalled による再注入で「古い kernel」と「新しい
 // kernel」が同一タブに共存する。グローバルフラグで先着したスクリプトが
@@ -41,18 +48,6 @@ const isFirefox: boolean = navigator.userAgent.toLowerCase().includes('firefox')
 const WALKER_KEYS = new Set([
     'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
 ]);
-
-// Shift+キー → background へ送るコマンド
-const SHIFT_ACTIONS: Record<string, string> = {
-    'x': 'CLOSE_TAB',
-    'z': 'UNDO_CLOSE',
-    'r': 'RELOAD_TAB',
-    'm': 'MUTE_TAB',
-    'g': 'DISCARD_TAB',
-    't': 'CLEAN_UP',
-    '9': 'GO_FIRST_TAB',
-    'c': 'DUPLICATE_TAB',
-};
 
 // ── スクロールユーティリティ（Center Raycast + Shadow Piercing）────────────────────────────
 
@@ -107,43 +102,6 @@ function getBestScrollContainer(event: KeyboardEvent): Element {
     const centerEl = getDeepElementFromPoint(centerX, centerY);
     return getScrollParentPiercing(centerEl);
 }
-
-function walkerScroll(event: KeyboardEvent, delta: number): void {
-    const c = getBestScrollContainer(event);
-    c.scrollBy({ top: delta, behavior: 'smooth' });
-}
-
-function resetScrollPosition(event: KeyboardEvent): void {
-    const c = getBestScrollContainer(event);
-    const host = window.location.hostname;
-    // Zキーの AI チャット最適化 (Gemini/ChatGPT/Claude 等は最下部へ、その他は最上部へ)
-    if (host.includes('gemini.google.com') || host.includes('chatgpt.com') || host.includes('claude.ai')) {
-        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
-    } else {
-        c.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-}
-
-// Shift+W / Shift+S → ページ先頭・末尾へスクロール
-const SHIFT_LOCAL_ACTIONS: Record<string, () => void> = {
-    'w': () => {
-        const c = getScrollParentPiercing(document.activeElement);
-        c.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    's': () => {
-        const c = getScrollParentPiercing(document.activeElement);
-        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
-    },
-};
-
-// 無修飾キー → ローカルスクロール / background タブ移動
-const NAV_ACTIONS: Record<string, (event: KeyboardEvent) => void> = {
-    'w': (event) => walkerScroll(event, -window.innerHeight * 0.8),
-    's': (event) => walkerScroll(event, window.innerHeight * 0.8),
-    'a': () => safeSendMessage({ command: 'PREV_TAB' }),
-    'd': () => safeSendMessage({ command: 'NEXT_TAB' }),
-};
-
 
 // ── P1: Orphan フェイルセーフ ─────────────────────────────────────────────────
 // キーダウンリスナーの先頭で必ず呼ぶ。
@@ -657,6 +615,10 @@ const cheatsheet: CheatsheetController = (() => {
     return { toggle, hide, isVisible };
 })();
 
+// ── Cheatsheet 外部連携フック ────────────────────────────────────────────────
+window.addEventListener('XOpsWalker_ToggleCheatsheet', () => {
+    cheatsheet.toggle();
+});
 
 // ── Deep Blur: Shadow DOM を再帰して最深層の activeElement を blur する ──────────
 // Gemini 等の SPA は入力欄を closed Shadow DOM の奥深くに置くため、
@@ -690,56 +652,6 @@ function normalizeKey(event: KeyboardEvent): string {
 }
 
 
-// ── P3: キーアクションハンドラ (完全なイベント強奪後に実行) ─────────────────
-// key は呼び元（keydownHandler）にて normalizeKey で正規化済みの文字列。
-// このメソッドは「P3強奪3点セットが確実に実行済み」の文脈からのみ呼ばれる。
-function dispatchWalkerAction(event: KeyboardEvent, key: string): void {
-    const shift = event.shiftKey;
-
-    // Shift+キー: background 送信コマンド（タブ操作）
-    if (shift && SHIFT_ACTIONS[key]) {
-        safeSendMessage({ command: SHIFT_ACTIONS[key] });
-        return;
-    }
-
-    // Shift+W / Shift+S: ページ先頭・末尾へスクロール
-    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
-        SHIFT_LOCAL_ACTIONS[key]();
-        return;
-    }
-
-    // F: チートシート開閉
-    if (key === 'f') {
-        cheatsheet.toggle();
-        return;
-    }
-
-    // Space: 次タブ / Shift+Space: 前タブ
-    if (key === ' ') {
-        safeSendMessage({ command: shift ? 'PREV_TAB' : 'NEXT_TAB' });
-        return;
-    }
-
-    // Q: 履歴戻る / E: 履歴進む
-    if (key === 'q') { window.history.back(); return; }
-    if (key === 'e') { window.history.forward(); return; }
-
-    // Z (単押し): DOMフォーカスリセット + ページ最上部/最下部へ
-    // Shift+Z は上の UNDO_CLOSE で処理済み
-    if (key === 'z' && !shift) {
-        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-        window.focus();
-        resetScrollPosition(event);
-        return;
-    }
-
-    // W/S/A/D: スクロール・タブ移動
-    if (!shift && NAV_ACTIONS[key]) {
-        NAV_ACTIONS[key](event);
-    }
-}
-
-
 // ── P3: メインキーダウンリスナー ──────────────────────────────────────────────
 // 【設計上の重要事項】
 // Chromeの capture フェーズでは、Chrome 拡張の isolated world と
@@ -768,7 +680,8 @@ function keydownHandler(event: KeyboardEvent): void {
         // Stage 3: ウィンドウフォーカスも Walker へ
         window.focus();
         // Stage 4: 単押し Z と同等のスクロールリセット
-        resetScrollPosition(event);
+        const container = getBestScrollContainer(event);
+        router.dispatch(event, 'z', event.shiftKey, container);
         return;
     }
 
@@ -841,7 +754,9 @@ function keydownHandler(event: KeyboardEvent): void {
         event.stopPropagation();
         event.stopImmediatePropagation();
 
-        dispatchWalkerAction(event, key);
+        const container = getBestScrollContainer(event);
+        router.dispatch(event, key, event.shiftKey, container);
+        return;
     }
 }
 

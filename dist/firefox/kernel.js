@@ -1031,6 +1031,149 @@
 
   // src/kernel.ts
   init_browser_polyfill_entry();
+
+  // src/router.ts
+  init_browser_polyfill_entry();
+  var WalkerRouter = class {
+    protocols = [];
+    baseProtocol;
+    constructor(base) {
+      this.baseProtocol = base;
+    }
+    /** ドメイン固有のプロトコルを登録 */
+    register(protocol) {
+      this.protocols.push(protocol);
+    }
+    /** Kernel からディスパッチされるエントリーポイント */
+    dispatch(event, key, shift, container) {
+      const hostname = window.location.hostname;
+      for (const protocol of this.protocols) {
+        if (protocol.matches(hostname)) {
+          if (protocol.handleKey(event, key, shift, container)) {
+            return;
+          }
+        }
+      }
+      this.baseProtocol.handleKey(event, key, shift, container);
+    }
+  };
+
+  // src/protocols/base.ts
+  init_browser_polyfill_entry();
+  var BaseProtocol = class {
+    matches(hostname) {
+      return true;
+    }
+    handleKey(event, key, shift, container) {
+      if (shift) {
+        switch (key) {
+          // タブ・ウィンドウ操作（backgroundへ委譲）
+          case "x":
+            chrome.runtime.sendMessage({ command: "CLOSE_TAB" });
+            return true;
+          case "z":
+            chrome.runtime.sendMessage({ command: "UNDO_CLOSE" });
+            return true;
+          case "r":
+            chrome.runtime.sendMessage({ command: "RELOAD_TAB" });
+            return true;
+          case "m":
+            chrome.runtime.sendMessage({ command: "MUTE_TAB" });
+            return true;
+          case "g":
+            chrome.runtime.sendMessage({ command: "DISCARD_TAB" });
+            return true;
+          case "t":
+            chrome.runtime.sendMessage({ command: "CLEAN_UP" });
+            return true;
+          case "9":
+            chrome.runtime.sendMessage({ command: "GO_FIRST_TAB" });
+            return true;
+          case "c":
+            chrome.runtime.sendMessage({ command: "DUPLICATE_TAB" });
+            return true;
+          // スクロール操作 (ページ先頭・末尾へ直行)
+          case "w":
+            container.scrollTo({ top: 0, behavior: "smooth" });
+            return true;
+          case "s":
+            container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+            return true;
+          // ナビゲーション (Shift + Space: 前タブ)
+          case " ":
+            chrome.runtime.sendMessage({ command: "PREV_TAB" });
+            return true;
+        }
+        return false;
+      }
+      switch (key) {
+        // スクロール操作 (画面の80%分)
+        case "w":
+          container.scrollBy({ top: -window.innerHeight * 0.8, behavior: "smooth" });
+          return true;
+        case "s":
+          container.scrollBy({ top: window.innerHeight * 0.8, behavior: "smooth" });
+          return true;
+        // ナビゲーション (タブ移動)
+        case "a":
+          chrome.runtime.sendMessage({ command: "PREV_TAB" });
+          return true;
+        case "d":
+          chrome.runtime.sendMessage({ command: "NEXT_TAB" });
+          return true;
+        case " ":
+          chrome.runtime.sendMessage({ command: "NEXT_TAB" });
+          return true;
+        // 履歴ナビゲーション
+        case "q":
+          window.history.back();
+          return true;
+        case "e":
+          window.history.forward();
+          return true;
+        // ピン留め等 (元コードではFはチートシートでしたが、プロトコル分離で参照不可のため代替実装)
+        case "f":
+          window.dispatchEvent(new CustomEvent("XOpsWalker_ToggleCheatsheet"));
+          return true;
+        // フォーカス・スクロールのリセット (Z単押し)
+        case "z":
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          window.focus();
+          container.scrollTo({ top: 0, behavior: "smooth" });
+          return true;
+      }
+      if (event.altKey && key === "z") {
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        window.focus();
+        container.scrollTo({ top: 0, behavior: "smooth" });
+        return true;
+      }
+      return false;
+    }
+  };
+
+  // src/protocols/ai-chat.ts
+  init_browser_polyfill_entry();
+  var AiChatProtocol = class {
+    matches(hostname) {
+      return hostname.includes("gemini.google.com") || hostname.includes("chatgpt.com") || hostname.includes("claude.ai");
+    }
+    handleKey(event, key, shift, container) {
+      if (key === "z") {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+        return true;
+      }
+      return false;
+    }
+  };
+
+  // src/kernel.ts
+  var router = new WalkerRouter(new BaseProtocol());
+  router.register(new AiChatProtocol());
   if (window.__XOPS_WALKER_ALIVE__) {
     throw new Error("[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.");
   }
@@ -1056,16 +1199,6 @@
     "e",
     "c"
   ]);
-  var SHIFT_ACTIONS = {
-    "x": "CLOSE_TAB",
-    "z": "UNDO_CLOSE",
-    "r": "RELOAD_TAB",
-    "m": "MUTE_TAB",
-    "g": "DISCARD_TAB",
-    "t": "CLEAN_UP",
-    "9": "GO_FIRST_TAB",
-    "c": "DUPLICATE_TAB"
-  };
   function getDeepElementFromPoint(x, y) {
     let el = document.elementFromPoint(x, y);
     while (el?.shadowRoot) {
@@ -1109,35 +1242,6 @@
     const centerEl = getDeepElementFromPoint(centerX, centerY);
     return getScrollParentPiercing(centerEl);
   }
-  function walkerScroll(event, delta) {
-    const c = getBestScrollContainer(event);
-    c.scrollBy({ top: delta, behavior: "smooth" });
-  }
-  function resetScrollPosition(event) {
-    const c = getBestScrollContainer(event);
-    const host = window.location.hostname;
-    if (host.includes("gemini.google.com") || host.includes("chatgpt.com") || host.includes("claude.ai")) {
-      c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
-    } else {
-      c.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }
-  var SHIFT_LOCAL_ACTIONS = {
-    "w": () => {
-      const c = getScrollParentPiercing(document.activeElement);
-      c.scrollTo({ top: 0, behavior: "smooth" });
-    },
-    "s": () => {
-      const c = getScrollParentPiercing(document.activeElement);
-      c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
-    }
-  };
-  var NAV_ACTIONS = {
-    "w": (event) => walkerScroll(event, -window.innerHeight * 0.8),
-    "s": (event) => walkerScroll(event, window.innerHeight * 0.8),
-    "a": () => safeSendMessage({ command: "PREV_TAB" }),
-    "d": () => safeSendMessage({ command: "NEXT_TAB" })
-  };
   function isOrphan() {
     try {
       chrome.runtime.getManifest();
@@ -1165,28 +1269,6 @@
         _keepAlivePort = null;
       });
     } catch {
-    }
-  }
-  async function safeSendMessage(msg) {
-    const MAX_RETRIES = 2;
-    const RETRY_DELAY_MS = 150;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        await chrome.runtime.sendMessage(msg);
-        return;
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (errMsg.includes("Extension context invalidated") || errMsg.includes("message channel closed")) {
-          selfDestruct();
-          return;
-        }
-        if (errMsg.includes("Receiving end does not exist") && attempt < MAX_RETRIES) {
-          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
-          continue;
-        }
-        console.warn("[X-Ops Walker] sendMessage failed (final):", errMsg, msg);
-        return;
-      }
     }
   }
   function safeStorageGet(keys, cb) {
@@ -1528,6 +1610,9 @@
     mount();
     return { toggle, hide, isVisible };
   })();
+  window.addEventListener("XOpsWalker_ToggleCheatsheet", () => {
+    cheatsheet.toggle();
+  });
   function deepBlur(root) {
     if (!root) return;
     let el = root;
@@ -1549,42 +1634,6 @@
     if (code === "Space") return " ";
     return event.key.toLowerCase();
   }
-  function dispatchWalkerAction(event, key) {
-    const shift = event.shiftKey;
-    if (shift && SHIFT_ACTIONS[key]) {
-      safeSendMessage({ command: SHIFT_ACTIONS[key] });
-      return;
-    }
-    if (shift && SHIFT_LOCAL_ACTIONS[key]) {
-      SHIFT_LOCAL_ACTIONS[key]();
-      return;
-    }
-    if (key === "f") {
-      cheatsheet.toggle();
-      return;
-    }
-    if (key === " ") {
-      safeSendMessage({ command: shift ? "PREV_TAB" : "NEXT_TAB" });
-      return;
-    }
-    if (key === "q") {
-      window.history.back();
-      return;
-    }
-    if (key === "e") {
-      window.history.forward();
-      return;
-    }
-    if (key === "z" && !shift) {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-      window.focus();
-      resetScrollPosition(event);
-      return;
-    }
-    if (!shift && NAV_ACTIONS[key]) {
-      NAV_ACTIONS[key](event);
-    }
-  }
   function keydownHandler(event) {
     if (isOrphan()) return;
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
@@ -1594,7 +1643,8 @@
       deepBlur(document.activeElement);
       document.body.focus();
       window.focus();
-      resetScrollPosition(event);
+      const container = getBestScrollContainer(event);
+      router.dispatch(event, "z", event.shiftKey, container);
       return;
     }
     if (!isWalkerMode && event.key !== "Escape") return;
@@ -1624,7 +1674,9 @@
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      dispatchWalkerAction(event, key);
+      const container = getBestScrollContainer(event);
+      router.dispatch(event, key, event.shiftKey, container);
+      return;
     }
   }
   window.addEventListener("keydown", keydownHandler, { capture: true });
