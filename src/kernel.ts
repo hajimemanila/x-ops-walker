@@ -54,87 +54,71 @@ const SHIFT_ACTIONS: Record<string, string> = {
     'c': 'DUPLICATE_TAB',
 };
 
-// ── スクロールユーティリティ（GCM準拠 + Gemini フォールバック強化）────────────────────────────
-//
-// Stage 1 — GCM コア: activeElement.parentElement から上へ歩き、
-//           overflowY=auto/scroll の最初の親を返す（GCMと完全同一）。
-// Stage 2 — コンテンツアンカー: Stage 1 が documentElement を返した場合、
-//           Gemini メッセージ等の既知セレクタを querySelector で掴み、再度 Stage 1。
-//           GCM が messageList[0] を起点にするのと同じ思想。
-// Stage 3 — DOM スキャン: Stage 1/2 が失敗した場合、全要素から最大 scrollHeight の
-//           overflow 要素を探す（重いが最後の Element 捕捉手段）。
-// Stage 4 — window: 静的ページ用の最終手段。
+// ── スクロールユーティリティ（Center Raycast + Shadow Piercing）────────────────────────────
 
-const CONTENT_ANCHOR_SELECTORS = [
-    'user-message',
-    'model-response',
-    'infinite-scroller',
-    '.conversations-container',
-    'main',
-    'article',
-    '[role="main"]',
-] as const;
-
-function walkToScrollParent(el: Element | null): Element | null {
-    let parent = el?.parentElement ?? null;
-    while (parent) {
-        const ov = window.getComputedStyle(parent).overflowY;
-        if (ov === 'auto' || ov === 'scroll') return parent;
-        parent = parent.parentElement;
+function getDeepElementFromPoint(x: number, y: number): Element | null {
+    let el = document.elementFromPoint(x, y);
+    while (el?.shadowRoot) {
+        const inner = el.shadowRoot.elementFromPoint(x, y);
+        if (!inner || inner === el) break;
+        el = inner;
     }
-    return null;
+    return el;
 }
 
-function findScrollContainer(el: Element | null): Element {
-    // Stage 1: GCM コア
-    const s1 = walkToScrollParent(el);
-    if (s1) return s1;
-
-    // Stage 2: コンテンツアンカー起点の再探索
-    for (const sel of CONTENT_ANCHOR_SELECTORS) {
-        const anchor = document.querySelector(sel);
-        if (anchor) {
-            const s2 = walkToScrollParent(anchor);
-            if (s2) return s2;
+function getScrollParentPiercing(startNode: Element | null): Element {
+    let el = startNode;
+    while (el) {
+        const ov = window.getComputedStyle(el).overflowY;
+        if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
+            return el;
         }
+
+        let parent: Element | null = el.parentElement;
+        if (!parent) {
+            const root = el.getRootNode();
+            if (root instanceof ShadowRoot) {
+                parent = root.host as Element;
+            }
+        }
+        el = parent;
     }
-
-    // Stage 3: DOM 全体から最大 scrollHeight の overflow 要素をスキャン
-    let best: Element | null = null;
-    let bestHeight = 0;
-    document.querySelectorAll<Element>('*').forEach(node => {
-        const ov = window.getComputedStyle(node).overflowY;
-        if ((ov === 'auto' || ov === 'scroll') && node.scrollHeight > node.clientHeight) {
-            if (node.scrollHeight > bestHeight) { bestHeight = node.scrollHeight; best = node; }
-        }
-    });
-    if (best) return best;
-
     return document.documentElement;
 }
 
-// スクロール実行。documentElement が返った（= html:overflow:hidden 系 SPA）場合は
-// window にフォールバックする。
-function walkerScroll(delta: number): void {
-    const c = findScrollContainer(document.activeElement);
-    if (c === document.documentElement) {
-        window.scrollBy({ top: delta, behavior: 'smooth' });
-    } else {
-        c.scrollBy({ top: delta, behavior: 'smooth' });
+function getBestScrollContainer(event: KeyboardEvent): Element {
+    // ① Event Path 探索 (Reddit 対策)
+    for (const node of event.composedPath()) {
+        if (!node || (node as Node).nodeType !== 1) continue;
+        const el = node as Element;
+        const ov = window.getComputedStyle(el).overflowY;
+        if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
+            return el;
+        }
     }
+
+    // ② ActiveElement 探索 (Gemini/汎用対策)
+    const activeC = getScrollParentPiercing(document.activeElement);
+    if (activeC !== document.documentElement) return activeC;
+
+    // ③ Center Raycast 探索 (画面中央からの逆探知・Shadow貫通の最終フォールバック)
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const centerEl = getDeepElementFromPoint(centerX, centerY);
+    return getScrollParentPiercing(centerEl);
 }
 
-// ── scrollToTop: ページ最上部へのリセット（Zキー / Alt+Z 共通） ────────────────────
-// findScrollContainer を利用してページの実コンテナを動的に特定する。
-// window.scrollTo のハードコードを排し、Reddit / Gemini 等 SPA の
-// カスタムスクロールコンテナ（body 直下の div 等）も正しくリセットする。
-// 【設計】
-//   findScrollContainer が documentElement を返した場傂は window にフォールバック。
-//   それ以外（SPA 内部コンテナ）はそのィチの scrollTo({ top: 0 }) で確実に先頭へ滝る。
-function scrollToTop(): void {
-    const c = findScrollContainer(document.activeElement);
-    if (c === document.documentElement) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+function walkerScroll(event: KeyboardEvent, delta: number): void {
+    const c = getBestScrollContainer(event);
+    c.scrollBy({ top: delta, behavior: 'smooth' });
+}
+
+function resetScrollPosition(event: KeyboardEvent): void {
+    const c = getBestScrollContainer(event);
+    const host = window.location.hostname;
+    // Zキーの AI チャット最適化 (Gemini/ChatGPT/Claude 等は最下部へ、その他は最上部へ)
+    if (host.includes('gemini.google.com') || host.includes('chatgpt.com') || host.includes('claude.ai')) {
+        c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
     } else {
         c.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -143,19 +127,19 @@ function scrollToTop(): void {
 // Shift+W / Shift+S → ページ先頭・末尾へスクロール
 const SHIFT_LOCAL_ACTIONS: Record<string, () => void> = {
     'w': () => {
-        const c = findScrollContainer(document.activeElement);
+        const c = getScrollParentPiercing(document.activeElement);
         c.scrollTo({ top: 0, behavior: 'smooth' });
     },
     's': () => {
-        const c = findScrollContainer(document.activeElement);
+        const c = getScrollParentPiercing(document.activeElement);
         c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
     },
 };
 
 // 無修飾キー → ローカルスクロール / background タブ移動
-const NAV_ACTIONS: Record<string, () => void> = {
-    'w': () => walkerScroll(-window.innerHeight * 0.8),
-    's': () => walkerScroll(window.innerHeight * 0.8),
+const NAV_ACTIONS: Record<string, (event: KeyboardEvent) => void> = {
+    'w': (event) => walkerScroll(event, -window.innerHeight * 0.8),
+    's': (event) => walkerScroll(event, window.innerHeight * 0.8),
     'a': () => safeSendMessage({ command: 'PREV_TAB' }),
     'd': () => safeSendMessage({ command: 'NEXT_TAB' }),
 };
@@ -318,13 +302,12 @@ let isWalkerMode = false;
 
 function isEditableElement(el: Element): boolean {
     // ── クラッシュガード: TextNode 等 Element でないノードが来た場合は即 false ──
-    if (!(el instanceof Element)) return false;
-    const htmlEl = el as HTMLElement;
+    if (!el || (el as Node).nodeType !== 1) return false;
     // <input>, <textarea>, <select> タグは常に入力欄として扱う
     const tag = el.tagName.toUpperCase();
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
     // contenteditable="true" が自身に明示されている要素のみ対象（継承値は無視）
-    if (htmlEl.getAttribute('contentEditable') === 'true') return true;
+    if (el.getAttribute('contentEditable') === 'true') return true;
     // ── ARIA ヒューリスティック: closed Shadow DOM 貫通不可の補完 ──────────────
     // Reddit 等の closed shadow Host は内側の <input> に到達できない。
     // ARIA role が入力欄を示す場合は Shadow Host 自体を入力欄とみなす（保守的判定）。
@@ -335,13 +318,12 @@ function isEditableElement(el: Element): boolean {
 
 function isSensitiveElement(el: Element): boolean {
     // クラッシュガード
-    if (!(el instanceof Element)) return false;
-    const htmlEl = el as HTMLElement;
+    if (!el || (el as Node).nodeType !== 1) return false;
     if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'password') return true;
-    const ac = htmlEl.getAttribute('autocomplete') ?? '';
+    const ac = el.getAttribute('autocomplete') ?? '';
     if (ac.includes('password') || ac.startsWith('cc-')) return true;
     // isContentEditable（継承値）ではなく明示的属性で判定
-    if (htmlEl.getAttribute('contentEditable') === 'true') return true;
+    if (el.getAttribute('contentEditable') === 'true') return true;
     return false;
 }
 
@@ -742,18 +724,18 @@ function dispatchWalkerAction(event: KeyboardEvent, key: string): void {
     if (key === 'q') { window.history.back(); return; }
     if (key === 'e') { window.history.forward(); return; }
 
-    // Z (単押し): DOMフォーカスリセット + ページ最上部へ（スクロールコンテナを動的に特定）
+    // Z (単押し): DOMフォーカスリセット + ページ最上部/最下部へ
     // Shift+Z は上の UNDO_CLOSE で処理済み
     if (key === 'z' && !shift) {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         window.focus();
-        scrollToTop();  // findScrollContainer 経由で SPA 内部コンテナも確実にリセット
+        resetScrollPosition(event);
         return;
     }
 
     // W/S/A/D: スクロール・タブ移動
     if (!shift && NAV_ACTIONS[key]) {
-        NAV_ACTIONS[key]();
+        NAV_ACTIONS[key](event);
     }
 }
 
@@ -785,8 +767,8 @@ function keydownHandler(event: KeyboardEvent): void {
         document.body.focus();
         // Stage 3: ウィンドウフォーカスも Walker へ
         window.focus();
-        // Stage 4: 単押し Z と同等のスクロールリセット（SPA 内部コンテナ対応）
-        scrollToTop();
+        // Stage 4: 単押し Z と同等のスクロールリセット
+        resetScrollPosition(event);
         return;
     }
 

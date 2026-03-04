@@ -1066,77 +1066,75 @@
     "9": "GO_FIRST_TAB",
     "c": "DUPLICATE_TAB"
   };
-  var CONTENT_ANCHOR_SELECTORS = [
-    "user-message",
-    "model-response",
-    "infinite-scroller",
-    ".conversations-container",
-    "main",
-    "article",
-    '[role="main"]'
-  ];
-  function walkToScrollParent(el) {
-    let parent = el?.parentElement ?? null;
-    while (parent) {
-      const ov = window.getComputedStyle(parent).overflowY;
-      if (ov === "auto" || ov === "scroll") return parent;
-      parent = parent.parentElement;
+  function getDeepElementFromPoint(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el?.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
     }
-    return null;
+    return el;
   }
-  function findScrollContainer(el) {
-    const s1 = walkToScrollParent(el);
-    if (s1) return s1;
-    for (const sel of CONTENT_ANCHOR_SELECTORS) {
-      const anchor = document.querySelector(sel);
-      if (anchor) {
-        const s2 = walkToScrollParent(anchor);
-        if (s2) return s2;
+  function getScrollParentPiercing(startNode) {
+    let el = startNode;
+    while (el) {
+      const ov = window.getComputedStyle(el).overflowY;
+      if ((ov === "auto" || ov === "scroll") && el.scrollHeight > el.clientHeight) {
+        return el;
       }
-    }
-    let best = null;
-    let bestHeight = 0;
-    document.querySelectorAll("*").forEach((node) => {
-      const ov = window.getComputedStyle(node).overflowY;
-      if ((ov === "auto" || ov === "scroll") && node.scrollHeight > node.clientHeight) {
-        if (node.scrollHeight > bestHeight) {
-          bestHeight = node.scrollHeight;
-          best = node;
+      let parent = el.parentElement;
+      if (!parent) {
+        const root = el.getRootNode();
+        if (root instanceof ShadowRoot) {
+          parent = root.host;
         }
       }
-    });
-    if (best) return best;
+      el = parent;
+    }
     return document.documentElement;
   }
-  function walkerScroll(delta) {
-    const c = findScrollContainer(document.activeElement);
-    if (c === document.documentElement) {
-      window.scrollBy({ top: delta, behavior: "smooth" });
-    } else {
-      c.scrollBy({ top: delta, behavior: "smooth" });
+  function getBestScrollContainer(event) {
+    for (const node of event.composedPath()) {
+      if (!node || node.nodeType !== 1) continue;
+      const el = node;
+      const ov = window.getComputedStyle(el).overflowY;
+      if ((ov === "auto" || ov === "scroll") && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
     }
+    const activeC = getScrollParentPiercing(document.activeElement);
+    if (activeC !== document.documentElement) return activeC;
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const centerEl = getDeepElementFromPoint(centerX, centerY);
+    return getScrollParentPiercing(centerEl);
   }
-  function scrollToTop() {
-    const c = findScrollContainer(document.activeElement);
-    if (c === document.documentElement) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  function walkerScroll(event, delta) {
+    const c = getBestScrollContainer(event);
+    c.scrollBy({ top: delta, behavior: "smooth" });
+  }
+  function resetScrollPosition(event) {
+    const c = getBestScrollContainer(event);
+    const host = window.location.hostname;
+    if (host.includes("gemini.google.com") || host.includes("chatgpt.com") || host.includes("claude.ai")) {
+      c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
     } else {
       c.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
   var SHIFT_LOCAL_ACTIONS = {
     "w": () => {
-      const c = findScrollContainer(document.activeElement);
+      const c = getScrollParentPiercing(document.activeElement);
       c.scrollTo({ top: 0, behavior: "smooth" });
     },
     "s": () => {
-      const c = findScrollContainer(document.activeElement);
+      const c = getScrollParentPiercing(document.activeElement);
       c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
     }
   };
   var NAV_ACTIONS = {
-    "w": () => walkerScroll(-window.innerHeight * 0.8),
-    "s": () => walkerScroll(window.innerHeight * 0.8),
+    "w": (event) => walkerScroll(event, -window.innerHeight * 0.8),
+    "s": (event) => walkerScroll(event, window.innerHeight * 0.8),
     "a": () => safeSendMessage({ command: "PREV_TAB" }),
     "d": () => safeSendMessage({ command: "NEXT_TAB" })
   };
@@ -1232,22 +1230,20 @@
   }
   var isWalkerMode = false;
   function isEditableElement(el) {
-    if (!(el instanceof Element)) return false;
-    const htmlEl = el;
+    if (!el || el.nodeType !== 1) return false;
     const tag = el.tagName.toUpperCase();
     if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
-    if (htmlEl.getAttribute("contentEditable") === "true") return true;
+    if (el.getAttribute("contentEditable") === "true") return true;
     const role = el.getAttribute("role") ?? "";
     if (role === "textbox" || role === "searchbox" || role === "combobox" || role === "spinbutton") return true;
     return false;
   }
   function isSensitiveElement(el) {
-    if (!(el instanceof Element)) return false;
-    const htmlEl = el;
+    if (!el || el.nodeType !== 1) return false;
     if (el.tagName === "INPUT" && el.type === "password") return true;
-    const ac = htmlEl.getAttribute("autocomplete") ?? "";
+    const ac = el.getAttribute("autocomplete") ?? "";
     if (ac.includes("password") || ac.startsWith("cc-")) return true;
-    if (htmlEl.getAttribute("contentEditable") === "true") return true;
+    if (el.getAttribute("contentEditable") === "true") return true;
     return false;
   }
   function isInputActive(event) {
@@ -1582,11 +1578,11 @@
     if (key === "z" && !shift) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       window.focus();
-      scrollToTop();
+      resetScrollPosition(event);
       return;
     }
     if (!shift && NAV_ACTIONS[key]) {
-      NAV_ACTIONS[key]();
+      NAV_ACTIONS[key](event);
     }
   }
   function keydownHandler(event) {
@@ -1598,7 +1594,7 @@
       deepBlur(document.activeElement);
       document.body.focus();
       window.focus();
-      scrollToTop();
+      resetScrollPosition(event);
       return;
     }
     if (!isWalkerMode && event.key !== "Escape") return;
