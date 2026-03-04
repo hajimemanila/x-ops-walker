@@ -86,6 +86,14 @@
       c.scrollBy({ top: delta, behavior: "smooth" });
     }
   }
+  function scrollToTop() {
+    const c = findScrollContainer(document.activeElement);
+    if (c === document.documentElement) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      c.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
   var SHIFT_LOCAL_ACTIONS = {
     "w": () => {
       const c = findScrollContainer(document.activeElement);
@@ -582,7 +590,7 @@
     if (key === "z" && !shift) {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       window.focus();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToTop();
       return;
     }
     if (!shift && NAV_ACTIONS[key]) {
@@ -591,14 +599,14 @@
   }
   function keydownHandler(event) {
     if (isOrphan()) return;
-    if (!isFirefox && isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
+    if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
       deepBlur(document.activeElement);
       document.body.focus();
       window.focus();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollToTop();
       return;
     }
     if (!isWalkerMode && event.key !== "Escape") return;

@@ -124,6 +124,22 @@ function walkerScroll(delta: number): void {
     }
 }
 
+// ── scrollToTop: ページ最上部へのリセット（Zキー / Alt+Z 共通） ────────────────────
+// findScrollContainer を利用してページの実コンテナを動的に特定する。
+// window.scrollTo のハードコードを排し、Reddit / Gemini 等 SPA の
+// カスタムスクロールコンテナ（body 直下の div 等）も正しくリセットする。
+// 【設計】
+//   findScrollContainer が documentElement を返した場傂は window にフォールバック。
+//   それ以外（SPA 内部コンテナ）はそのィチの scrollTo({ top: 0 }) で確実に先頭へ滝る。
+function scrollToTop(): void {
+    const c = findScrollContainer(document.activeElement);
+    if (c === document.documentElement) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        c.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+}
+
 // Shift+W / Shift+S → ページ先頭・末尾へスクロール
 const SHIFT_LOCAL_ACTIONS: Record<string, () => void> = {
     'w': () => {
@@ -775,12 +791,12 @@ function dispatchWalkerAction(event: KeyboardEvent, key: string): void {
     if (key === 'q') { window.history.back(); return; }
     if (key === 'e') { window.history.forward(); return; }
 
-    // Z (単押し): DOMフォーカスリセット + スクロール最上部へ
+    // Z (単押し): DOMフォーカスリセット + ページ最上部へ（スクロールコンテナを動的に特定）
     // Shift+Z は上の UNDO_CLOSE で処理済み
     if (key === 'z' && !shift) {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         window.focus();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        scrollToTop();  // findScrollContainer 経由で SPA 内部コンテナも確実にリセット
         return;
     }
 
@@ -803,14 +819,13 @@ function keydownHandler(event: KeyboardEvent): void {
     // ── P1: Orphan（亡霊）フェイルセーフ ────────────────────────────────────
     if (isOrphan()) return;
 
-    // ── Alt+Z: 緊急フォーカス奪還 — Chrome 限定、ハンドラ最上段で即座に発動する特権コマンド ──
-    // 【Firefox 除外の理由】
-    //   Firefox では Alt キーのメニューバー活性化が OS/XUL レベルで DOM keydown より先に処理される。
-    //   JavaScript の preventDefault() では防げない（実証済みの仕様上の制約）ため、Firefox では無効化する。
-    //   Firefox でのフォーカス奪還は単押し Z（isInputActive が false の時）で対処する。
+    // ── Alt+Z: 緊急フォーカス奪還 — ハンドラ最上段で即座に発動する特権コマンド ──
+    // 【全ブラウザ対応】
+    //   Firefox では OS レベルの Alt メニュー干渉が DOM keydown より先に発生する場合があるが、
+    //   可能な限り早いタイミングで preventDefault を呼び、寒山に字を遭える。
     //   ※ Focus Shield（自動 blur 監視）は一切含まない — 手動コマンドのみ。
-    if (!isFirefox && isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === 'KeyZ') {
-        event.preventDefault();                      // OS メニュー活性化を最速で阻止（Chrome）
+    if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === 'KeyZ') {
+        event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         // Stage 1: deepBlur — Shadow DOM 最深層も対応
@@ -819,8 +834,8 @@ function keydownHandler(event: KeyboardEvent): void {
         document.body.focus();
         // Stage 3: ウィンドウフォーカスも Walker へ
         window.focus();
-        // Stage 4: 単押し Z と同等のスクロールリセット
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Stage 4: 単押し Z と同等のスクロールリセット（SPA 内部コンテナ対応）
+        scrollToTop();
         return;
     }
 
