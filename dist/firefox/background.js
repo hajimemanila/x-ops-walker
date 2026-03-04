@@ -1192,4 +1192,9 @@
     })();
     return true;
   });
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== "walker-keepalive") return;
+    port.onDisconnect.addListener(() => {
+    });
+  });
 })();

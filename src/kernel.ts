@@ -170,6 +170,26 @@ function selfDestruct(): void {
     window.removeEventListener('focus', onWindowFocus);
 }
 
+// ── Service Worker Keep-Alive Port ────────────────────────────────────────
+// chrome.runtime.connect によるポート接続を終始することで SW の休止を防ぐ。
+// 機能ロジック（キー判定・スクロール等）には一切触れない。
+let _keepAlivePort: chrome.runtime.Port | null = null;
+
+function connectKeepAlivePort(): void {
+    // 既に接続中なら何もしない
+    if (_keepAlivePort) return;
+    try {
+        _keepAlivePort = chrome.runtime.connect({ name: 'walker-keepalive' });
+        _keepAlivePort.onDisconnect.addListener(() => {
+            // SW が強制終了された場合のみここに来る。
+            // 次回の safeSendMessage がリトライで復旧するため、再接続不要。
+            _keepAlivePort = null;
+        });
+    } catch {
+        // context が既に無効化されている場合（亮鬺状態）は無視
+    }
+}
+
 // chrome.runtime.sendMessage の安全ラッパー（非同期・リトライ付き）
 //
 // Service Worker は約30秒のアイドルで休止する（MV3 仕様）。
@@ -886,6 +906,10 @@ function onWindowFocus(): void {
 
 window.addEventListener('visibilitychange', onVisibilityChange);
 window.addEventListener('focus', onWindowFocus);
+
+// Keep-Alive Port を開く: storage.onChanged リスナー登録後に1回だけ実行。
+// 機能ロジックには一切手を触れず、通信層のみの初期化。
+connectKeepAlivePort();
 
 // ── keyup / keypress: ホワイトリスト方式サイレントキル ───────────────────────
 // 問題: Gemini 等のサイトは keydown ではなく keyup や keypress でショートカットを

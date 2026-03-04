@@ -254,3 +254,15 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
 
     return true; // 非同期応答チャネルを維持
 });
+
+// ── Service Worker Keep-Alive: Port 受け口 ────────────────────────────────
+// Content Script（kernel.ts）が接続する 'walker-keepalive' ポートを受け入れる。
+// ポートが開いている限り Chrome は Service Worker を休止させない（MV3 公式仕様）。
+// このリスナーを配置するだけで効果が発生する — 特別なメッセージ処理は不要。
+chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'walker-keepalive') return;
+    // ポート参照を保持することで GC を防ぎ、接続を維持する
+    port.onDisconnect.addListener(() => {
+        // Content Script が破棄された（タブ閉鎖等）— 次の接続を待つだけ
+    });
+});

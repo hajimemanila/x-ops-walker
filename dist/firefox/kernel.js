@@ -1149,6 +1149,17 @@
     window.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("focus", onWindowFocus);
   }
+  var _keepAlivePort = null;
+  function connectKeepAlivePort() {
+    if (_keepAlivePort) return;
+    try {
+      _keepAlivePort = chrome.runtime.connect({ name: "walker-keepalive" });
+      _keepAlivePort.onDisconnect.addListener(() => {
+        _keepAlivePort = null;
+      });
+    } catch {
+    }
+  }
   async function safeSendMessage(msg) {
     const MAX_RETRIES = 2;
     const RETRY_DELAY_MS = 150;
@@ -1658,6 +1669,7 @@
   }
   window.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("focus", onWindowFocus);
+  connectKeepAlivePort();
   function walkerKeyUpHandler(event) {
     if (isOrphan()) return;
     if (!isWalkerMode) return;
