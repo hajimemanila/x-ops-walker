@@ -71,6 +71,9 @@
     "cs_sys_z": {
         "message": "DOMリセット（フォーカス解除）"
     },
+    "cs_sys_altz": {
+        "message": "緊急フォーカス奪還（入力ロックを強制突破）"
+    },
     "cs_footer": {
         "message": "F または Esc で閉じる"
     },

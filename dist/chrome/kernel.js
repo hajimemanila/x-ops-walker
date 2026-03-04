@@ -7,6 +7,7 @@
   window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
+  var isFirefox = navigator.userAgent.toLowerCase().includes("firefox");
   var WALKER_KEYS = /* @__PURE__ */ new Set([
     "a",
     "d",
@@ -193,13 +194,17 @@
   }
   var isWalkerMode = false;
   function isEditableElement(el) {
+    if (!(el instanceof Element)) return false;
     const htmlEl = el;
     const tag = el.tagName.toUpperCase();
     if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
     if (htmlEl.getAttribute("contentEditable") === "true") return true;
+    const role = el.getAttribute("role") ?? "";
+    if (role === "textbox" || role === "searchbox" || role === "combobox" || role === "spinbutton") return true;
     return false;
   }
   function isSensitiveElement(el) {
+    if (!(el instanceof Element)) return false;
     const htmlEl = el;
     if (el.tagName === "INPUT" && el.type === "password") return true;
     const ac = htmlEl.getAttribute("autocomplete") ?? "";
@@ -207,17 +212,51 @@
     if (htmlEl.getAttribute("contentEditable") === "true") return true;
     return false;
   }
-  function isInputActive() {
-    const el = document.activeElement;
-    if (!el || el === document.body || el === document.documentElement) return false;
-    if (isSensitiveElement(el)) return true;
-    if (isEditableElement(el)) return true;
-    if (el.shadowRoot) {
-      const inner = el.shadowRoot.activeElement;
-      if (inner) {
-        if (isSensitiveElement(inner)) return true;
-        if (isEditableElement(inner)) return true;
+  var getRaw = (el) => el?.wrappedJSObject ?? el;
+  function isInputActive(event) {
+    if (isFirefox) {
+      const targets = [];
+      const ae = document.activeElement;
+      if (ae && ae !== document.body && ae !== document.documentElement) targets.push(ae);
+      const et = event.target;
+      if (et instanceof Element && et !== ae) targets.push(et);
+      for (const el of targets) {
+        const raw = getRaw(el);
+        if (!raw) continue;
+        if (raw instanceof Element) {
+          if (isSensitiveElement(raw)) return true;
+          if (isEditableElement(raw)) return true;
+        } else {
+          const tag = (raw.tagName ?? "").toUpperCase();
+          if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
+          const role = raw.getAttribute?.("role") ?? raw.role ?? "";
+          if (role === "textbox" || role === "searchbox" || role === "combobox" || role === "spinbutton") return true;
+          if (raw.isContentEditable === true) return true;
+        }
+        const rawShadow = getRaw(el)?.shadowRoot ?? null;
+        if (rawShadow) {
+          const inner = rawShadow.activeElement;
+          if (inner) {
+            const rawInner = getRaw(inner);
+            if (rawInner instanceof Element) {
+              if (isSensitiveElement(rawInner)) return true;
+              if (isEditableElement(rawInner)) return true;
+            } else if (rawInner) {
+              const tag = (rawInner.tagName ?? "").toUpperCase();
+              if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
+            }
+          }
+        }
       }
+      return false;
+    }
+    const path = event.composedPath();
+    for (const node of path) {
+      if (node === window || node === document) break;
+      if (!(node instanceof Element)) continue;
+      if (node === document.body || node === document.documentElement) break;
+      if (isSensitiveElement(node)) return true;
+      if (isEditableElement(node)) return true;
     }
     return false;
   }
@@ -450,6 +489,7 @@
     addRow(["Esc"], "cs_sys_esc");
     addRow(["F"], "cs_sys_f");
     addRow(["Z"], "cs_sys_z");
+    addRow(["Alt", "Z"], "cs_sys_altz");
     panel.appendChild(table);
     const footer = document.createElement("div");
     footer.id = "footer";
@@ -551,11 +591,21 @@
   }
   function keydownHandler(event) {
     if (isOrphan()) return;
+    if (!isFirefox && isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      deepBlur(document.activeElement);
+      document.body.focus();
+      window.focus();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     if (!isWalkerMode && event.key !== "Escape") return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
-    if (event.isComposing) return;
-    if (isInputActive()) return;
+    if (event.isComposing || event.key === "Process" || event.keyCode === 229) return;
+    if (isInputActive(event)) return;
     if (event.repeat) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (document.fullscreenElement !== null && event.key === "Escape") return;
@@ -646,7 +696,7 @@
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
     if (event.isComposing) return;
-    if (isInputActive()) return;
+    if (isInputActive(event)) return;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
     if (event.repeat) return;
     const key = normalizeKey(event);

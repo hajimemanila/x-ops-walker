@@ -68,6 +68,9 @@
     "cs_sys_z": {
         "message": "DOM Reset (blur focus)"
     },
+    "cs_sys_altz": {
+        "message": "Emergency Focus Override (bypass input lock)"
+    },
     "cs_footer": {
         "message": "Press F or Esc to close"
     },

@@ -31,6 +31,12 @@ window.__XOPS_WALKER_ALIVE__ = true;
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
+// ── ブラウザ判定 ───────────────────────────────────────────────────────────────
+// Firefox (Gecko) と Chrome (Blink) では Shadow DOM / Alt キーの挙動が異なる。
+// ブラウザごとに最適なロジックを分岐させるため、実行時に一度だけ判定する。
+const isFirefox: boolean = navigator.userAgent.toLowerCase().includes('firefox');
+
+
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const WALKER_KEYS = new Set([
     'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
@@ -288,23 +294,32 @@ let isWalkerMode = false;
 
 
 // ── Security Guard: 機密入力フィールドの検出 ──────────────────────────────────
-// 【設計注意】isContentEditable は DOM ツリーの継承で true になる。
-// Gemini の外側コンテナ div が contenteditable="false" でも
-// 親が contenteditable="true" なら isContentEditable === true を返し、
-// スクロールキー（W/S）が全滅する。
-// 修正: getAttribute('contentEditable') === 'true' で「自身が明示的に編集可能」
-// と指定されているものだけを対象にする。
+// 【設計原則】
+//   - isContentEditable 継承値ではなく getAttribute('contentEditable') === 'true' で判定
+//   - el が Element でない場合（テキストノード等）のクラッシュを最上段のガードで防ぐ
+//   - closed Shadow DOM 対策として ARIA role ヒューリスティックを補助的に使用
+//   - isInputActive はブラウザに応じて最適な判定ロジックを選択する
+
 function isEditableElement(el: Element): boolean {
+    // ── クラッシュガード: TextNode 等 Element でないノードが来た場合は即 false ──
+    if (!(el instanceof Element)) return false;
     const htmlEl = el as HTMLElement;
     // <input>, <textarea>, <select> タグは常に入力欄として扱う
     const tag = el.tagName.toUpperCase();
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
     // contenteditable="true" が自身に明示されている要素のみ対象（継承値は無視）
     if (htmlEl.getAttribute('contentEditable') === 'true') return true;
+    // ── ARIA ヒューリスティック: closed Shadow DOM 貫通不可の補完 ──────────────
+    // Reddit 等の closed shadow Host は内側の <input> に到達できない。
+    // ARIA role が入力欄を示す場合は Shadow Host 自体を入力欄とみなす（保守的判定）。
+    const role = el.getAttribute('role') ?? '';
+    if (role === 'textbox' || role === 'searchbox' || role === 'combobox' || role === 'spinbutton') return true;
     return false;
 }
 
 function isSensitiveElement(el: Element): boolean {
+    // クラッシュガード
+    if (!(el instanceof Element)) return false;
     const htmlEl = el as HTMLElement;
     if (el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'password') return true;
     const ac = htmlEl.getAttribute('autocomplete') ?? '';
@@ -314,24 +329,80 @@ function isSensitiveElement(el: Element): boolean {
     return false;
 }
 
-function isInputActive(): boolean {
-    const el = document.activeElement;
-    // フォーカスなし, body, html はセーフ
-    if (!el || el === document.body || el === document.documentElement) return false;
-    // 機密要素チェック（パスワード欄等）
-    if (isSensitiveElement(el)) return true;
-    // 標準タグ
-    if (isEditableElement(el)) return true;
-    // Shadow DOM を1段潜る（Gemini 等の SPA は closed shadow の内側に入力欄を置く）
-    if (el.shadowRoot) {
-        const inner = el.shadowRoot.activeElement;
-        if (inner) {
-            if (isSensitiveElement(inner)) return true;
-            if (isEditableElement(inner)) return true;
+// ── isInputActive: ブラウザ別最適ロジックで入力欄を確実に検知 ─────────────────────
+//
+// 【Chrome パス】
+//   event.composedPath() は open Shadow DOM の内部ノードまで返す。
+//   composedPath()[0] が真の <input> を指すため Reddit 等も確実に検知。
+//
+// 【Firefox パス】
+//   Xray Wrappers により composedPath() が Shadow Host で切り詰められる（Bugzilla #1475870）。
+//   また、JS で動的に付与された role 属性も Xray Barrier に隠される。
+//   対策: element.wrappedJSObject でページ側の「生DOM」を取得し、
+//          ネイティブ属性・Shadow DOM を直接評価する（Firefox Content Script 専用 API）。
+//
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getRaw = (el: any): any => el?.wrappedJSObject ?? el;
+
+function isInputActive(event: KeyboardEvent): boolean {
+    if (isFirefox) {
+        // ── Firefox パス: wrappedJSObject で Xray Barrier を突破 ──────────────────
+        // composedPath() は Xray により Shadow Host で切り詰められるため、
+        // document.activeElement / event.target を起点に生DOMを直接評価する。
+        const targets: Element[] = [];
+        const ae = document.activeElement;
+        if (ae && ae !== document.body && ae !== document.documentElement) targets.push(ae);
+        const et = event.target;
+        if (et instanceof Element && et !== ae) targets.push(et);
+
+        for (const el of targets) {
+            const raw = getRaw(el);
+            if (!raw) continue;
+
+            // ── 生要素そのものを評価 ──
+            if (raw instanceof Element) {
+                if (isSensitiveElement(raw)) return true;
+                if (isEditableElement(raw)) return true;
+            } else {
+                // wrappedJSObject がプレーンオブジェクトとして返る場合（稀） → タグ名で判定
+                const tag: string = (raw.tagName ?? '').toUpperCase();
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
+                const role: string = raw.getAttribute?.('role') ?? raw.role ?? '';
+                if (role === 'textbox' || role === 'searchbox' || role === 'combobox' || role === 'spinbutton') return true;
+                if (raw.isContentEditable === true) return true;
+            }
+
+            // ── 1段 Shadow DOM を潜る（open shadow + wrappedJSObject） ──
+            const rawShadow = getRaw(el)?.shadowRoot ?? null;
+            if (rawShadow) {
+                const inner = rawShadow.activeElement;
+                if (inner) {
+                    const rawInner = getRaw(inner);
+                    if (rawInner instanceof Element) {
+                        if (isSensitiveElement(rawInner)) return true;
+                        if (isEditableElement(rawInner)) return true;
+                    } else if (rawInner) {
+                        const tag: string = (rawInner.tagName ?? '').toUpperCase();
+                        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
+                    }
+                }
+            }
         }
+        return false;
+    }
+
+    // ── Chrome パス: composedPath() で open Shadow DOM を完全貫通 ──────────────────
+    const path = event.composedPath();
+    for (const node of path) {
+        if (node === window || node === document) break;
+        if (!(node instanceof Element)) continue;
+        if (node === document.body || node === document.documentElement) break;
+        if (isSensitiveElement(node)) return true;
+        if (isEditableElement(node)) return true;
     }
     return false;
 }
+
 
 
 // ── HUD (Shadow DOM) ──────────────────────────────────────────────────────────
@@ -592,6 +663,7 @@ const cheatsheet: CheatsheetController = (() => {
     addRow(['Esc'], 'cs_sys_esc');
     addRow(['F'], 'cs_sys_f');
     addRow(['Z'], 'cs_sys_z');
+    addRow(['Alt', 'Z'], 'cs_sys_altz');
 
     panel.appendChild(table);
 
@@ -731,6 +803,27 @@ function keydownHandler(event: KeyboardEvent): void {
     // ── P1: Orphan（亡霊）フェイルセーフ ────────────────────────────────────
     if (isOrphan()) return;
 
+    // ── Alt+Z: 緊急フォーカス奪還 — Chrome 限定、ハンドラ最上段で即座に発動する特権コマンド ──
+    // 【Firefox 除外の理由】
+    //   Firefox では Alt キーのメニューバー活性化が OS/XUL レベルで DOM keydown より先に処理される。
+    //   JavaScript の preventDefault() では防げない（実証済みの仕様上の制約）ため、Firefox では無効化する。
+    //   Firefox でのフォーカス奪還は単押し Z（isInputActive が false の時）で対処する。
+    //   ※ Focus Shield（自動 blur 監視）は一切含まない — 手動コマンドのみ。
+    if (!isFirefox && isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === 'KeyZ') {
+        event.preventDefault();                      // OS メニュー活性化を最速で阻止（Chrome）
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        // Stage 1: deepBlur — Shadow DOM 最深層も対応
+        deepBlur(document.activeElement);
+        // Stage 2: body を掴み直して「無主フォーカス」を消滅させる
+        document.body.focus();
+        // Stage 3: ウィンドウフォーカスも Walker へ
+        window.focus();
+        // Stage 4: 単押し Z と同等のスクロールリセット
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 【絶対的パススルー層】
     // 以下の条件のいずれかに合致する場合は stopPropagation / preventDefault を
@@ -747,11 +840,15 @@ function keydownHandler(event: KeyboardEvent): void {
     // テキストが選択されている場合は干渉しない（コピー等の選択操作を保護）
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
 
-    // IME（日本語変換等）入力中はスリープ（変換候補のキー操作を誤捕捉しない）
-    if (event.isComposing) return;
+    // IME（日本語変換等）入力中は絶対にスリープ
+    // isComposing   : 変換中（2打目以降）を確実にガード
+    // key==='Process': Chrome/Edge が IME 処理中キーに付与する値（Chrome の1打目対策）
+    // keyCode===229 : Firefox では IME 変換中のキーに keyCode 229 が付与される
+    //                 （key は 'Process' にならないため Firefox 固有のガードとして追加）
+    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
 
-    // 入力欄にフォーカスがある場合は干渉しない
-    if (isInputActive()) return;
+    // 入力欄にフォーカスがある場合は干渉しない（composedPath による Shadow DOM 完全貫通版）
+    if (isInputActive(event)) return;
 
     // キーリピートはスキップ（長押し連射を防ぐ）
     if (event.repeat) return;
@@ -939,8 +1036,8 @@ function walkerKeyUpHandler(event: KeyboardEvent): void {
     // IME 変換中はスキップ
     if (event.isComposing) return;
 
-    // 入力欄にフォーカスがある場合は干渉しない
-    if (isInputActive()) return;
+    // 入力欄にフォーカスがある場合は干渉しない（composedPath 版）
+    if (isInputActive(event)) return;
 
     // 修飾キー単独はスキップ
     if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
