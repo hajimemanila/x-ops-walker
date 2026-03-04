@@ -38,14 +38,8 @@ window.__XOPS_WALKER_ALIVE__ = true;
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
-// ── ブラウザ判定 ───────────────────────────────────────────────────────────────
-// Firefox (Gecko) と Chrome (Blink) では Shadow DOM / Alt キーの挙動が異なる。
-// ブラウザごとに最適なロジックを分岐させるため、実行時に一度だけ判定する。
-const isFirefox: boolean = navigator.userAgent.toLowerCase().includes('firefox');
-
-
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
-const WALKER_KEYS = new Set([
+const REGISTERED_ROUTER_KEYS = new Set([
     'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
 ]);
 
@@ -128,8 +122,8 @@ function isOrphan(): boolean {
 function selfDestruct(): void {
     window.__XOPS_WALKER_ALIVE__ = false;
     window.removeEventListener('keydown', keydownHandler, { capture: true });
-    window.removeEventListener('keyup', walkerKeyUpHandler, { capture: true });
-    window.removeEventListener('keypress', walkerKeyUpHandler, { capture: true });
+    window.removeEventListener('keyup', suppressSiteShortcutsHandler, { capture: true });
+    window.removeEventListener('keypress', suppressSiteShortcutsHandler, { capture: true });
     window.removeEventListener('visibilitychange', onVisibilityChange);
     window.removeEventListener('focus', onWindowFocus);
 }
@@ -310,7 +304,35 @@ function isInputActive(event: KeyboardEvent): boolean {
     return false;
 }
 
+// ── 絶対的パススルー共通判定 ──────────────────────────────────────────────────
+function shouldPassThrough(event: KeyboardEvent): boolean {
+    // Walker が OFF の時は何もしない（Escape だけは後段で処理するため除外）
+    if (!isWalkerMode && event.key !== 'Escape') return true;
 
+    // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
+    // 例: Ctrl+C (コピー), Ctrl+V (ペースト), Alt+← (戻る) 等を保護
+    if (event.ctrlKey || event.metaKey || event.altKey) return true;
+
+    // テキストが選択されている場合は干渉しない（コピー等の選択操作を保護）
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return true;
+
+    // IME（日本語変換等）入力中は絶対にスリープ
+    // isComposing   : 変換中（2打目以降）を確実にガード
+    // key==='Process': Chrome/Edge が IME 処理中キーに付与する値（Chrome の1打目対策）
+    // keyCode===229 : Firefox では IME 変換中のキーに keyCode 229 が付与される
+    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return true;
+
+    // 入力欄にフォーカスがある場合は干渉しない（nodeType ベースの Xray セーフ共通判定）
+    if (isInputActive(event)) return true;
+
+    // キーリピートはスキップ（長押し連射を防ぐ）
+    if (event.repeat) return true;
+
+    // 修飾キー単独のキーダウンはスキップ
+    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return true;
+
+    return false;
+}
 
 // ── HUD (Shadow DOM) ──────────────────────────────────────────────────────────
 interface HudController {
@@ -687,35 +709,8 @@ function keydownHandler(event: KeyboardEvent): void {
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 【絶対的パススルー層】
-    // 以下の条件のいずれかに合致する場合は stopPropagation / preventDefault を
-    // 一切呼ばずに即 return。ブラウザ標準動作（コピー・ペースト・IME 等）を完全保護。
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    // Walker が OFF の時は何もしない（Escape だけは後段で処理するため除外）
-    if (!isWalkerMode && event.key !== 'Escape') return;
-
-    // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
-    // 例: Ctrl+C (コピー), Ctrl+V (ペースト), Alt+← (戻る) 等を保護
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-
-    // テキストが選択されている場合は干渉しない（コピー等の選択操作を保護）
-    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
-
-    // IME（日本語変換等）入力中は絶対にスリープ
-    // isComposing   : 変換中（2打目以降）を確実にガード
-    // key==='Process': Chrome/Edge が IME 処理中キーに付与する値（Chrome の1打目対策）
-    // keyCode===229 : Firefox では IME 変換中のキーに keyCode 229 が付与される
-    //                 （key は 'Process' にならないため Firefox 固有のガードとして追加）
-    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
-
-    // 入力欄にフォーカスがある場合は干渉しない（nodeType ベースの Xray セーフ共通判定）
-    if (isInputActive(event)) return;
-
-    // キーリピートはスキップ（長押し連射を防ぐ）
-    if (event.repeat) return;
-
-    // 修飾キー単独のキーダウンはスキップ
-    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
+    if (shouldPassThrough(event)) return;
 
     // フルスクリーン中の Escape はブラウザに委ねる
     if (document.fullscreenElement !== null && event.key === 'Escape') return;
@@ -748,8 +743,8 @@ function keydownHandler(event: KeyboardEvent): void {
         return;
     }
 
-    // Walker ON 確定 & WALKER_KEYS に含まれるキー → この瞬間に初めてブロック
-    if (isWalkerMode && WALKER_KEYS.has(key)) {
+    // Walker ON 確定 & REGISTERED_ROUTER_KEYS に含まれるキー → この瞬間に初めてブロック
+    if (isWalkerMode && REGISTERED_ROUTER_KEYS.has(key)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -878,40 +873,21 @@ connectKeepAlivePort();
 // 解決: keydown と同一の「絶対的パススルー層」を最上部で評価し、
 //       Walker が確実に使うキーと判定された場合のみ止める（ホワイトリスト）。
 // 注意: keypress は非推奨だが、レガシーサイト対策として引き続き登録する。
-function walkerKeyUpHandler(event: KeyboardEvent): void {
+function suppressSiteShortcutsHandler(event: KeyboardEvent): void {
     // P1: 亡霊チェック
     if (isOrphan()) return;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // 【絶対的パススルー層】— keydown と完全に同一の条件セット
-    // これらを通過するイベントにはいかなるブロックも行わない。
+    // 【絶対的パススルー層】
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    // Walker OFF なら一切介入しない
-    if (!isWalkerMode) return;
-
-    // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-
-    // テキストが選択されている場合は干渉しない
-    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
-
-    // IME 変換中はスキップ
-    if (event.isComposing) return;
-
-    // 入力欄にフォーカスがある場合は干渉しない（composedPath 版）
-    if (isInputActive(event)) return;
-
-    // 修飾キー単独はスキップ
-    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return;
-    if (event.repeat) return;
+    if (shouldPassThrough(event)) return;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 【Opt-in Block 層】— Walker キーと確定した瞬間にのみブロック
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const key = normalizeKey(event);
 
-    if (WALKER_KEYS.has(key)) {
+    if (REGISTERED_ROUTER_KEYS.has(key)) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -920,5 +896,5 @@ function walkerKeyUpHandler(event: KeyboardEvent): void {
 }
 
 // keyup / keypress ともにキャプチャフェーズの最上流（window）に配備する
-window.addEventListener('keyup', walkerKeyUpHandler, { capture: true });
-window.addEventListener('keypress', walkerKeyUpHandler, { capture: true });
+window.addEventListener('keyup', suppressSiteShortcutsHandler, { capture: true });
+window.addEventListener('keypress', suppressSiteShortcutsHandler, { capture: true });

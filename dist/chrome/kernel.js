@@ -145,8 +145,7 @@
   window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
-  var isFirefox = navigator.userAgent.toLowerCase().includes("firefox");
-  var WALKER_KEYS = /* @__PURE__ */ new Set([
+  var REGISTERED_ROUTER_KEYS = /* @__PURE__ */ new Set([
     "a",
     "d",
     "s",
@@ -220,8 +219,8 @@
   function selfDestruct() {
     window.__XOPS_WALKER_ALIVE__ = false;
     window.removeEventListener("keydown", keydownHandler, { capture: true });
-    window.removeEventListener("keyup", walkerKeyUpHandler, { capture: true });
-    window.removeEventListener("keypress", walkerKeyUpHandler, { capture: true });
+    window.removeEventListener("keyup", suppressSiteShortcutsHandler, { capture: true });
+    window.removeEventListener("keypress", suppressSiteShortcutsHandler, { capture: true });
     window.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("focus", onWindowFocus);
   }
@@ -301,6 +300,16 @@
       if (isSensitiveElement(el)) return true;
       if (isEditableElement(el)) return true;
     }
+    return false;
+  }
+  function shouldPassThrough(event) {
+    if (!isWalkerMode && event.key !== "Escape") return true;
+    if (event.ctrlKey || event.metaKey || event.altKey) return true;
+    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return true;
+    if (event.isComposing || event.key === "Process" || event.keyCode === 229) return true;
+    if (isInputActive(event)) return true;
+    if (event.repeat) return true;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return true;
     return false;
   }
   var hud = (() => {
@@ -612,13 +621,7 @@
       router.dispatch(event, "z", event.shiftKey, container);
       return;
     }
-    if (!isWalkerMode && event.key !== "Escape") return;
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
-    if (event.isComposing || event.key === "Process" || event.keyCode === 229) return;
-    if (isInputActive(event)) return;
-    if (event.repeat) return;
-    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
+    if (shouldPassThrough(event)) return;
     if (document.fullscreenElement !== null && event.key === "Escape") return;
     const key = normalizeKey(event);
     if (event.key === "Escape") {
@@ -635,7 +638,7 @@
       if (isWalkerMode) blurActiveInput();
       return;
     }
-    if (isWalkerMode && WALKER_KEYS.has(key)) {
+    if (isWalkerMode && REGISTERED_ROUTER_KEYS.has(key)) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -703,22 +706,16 @@
   window.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("focus", onWindowFocus);
   connectKeepAlivePort();
-  function walkerKeyUpHandler(event) {
+  function suppressSiteShortcutsHandler(event) {
     if (isOrphan()) return;
-    if (!isWalkerMode) return;
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return;
-    if (event.isComposing) return;
-    if (isInputActive(event)) return;
-    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return;
-    if (event.repeat) return;
+    if (shouldPassThrough(event)) return;
     const key = normalizeKey(event);
-    if (WALKER_KEYS.has(key)) {
+    if (REGISTERED_ROUTER_KEYS.has(key)) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
     }
   }
-  window.addEventListener("keyup", walkerKeyUpHandler, { capture: true });
-  window.addEventListener("keypress", walkerKeyUpHandler, { capture: true });
+  window.addEventListener("keyup", suppressSiteShortcutsHandler, { capture: true });
+  window.addEventListener("keypress", suppressSiteShortcutsHandler, { capture: true });
 })();
