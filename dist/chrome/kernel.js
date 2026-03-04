@@ -220,51 +220,13 @@
     if (htmlEl.getAttribute("contentEditable") === "true") return true;
     return false;
   }
-  var getRaw = (el) => el?.wrappedJSObject ?? el;
   function isInputActive(event) {
-    if (isFirefox) {
-      const targets = [];
-      const ae = document.activeElement;
-      if (ae && ae !== document.body && ae !== document.documentElement) targets.push(ae);
-      const et = event.target;
-      if (et instanceof Element && et !== ae) targets.push(et);
-      for (const el of targets) {
-        const raw = getRaw(el);
-        if (!raw) continue;
-        if (raw instanceof Element) {
-          if (isSensitiveElement(raw)) return true;
-          if (isEditableElement(raw)) return true;
-        } else {
-          const tag = (raw.tagName ?? "").toUpperCase();
-          if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
-          const role = raw.getAttribute?.("role") ?? raw.role ?? "";
-          if (role === "textbox" || role === "searchbox" || role === "combobox" || role === "spinbutton") return true;
-          if (raw.isContentEditable === true) return true;
-        }
-        const rawShadow = getRaw(el)?.shadowRoot ?? null;
-        if (rawShadow) {
-          const inner = rawShadow.activeElement;
-          if (inner) {
-            const rawInner = getRaw(inner);
-            if (rawInner instanceof Element) {
-              if (isSensitiveElement(rawInner)) return true;
-              if (isEditableElement(rawInner)) return true;
-            } else if (rawInner) {
-              const tag = (rawInner.tagName ?? "").toUpperCase();
-              if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-    const path = event.composedPath();
-    for (const node of path) {
-      if (node === window || node === document) break;
-      if (!(node instanceof Element)) continue;
-      if (node === document.body || node === document.documentElement) break;
-      if (isSensitiveElement(node)) return true;
-      if (isEditableElement(node)) return true;
+    for (const node of event.composedPath()) {
+      if (!node || node.nodeType !== 1) continue;
+      const el = node;
+      if (el === document.body || el === document.documentElement) break;
+      if (isSensitiveElement(el)) return true;
+      if (isEditableElement(el)) return true;
     }
     return false;
   }

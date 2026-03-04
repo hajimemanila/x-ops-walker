@@ -345,76 +345,27 @@ function isSensitiveElement(el: Element): boolean {
     return false;
 }
 
-// ── isInputActive: ブラウザ別最適ロジックで入力欄を確実に検知 ─────────────────────
+// ── isInputActive: composedPath 進行方向で入力欄を検知（Chrome / Firefox 共通） ───────────
 //
-// 【Chrome パス】
-//   event.composedPath() は open Shadow DOM の内部ノードまで返す。
-//   composedPath()[0] が真の <input> を指すため Reddit 等も確実に検知。
+// 【設計方針】
+//   テレメトリにより、Firefox でも event.composedPath()[0] が正確に INPUT を返すことが判明。
+//   以前の Firefox 失敗の原因は composedPath 自体ではなく、
+//   `instanceof Element` が Xray 境界を越えず false を返しノードをスキップしていたため。
 //
-// 【Firefox パス】
-//   Xray Wrappers により composedPath() が Shadow Host で切り詰められる（Bugzilla #1475870）。
-//   また、JS で動的に付与された role 属性も Xray Barrier に隠される。
-//   対策: element.wrappedJSObject でページ側の「生DOM」を取得し、
-//          ネイティブ属性・Shadow DOM を直接評価する（Firefox Content Script 専用 API）。
-//
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getRaw = (el: any): any => el?.wrappedJSObject ?? el;
-
+// 【対策】
+//   `instanceof Element` の代わりに `node.nodeType !== 1` （Node.ELEMENT_NODE）を使用。
+//   これは純粋な DOM プロパティアクセスであり Xray 天井を越えられるブラウザ中立な判定。
+//   Chrome / Firefox / 全ステージ庖一のロジックで完結。
 function isInputActive(event: KeyboardEvent): boolean {
-    if (isFirefox) {
-        // ── Firefox パス: wrappedJSObject で Xray Barrier を突破 ──────────────────
-        // composedPath() は Xray により Shadow Host で切り詰められるため、
-        // document.activeElement / event.target を起点に生DOMを直接評価する。
-        const targets: Element[] = [];
-        const ae = document.activeElement;
-        if (ae && ae !== document.body && ae !== document.documentElement) targets.push(ae);
-        const et = event.target;
-        if (et instanceof Element && et !== ae) targets.push(et);
-
-        for (const el of targets) {
-            const raw = getRaw(el);
-            if (!raw) continue;
-
-            // ── 生要素そのものを評価 ──
-            if (raw instanceof Element) {
-                if (isSensitiveElement(raw)) return true;
-                if (isEditableElement(raw)) return true;
-            } else {
-                // wrappedJSObject がプレーンオブジェクトとして返る場合（稀） → タグ名で判定
-                const tag: string = (raw.tagName ?? '').toUpperCase();
-                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
-                const role: string = raw.getAttribute?.('role') ?? raw.role ?? '';
-                if (role === 'textbox' || role === 'searchbox' || role === 'combobox' || role === 'spinbutton') return true;
-                if (raw.isContentEditable === true) return true;
-            }
-
-            // ── 1段 Shadow DOM を潜る（open shadow + wrappedJSObject） ──
-            const rawShadow = getRaw(el)?.shadowRoot ?? null;
-            if (rawShadow) {
-                const inner = rawShadow.activeElement;
-                if (inner) {
-                    const rawInner = getRaw(inner);
-                    if (rawInner instanceof Element) {
-                        if (isSensitiveElement(rawInner)) return true;
-                        if (isEditableElement(rawInner)) return true;
-                    } else if (rawInner) {
-                        const tag: string = (rawInner.tagName ?? '').toUpperCase();
-                        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    // ── Chrome パス: composedPath() で open Shadow DOM を完全貫通 ──────────────────
-    const path = event.composedPath();
-    for (const node of path) {
-        if (node === window || node === document) break;
-        if (!(node instanceof Element)) continue;
-        if (node === document.body || node === document.documentElement) break;
-        if (isSensitiveElement(node)) return true;
-        if (isEditableElement(node)) return true;
+    for (const node of event.composedPath()) {
+        // nodeType≠Element（ShadowRoot, DocumentFragment, Window, Document 等）はスキップ
+        // nodeType 属性は純粋な数値なので Xray 天井を越える
+        if (!node || (node as Node).nodeType !== 1) continue;
+        const el = node as Element;
+        // body / html / window / document 垢に達したら入力欄なし
+        if (el === document.body || el === document.documentElement) break;
+        if (isSensitiveElement(el)) return true;
+        if (isEditableElement(el)) return true;
     }
     return false;
 }
@@ -862,7 +813,7 @@ function keydownHandler(event: KeyboardEvent): void {
     //                 （key は 'Process' にならないため Firefox 固有のガードとして追加）
     if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
 
-    // 入力欄にフォーカスがある場合は干渉しない（composedPath による Shadow DOM 完全貫通版）
+    // 入力欄にフォーカスがある場合は干渉しない（nodeType ベースの Xray セーフ共通判定）
     if (isInputActive(event)) return;
 
     // キーリピートはスキップ（長押し連射を防ぐ）
