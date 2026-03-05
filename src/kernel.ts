@@ -38,6 +38,29 @@ window.__XOPS_WALKER_ALIVE__ = true;
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
+// ── ALM: Heavy Domain 判定 ──────────────────────────────────────────────
+// background.ts 内の ALM_HEAVY_DOMAINS と同じセット。定義値は必ず両ファイルで同期すること。
+// kernel がドメインをbackgroundに報告するため、両方で判定する必要はない（background側にも構築中）。
+const ALM_HEAVY_DOMAIN_SET = new Set([
+    'x.com',
+    'twitter.com',
+    'gemini.google.com',
+    'chatgpt.com',
+    'claude.ai',
+    'chat.deepseek.com',
+    'copilot.microsoft.com',
+    'perplexity.ai',
+    'grok.com',
+    'figma.com',
+    'canva.com',
+    'notion.so',
+    'www.youtube.com',
+]);
+
+function isHeavyDomain(): boolean {
+    return ALM_HEAVY_DOMAIN_SET.has(window.location.hostname);
+}
+
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const REGISTERED_ROUTER_KEYS = new Set([
     'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
@@ -812,6 +835,25 @@ chrome.runtime.onMessage.addListener((message: { command: string }) => {
             document.title = '💤 ' + document.title;
         }
     }
+
+    // ── ALM_REFOCUS: AHK 連携用「物理覚醒トリガー」スタブ ─────────────────────────
+    // Strategic Hibernation からの Pure Rebirth 後、AHK スクリプト（Physical Focus Infection）
+    // が検知できるように、document.title の先頭に [WAKE] 文字列を一時的に付与する。
+    // 0.5秒後に元のタイトルに復元する。
+    // AHK 側は WinTitle に "[WAKE]" をポーリングすることで「タブが者に过ぎた」を検知する。
+    if (message.command === 'ALM_REFOCUS') {
+        const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
+        document.title = '[WAKE] ' + originalTitle;
+        setTimeout(() => {
+            // 一定時間後に元に戻す（[WAKE] プレフィックスを隠ず)
+            if (document.title.startsWith('[WAKE] ')) {
+                document.title = originalTitle;
+            }
+        }, 500);
+        // 【代替手段スタブ】: F24 空撃ち（AHK 物理キーシミュレーション）
+        // 現在はタイトル方式を做用。将来、chrome.debugger 等で F24 実装時に活性化する。
+        // dispatchEvent(new KeyboardEvent('keydown', { key: 'F24', bubbles: true }));
+    }
 });
 
 // ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────
@@ -861,6 +903,99 @@ function onWindowFocus(): void {
 
 window.addEventListener('visibilitychange', onVisibilityChange);
 window.addEventListener('focus', onWindowFocus);
+
+// ── ALM: Vital Heartbeat の発信源群 ─────────────────────────────────────
+// このブロックは kernel の Gate当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番
+// (1) メディア再生 Veto (2) 入力フォーカス Veto (3) 非アクティブ化 TAB_INACTIVE の3つが主要なエントリポイント。
+
+// ── (1) Media-Capture Veto ───────────────────────────────────────────────────
+// audio/video が再生中の間は ALM_VETO を発火し、Strategic Hibernation を終久禁止する。
+// 停止した時点で ALM_VETO_CLEAR を送り、1分・8分タイマーを再開始させる。
+// 【設計】capture: true を使うことで Shadow DOM 内の media 要素からのバブリングも捕捉。
+(function installMediaVeto() {
+    // メディア Veto の Throttle: 同一イベントの連続発火を押さえるため、短時間に何度か発火してはいけない
+    let mediaVetoActive = false;
+
+    function onMediaPlay(): void {
+        if (mediaVetoActive) return; // 既に Veto 中 → 重複送信を抺える
+        mediaVetoActive = true;
+        safeSendMessage({ command: 'ALM_VETO' });
+    }
+
+    function onMediaPause(): void {
+        // 全ての再生中 media を確認し、1つでも再生中なら Veto を維持する
+        const medias = document.querySelectorAll('audio, video');
+        const anyPlaying = Array.from(medias).some(m => !(m as HTMLMediaElement).paused);
+        if (anyPlaying) return; // まだ他の media が再生中
+        if (!mediaVetoActive) return;
+        mediaVetoActive = false;
+        safeSendMessage({ command: 'ALM_VETO_CLEAR' });
+    }
+
+    // document 全体に capture リスナーを設置。Shadow DOM 内の media も捕捉できる。
+    document.addEventListener('play', onMediaPlay, { capture: true });
+    document.addEventListener('pause', onMediaPause, { capture: true });
+})();
+
+// ── (2) Form-Interference Veto ───────────────────────────────────────────────
+// 入力欄にフォーカスが当たった際、または未送信テキストが存在する際に Veto を宣言する。
+// isEditableElement を流用し、既存の Xray-safe 判定を再发明せずに流用する。
+// capture: true で Shadow DOM 内の入力欄からのバブルも捕捉。
+(function installInputVeto() {
+    let inputVetoActive = false;
+
+    function onInputFocus(event: FocusEvent): void {
+        // フォーカスイベントのターゲットを全歇リストで検査する
+        for (const node of event.composedPath()) {
+            if (!node || (node as Node).nodeType !== 1) continue;
+            const el = node as Element;
+            if (el === document.body || el === document.documentElement) break;
+            if (isEditableElement(el)) {
+                if (!inputVetoActive) {
+                    inputVetoActive = true;
+                    safeSendMessage({ command: 'ALM_VETO' });
+                }
+                return;
+            }
+        }
+    }
+
+    function onInputBlur(event: FocusEvent): void {
+        if (!inputVetoActive) return;
+        // blur 後、未送信テキストが残っている場合は Veto を維持する
+        for (const node of event.composedPath()) {
+            if (!node || (node as Node).nodeType !== 1) continue;
+            const el = node as Element;
+            if (el === document.body || el === document.documentElement) break;
+            if (isEditableElement(el)) {
+                const inputEl = el as HTMLInputElement | HTMLTextAreaElement;
+                // value プロパティが存在する input/textarea に未送信テキストがある場合
+                if ('value' in inputEl && (inputEl as HTMLInputElement).value.length > 0) {
+                    return; // Veto 持続
+                }
+                break;
+            }
+        }
+        // 未送信テキストなし → Veto 解除
+        inputVetoActive = false;
+        safeSendMessage({ command: 'ALM_VETO_CLEAR' });
+    }
+
+    document.addEventListener('focusin', onInputFocus, { capture: true });
+    document.addEventListener('focusout', onInputBlur, { capture: true });
+})();
+
+// ── (3) TAB_INACTIVE: visibilitychange 内の ALM シグナル ──────────────────────────
+// タブが非表示になった瞬間に background へ TAB_INACTIVE を送信する。
+// isHeavyDomain フラグを添付することで、background 側が Grace Period を適切に別けられる。
+// 【注意】タブが再び表示された場合は background 内の TAB_INACTIVE タイムスタンプは上書きされる。
+window.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // 非表示化 → Background に「今からのタイムスタンプを起点に Grace Period をカウント」を指示
+        safeSendMessage({ command: 'TAB_INACTIVE', isHeavyDomain: isHeavyDomain() });
+    }
+    // 再表示時（document.hidden === false）は既存の onVisibilityChange で完結
+});
 
 // Keep-Alive Port を開く: storage.onChanged リスナー登録後に1回だけ実行。
 // 機能ロジックには一切手を触れず、通信層のみの初期化。

@@ -1180,6 +1180,24 @@
   window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
+  var ALM_HEAVY_DOMAIN_SET = /* @__PURE__ */ new Set([
+    "x.com",
+    "twitter.com",
+    "gemini.google.com",
+    "chatgpt.com",
+    "claude.ai",
+    "chat.deepseek.com",
+    "copilot.microsoft.com",
+    "perplexity.ai",
+    "grok.com",
+    "figma.com",
+    "canva.com",
+    "notion.so",
+    "www.youtube.com"
+  ]);
+  function isHeavyDomain() {
+    return ALM_HEAVY_DOMAIN_SET.has(window.location.hostname);
+  }
   var REGISTERED_ROUTER_KEYS = /* @__PURE__ */ new Set([
     "a",
     "d",
@@ -1268,6 +1286,28 @@
         _keepAlivePort = null;
       });
     } catch {
+    }
+  }
+  async function safeSendMessage(msg) {
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 150;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await chrome.runtime.sendMessage(msg);
+        return;
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes("Extension context invalidated") || errMsg.includes("message channel closed")) {
+          selfDestruct();
+          return;
+        }
+        if (errMsg.includes("Receiving end does not exist") && attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+        console.warn("[X-Ops Walker] sendMessage failed (final):", errMsg, msg);
+        return;
+      }
     }
   }
   function safeStorageGet(keys, cb) {
@@ -1713,6 +1753,15 @@
         document.title = "\u{1F4A4} " + document.title;
       }
     }
+    if (message.command === "ALM_REFOCUS") {
+      const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
+      document.title = "[WAKE] " + originalTitle;
+      setTimeout(() => {
+        if (document.title.startsWith("[WAKE] ")) {
+          document.title = originalTitle;
+        }
+      }, 500);
+    }
   });
   function pullStateFromStorage() {
     if (!window.__XOPS_WALKER_ALIVE__) return;
@@ -1740,6 +1789,65 @@
   }
   window.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("focus", onWindowFocus);
+  (function installMediaVeto() {
+    let mediaVetoActive = false;
+    function onMediaPlay() {
+      if (mediaVetoActive) return;
+      mediaVetoActive = true;
+      safeSendMessage({ command: "ALM_VETO" });
+    }
+    function onMediaPause() {
+      const medias = document.querySelectorAll("audio, video");
+      const anyPlaying = Array.from(medias).some((m) => !m.paused);
+      if (anyPlaying) return;
+      if (!mediaVetoActive) return;
+      mediaVetoActive = false;
+      safeSendMessage({ command: "ALM_VETO_CLEAR" });
+    }
+    document.addEventListener("play", onMediaPlay, { capture: true });
+    document.addEventListener("pause", onMediaPause, { capture: true });
+  })();
+  (function installInputVeto() {
+    let inputVetoActive = false;
+    function onInputFocus(event) {
+      for (const node of event.composedPath()) {
+        if (!node || node.nodeType !== 1) continue;
+        const el = node;
+        if (el === document.body || el === document.documentElement) break;
+        if (isEditableElement(el)) {
+          if (!inputVetoActive) {
+            inputVetoActive = true;
+            safeSendMessage({ command: "ALM_VETO" });
+          }
+          return;
+        }
+      }
+    }
+    function onInputBlur(event) {
+      if (!inputVetoActive) return;
+      for (const node of event.composedPath()) {
+        if (!node || node.nodeType !== 1) continue;
+        const el = node;
+        if (el === document.body || el === document.documentElement) break;
+        if (isEditableElement(el)) {
+          const inputEl = el;
+          if ("value" in inputEl && inputEl.value.length > 0) {
+            return;
+          }
+          break;
+        }
+      }
+      inputVetoActive = false;
+      safeSendMessage({ command: "ALM_VETO_CLEAR" });
+    }
+    document.addEventListener("focusin", onInputFocus, { capture: true });
+    document.addEventListener("focusout", onInputBlur, { capture: true });
+  })();
+  window.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      safeSendMessage({ command: "TAB_INACTIVE", isHeavyDomain: isHeavyDomain() });
+    }
+  });
   connectKeepAlivePort();
   function suppressSiteShortcutsHandler(event) {
     if (isOrphan()) return;

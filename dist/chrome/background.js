@@ -153,6 +153,36 @@
             }
             break;
           }
+          // ── ALM v1.3.0: Kernel からの状態通知 ────────────────────────────────
+          case "TAB_INACTIVE": {
+            if (tabId === void 0) break;
+            const existing = almStates.get(tabId);
+            almStates.set(tabId, {
+              inactiveAt: Date.now(),
+              isHeavyDomain: message.isHeavyDomain ?? existing?.isHeavyDomain ?? false,
+              veto: existing?.veto ?? false
+            });
+            break;
+          }
+          case "ALM_VETO": {
+            if (tabId === void 0) break;
+            const state = almStates.get(tabId);
+            if (state) {
+              state.veto = true;
+            } else {
+              almStates.set(tabId, { inactiveAt: null, isHeavyDomain: false, veto: true });
+            }
+            break;
+          }
+          case "ALM_VETO_CLEAR": {
+            if (tabId === void 0) break;
+            const vetoState = almStates.get(tabId);
+            if (vetoState) {
+              vetoState.veto = false;
+              vetoState.inactiveAt = Date.now();
+            }
+            break;
+          }
           default:
             console.warn("[FoxWalker] Unknown command:", message.command);
         }
@@ -167,4 +197,51 @@
     port.onDisconnect.addListener(() => {
     });
   });
+  var ALM_GRACE_STANDARD_MS = 8 * 60 * 1e3;
+  var ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1e3;
+  var ALM_GRACE_HEAVY_MS = 1 * 60 * 1e3;
+  var ALM_OVERLOAD_THRESHOLD = 30;
+  var ALM_MASTER_INTERVAL_MS = 60 * 1e3;
+  var almStates = /* @__PURE__ */ new Map();
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    almStates.delete(tabId);
+  });
+  async function executeStrategicHibernation(tabId, state) {
+    try {
+      const liveTab = await chrome.tabs.get(tabId);
+      if (liveTab.active) return;
+      if (liveTab.discarded) return;
+      if (liveTab.pinned) return;
+      if (isSkippableTab(liveTab.url)) return;
+      chrome.tabs.sendMessage(tabId, { command: "MARK_SLEEPING" }).catch(() => {
+      });
+      await new Promise((r) => setTimeout(r, 30));
+      await chrome.tabs.discard(tabId);
+      console.debug(`[ALM] Strategic Hibernation executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
+    } catch (e) {
+      console.debug(`[ALM] Hibernation skipped (tab gone): tabId=${tabId}`, e);
+    }
+  }
+  async function scanAndHibernate() {
+    try {
+      const allTabs = await chrome.tabs.query({ currentWindow: true });
+      const totalTabCount = allTabs.length;
+      const isOverloaded = totalTabCount > ALM_OVERLOAD_THRESHOLD;
+      const standardGrace = isOverloaded ? ALM_GRACE_STANDARD_OVERLOADED_MS : ALM_GRACE_STANDARD_MS;
+      const now = Date.now();
+      for (const [tabId, state] of almStates) {
+        if (state.inactiveAt === null) continue;
+        if (state.veto) continue;
+        const grace = state.isHeavyDomain ? ALM_GRACE_HEAVY_MS : standardGrace;
+        const elapsed = now - state.inactiveAt;
+        if (elapsed >= grace) {
+          almStates.delete(tabId);
+          executeStrategicHibernation(tabId, state);
+        }
+      }
+    } catch (e) {
+      console.warn("[ALM] scanAndHibernate error:", e);
+    }
+  }
+  setInterval(scanAndHibernate, ALM_MASTER_INTERVAL_MS);
 })();
