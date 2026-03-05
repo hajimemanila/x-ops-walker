@@ -134,6 +134,12 @@
             }
         }
     },
+    "popup_safety_enter_label": {
+        "message": "Chat SafetyEnter (誤爆防止)"
+    },
+    "popup_safety_enter_desc": {
+        "message": "Enterキーでの意図しない送信を物理ブロック"
+    },
     "popup_advanced_settings": {
         "message": "⚙️ 詳細設定 (Options)"
     }

@@ -1665,8 +1665,24 @@
     if (code === "Space") return " ";
     return event.key.toLowerCase();
   }
-  var isSafetyEnterEnabled = true;
+  var isSafetyEnterEnabled = false;
   var isSynthesizing = false;
+  try {
+    chrome.storage.local.get("alm", (res) => {
+      if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== void 0) {
+        isSafetyEnterEnabled = res.alm.safetyEnter;
+      }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && "alm" in changes) {
+        const alm = changes["alm"].newValue;
+        if (alm && alm.safetyEnter !== void 0) {
+          isSafetyEnterEnabled = alm.safetyEnter;
+        }
+      }
+    });
+  } catch (e) {
+  }
   function showSafetyEnterOSD(target) {
     const existing = document.getElementById("x-ops-safety-osd");
     if (existing) existing.remove();
@@ -1732,6 +1748,9 @@
       showSafetyEnterOSD(target);
     }
   }
+  window.addEventListener("keydown", handleSafetyEnter, true);
+  window.addEventListener("keypress", handleSafetyEnter, true);
+  window.addEventListener("keyup", handleSafetyEnter, true);
   function keydownHandler(event) {
     if (isOrphan()) return;
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
@@ -1771,9 +1790,6 @@
       return;
     }
   }
-  window.addEventListener("keydown", handleSafetyEnter, true);
-  window.addEventListener("keypress", handleSafetyEnter, true);
-  window.addEventListener("keyup", handleSafetyEnter, true);
   window.addEventListener("keydown", keydownHandler, { capture: true });
   safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     isWalkerMode = !!result[STORAGE_KEY];
@@ -1789,12 +1805,6 @@
     }
     if (BLOCKER_KEY in changes) {
       applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
-    }
-    if ("alm" in changes) {
-      const alm = changes["alm"].newValue;
-      if (alm && alm.safetyEnter !== void 0) {
-        isSafetyEnterEnabled = alm.safetyEnter;
-      }
     }
   });
   chrome.runtime.onMessage.addListener((message) => {
@@ -1834,9 +1844,6 @@
       applyOneTapBlocker(!!result[BLOCKER_KEY]);
       if (result.alm && result.alm.ahkInfection !== void 0) {
         isAhkInfectionEnabled = result.alm.ahkInfection;
-      }
-      if (result.alm && result.alm.safetyEnter !== void 0) {
-        isSafetyEnterEnabled = result.alm.safetyEnter;
       }
       if (isWalkerMode) {
         setTimeout(() => {

@@ -697,8 +697,28 @@ function normalizeKey(event: KeyboardEvent): string {
 }
 
 // ── Chat SafetyEnter (Enter誤爆防止) ──────────────────────────────────────────
-let isSafetyEnterEnabled = true; // storage.onChangedで動的に書き換わる前提
+let isSafetyEnterEnabled = false;
 let isSynthesizing = false;
+
+// 【完全分離】ALMやルーターの初期化・ドメイン判定に依存しない独立した初期化シーケンス
+try {
+    chrome.storage.local.get('alm', (res) => {
+        if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== undefined) {
+            isSafetyEnterEnabled = res.alm.safetyEnter;
+        }
+    });
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && 'alm' in changes) {
+            const alm = changes['alm'].newValue;
+            if (alm && alm.safetyEnter !== undefined) {
+                isSafetyEnterEnabled = alm.safetyEnter;
+            }
+        }
+    });
+} catch (e) {
+    // Orphan context fail-safe
+}
 
 function showSafetyEnterOSD(target: HTMLElement) {
     const existing = document.getElementById('x-ops-safety-osd');
@@ -777,6 +797,11 @@ function handleSafetyEnter(event: KeyboardEvent) {
         // 意図的な虚無（改行処理もinputディスパッチも行わない）
     }
 }
+
+// 波状ブロックの独立登録（他のハンドラに依存せず最上流で捕捉）
+window.addEventListener('keydown', handleSafetyEnter, true);
+window.addEventListener('keypress', handleSafetyEnter, true);
+window.addEventListener('keyup', handleSafetyEnter, true);
 
 
 // ── P3: メインキーダウンリスナー ──────────────────────────────────────────────
@@ -860,11 +885,6 @@ function keydownHandler(event: KeyboardEvent): void {
     }
 }
 
-// 波状ブロックの登録 (既存のkeydownHandlerより前に記述)
-window.addEventListener('keydown', handleSafetyEnter, true);
-window.addEventListener('keypress', handleSafetyEnter, true);
-window.addEventListener('keyup', handleSafetyEnter, true);
-
 // capture: true — DOMツリーのキャプチャフェーズ最上流でイベントを捕捉する
 window.addEventListener('keydown', keydownHandler, { capture: true });
 
@@ -899,12 +919,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
         applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
     }
 
-    if ('alm' in changes) {
-        const alm = changes['alm'].newValue;
-        if (alm && alm.safetyEnter !== undefined) {
-            isSafetyEnterEnabled = alm.safetyEnter;
-        }
-    }
 });
 
 // ── FORCE_BLUR_ON_ARRIVAL + MARK_SLEEPING: background メッセージハンドラ ───────────
@@ -977,10 +991,6 @@ function pullStateFromStorage(): void {
 
         if (result.alm && result.alm.ahkInfection !== undefined) {
             isAhkInfectionEnabled = result.alm.ahkInfection;
-        }
-
-        if (result.alm && result.alm.safetyEnter !== undefined) {
-            isSafetyEnterEnabled = result.alm.safetyEnter;
         }
 
         // ── SPA オートフォーカス潰し ───────────────────────────────────────────

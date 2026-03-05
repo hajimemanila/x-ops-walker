@@ -131,6 +131,12 @@
             }
         }
     },
+    "popup_safety_enter_label": {
+        "message": "Chat SafetyEnter (Block)"
+    },
+    "popup_safety_enter_desc": {
+        "message": "Prevent accidental sends with Enter"
+    },
     "popup_advanced_settings": {
         "message": "⚙️ Advanced Settings"
     }

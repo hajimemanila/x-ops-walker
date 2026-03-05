@@ -6,6 +6,7 @@
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
     ahkInfection: true,
+    safetyEnter: false,
     heavyDomains: [
       "x.com",
       "twitter.com",
@@ -84,6 +85,8 @@
     document.getElementById("blocker-label").textContent = t("popup_blocker_label");
     document.getElementById("alm-master-label").textContent = t("popup_smart_discard_label");
     document.getElementById("alm-ahk-label").textContent = t("popup_ahk_reclaim_label");
+    document.getElementById("alm-safety-label").textContent = t("popup_safety_enter_label");
+    document.getElementById("alm-safety-row").title = t("popup_safety_enter_desc");
     document.getElementById("advanced-settings").textContent = t("popup_advanced_settings");
     const scHint = document.getElementById("sc-hint");
     const beforeText = document.createTextNode(t("popup_sc_hint_before") + " ");
@@ -100,6 +103,7 @@
     const almConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
     updateMiniToggle("alm-ahk-toggle", almConfig.ahkInfection);
+    updateMiniToggle("alm-safety-toggle", !!almConfig.safetyEnter);
     const domainBtn = document.getElementById("dynamic-domain-btn");
     let currentHostname = "";
     try {
@@ -140,6 +144,13 @@
       conf.ahkInfection = !conf.ahkInfection;
       await chrome.storage.local.set({ alm: conf });
       updateMiniToggle("alm-ahk-toggle", conf.ahkInfection);
+    });
+    document.getElementById("alm-safety-toggle").addEventListener("click", async () => {
+      const res = await chrome.storage.local.get("alm");
+      const conf = res.alm ?? DEFAULT_ALM_CONFIG;
+      conf.safetyEnter = !conf.safetyEnter;
+      await chrome.storage.local.set({ alm: conf });
+      updateMiniToggle("alm-safety-toggle", !!conf.safetyEnter);
     });
     domainBtn.addEventListener("click", async () => {
       if (!currentHostname) return;

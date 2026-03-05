@@ -5,12 +5,14 @@ const BLOCKER_KEY = 'blockGoogleOneTap';
 interface AlmConfig {
     enabled: boolean;
     ahkInfection: boolean;
+    safetyEnter?: boolean;
     heavyDomains: string[];
 }
 
 const DEFAULT_ALM_CONFIG: AlmConfig = {
     enabled: true,
     ahkInfection: true,
+    safetyEnter: false,
     heavyDomains: [
         'x.com',
         'twitter.com',
@@ -99,6 +101,8 @@ async function init(): Promise<void> {
     document.getElementById('blocker-label')!.textContent = t('popup_blocker_label');
     document.getElementById('alm-master-label')!.textContent = t('popup_smart_discard_label');
     document.getElementById('alm-ahk-label')!.textContent = t('popup_ahk_reclaim_label');
+    document.getElementById('alm-safety-label')!.textContent = t('popup_safety_enter_label');
+    document.getElementById('alm-safety-row')!.title = t('popup_safety_enter_desc');
     document.getElementById('advanced-settings')!.textContent = t('popup_advanced_settings');
 
     // sc-hint: "Press [F] on any page…" を DOM で構築（innerHTML 回避）
@@ -121,6 +125,7 @@ async function init(): Promise<void> {
     const almConfig: AlmConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle('alm-master-toggle', almConfig.enabled);
     updateMiniToggle('alm-ahk-toggle', almConfig.ahkInfection);
+    updateMiniToggle('alm-safety-toggle', !!almConfig.safetyEnter);
 
     // Dynamic Domain Button の初期化
     const domainBtn = document.getElementById('dynamic-domain-btn')!;
@@ -175,6 +180,15 @@ async function init(): Promise<void> {
         conf.ahkInfection = !conf.ahkInfection;
         await chrome.storage.local.set({ alm: conf });
         updateMiniToggle('alm-ahk-toggle', conf.ahkInfection);
+    });
+
+    // Chat SafetyEnter トグル
+    document.getElementById('alm-safety-toggle')!.addEventListener('click', async () => {
+        const res = await chrome.storage.local.get('alm');
+        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
+        conf.safetyEnter = !conf.safetyEnter;
+        await chrome.storage.local.set({ alm: conf });
+        updateMiniToggle('alm-safety-toggle', !!conf.safetyEnter);
     });
 
     // Dynamic Domain トグルボタン
