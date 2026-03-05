@@ -985,16 +985,26 @@ window.addEventListener('focus', onWindowFocus);
     document.addEventListener('focusout', onInputBlur, { capture: true });
 })();
 
-// ── (3) TAB_INACTIVE: visibilitychange 内の ALM シグナル ──────────────────────────
+// ── (3) TAB_INACTIVE & Arrival Shock: visibilitychange 内の ALM シグナル ──────────────────────────
 // タブが非表示になった瞬間に background へ TAB_INACTIVE を送信する。
 // isHeavyDomain フラグを添付することで、background 側が Grace Period を適切に別けられる。
-// 【注意】タブが再び表示された場合は background 内の TAB_INACTIVE タイムスタンプは上書きされる。
+// 逆にタブが表示された際（Arrival Shock）、ピン留めタブ等の Execution Dormancy 対策として
+// AHK連携用の物理シグナル（[WAKE] 一時付与）を発動する。
 window.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         // 非表示化 → Background に「今からのタイムスタンプを起点に Grace Period をカウント」を指示
         safeSendMessage({ command: 'TAB_INACTIVE', isHeavyDomain: isHeavyDomain() });
+    } else {
+        // 再表示時（Arrival Shock）: AHK 物理覚醒トリガー
+        const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
+        document.title = '[WAKE] ' + originalTitle;
+        setTimeout(() => {
+            if (document.title.startsWith('[WAKE] ')) {
+                document.title = originalTitle;
+            }
+        }, 500);
     }
-    // 再表示時（document.hidden === false）は既存の onVisibilityChange で完結
+    // 注意: 状態のプル（pullStateFromStorage）などは既存の onVisibilityChange で完結
 });
 
 // Keep-Alive Port を開く: storage.onChanged リスナー登録後に1回だけ実行。

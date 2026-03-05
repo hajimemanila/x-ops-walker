@@ -1846,6 +1846,14 @@
   window.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       safeSendMessage({ command: "TAB_INACTIVE", isHeavyDomain: isHeavyDomain() });
+    } else {
+      const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
+      document.title = "[WAKE] " + originalTitle;
+      setTimeout(() => {
+        if (document.title.startsWith("[WAKE] ")) {
+          document.title = originalTitle;
+        }
+      }, 500);
     }
   });
   connectKeepAlivePort();
