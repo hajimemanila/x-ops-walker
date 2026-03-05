@@ -710,15 +710,20 @@
       }, 500);
     }
   });
+  var isAhkInfectionEnabled = true;
   function pullStateFromStorage() {
     if (!window.__XOPS_WALKER_ALIVE__) return;
     if (document.title.startsWith("\u{1F4A4} ")) {
       document.title = document.title.slice("\u{1F4A4} ".length);
     }
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY, "alm"], (res) => {
+      const result = res;
       isWalkerMode = !!result[STORAGE_KEY];
       hud.setState(isWalkerMode);
       applyOneTapBlocker(!!result[BLOCKER_KEY]);
+      if (result.alm && result.alm.ahkInfection !== void 0) {
+        isAhkInfectionEnabled = result.alm.ahkInfection;
+      }
       if (isWalkerMode) {
         setTimeout(() => {
           if (!isWalkerMode) return;
@@ -791,7 +796,7 @@
     document.addEventListener("focusout", onInputBlur, { capture: true });
   })();
   window.addEventListener("visibilitychange", () => {
-    if (!document.hidden) {
+    if (!document.hidden && isAhkInfectionEnabled) {
       const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
       document.title = "[WAKE] " + originalTitle;
       setTimeout(() => {

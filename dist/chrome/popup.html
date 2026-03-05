@@ -265,6 +265,66 @@
             background: #ffac30;
         }
 
+        /* ── Advanced Settings Link ── */
+        #advanced-settings {
+            display: block;
+            margin: 12px 16px 0;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255, 140, 0, 0.6);
+            text-decoration: none;
+            letter-spacing: 0.05em;
+            transition: color 0.2s;
+            cursor: pointer;
+        }
+
+        #advanced-settings:hover {
+            color: rgba(255, 140, 0, 0.9);
+            text-decoration: underline;
+        }
+
+        /* ── Dynamic Domain Button ── */
+        .domain-btn {
+            margin-top: 10px;
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .domain-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .domain-btn.active {
+            background: rgba(74, 222, 128, 0.1);
+            border-color: rgba(74, 222, 128, 0.4);
+            color: #4ade80;
+            border-style: solid;
+        }
+
+        .domain-btn.active:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+        }
+
+        /* ── Separator ── */
+        .card-separator {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 10px 0;
+        }
+
         /* ── Footer ── */
         #footer {
             padding: 10px 16px 12px;
@@ -308,14 +368,37 @@
 
     <!-- Settings Card -->
     <div id="settings-card">
+        <!-- Google One Tap Blocker -->
         <div class="setting-row">
             <span class="setting-label" id="blocker-label"></span>
             <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
         </div>
+
+        <div class="card-separator"></div>
+
+        <!-- ALM: Strategic Hibernation -->
+        <div class="setting-row">
+            <span class="setting-label" id="alm-master-label">Smart Tab Discard</span>
+            <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
+        </div>
+
+        <div class="card-separator"></div>
+
+        <!-- ALM: AHK Physical Reclaim -->
+        <div class="setting-row">
+            <span class="setting-label" id="alm-ahk-label">AHK Physical Reclaim ([WAKE])</span>
+            <div id="alm-ahk-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
+        </div>
+
+        <!-- Dynamic Domain Button -->
+        <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
     </div>
 
+    <!-- Advanced Settings Link -->
+    <a id="advanced-settings" title="Open Extension Options">🛠 Advanced Settings</a>
+
     <!-- Footer -->
-    <div id="footer" id="footer-hint"></div>
+    <div id="footer"></div>
 
     <script src="popup.js"></script>
 </body>

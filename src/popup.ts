@@ -1,8 +1,35 @@
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
-function t(key: string): string {
-    return chrome.i18n.getMessage(key) || key;
+// ── ALM Configuration ──
+interface AlmConfig {
+    enabled: boolean;
+    ahkInfection: boolean;
+    heavyDomains: string[];
+}
+
+const DEFAULT_ALM_CONFIG: AlmConfig = {
+    enabled: true,
+    ahkInfection: true,
+    heavyDomains: [
+        'x.com',
+        'twitter.com',
+        'gemini.google.com',
+        'chatgpt.com',
+        'claude.ai',
+        'chat.deepseek.com',
+        'copilot.microsoft.com',
+        'perplexity.ai',
+        'grok.com',
+        'figma.com',
+        'canva.com',
+        'notion.so',
+        'www.youtube.com',
+    ]
+};
+
+function t(key: string, subs?: string | string[]): string {
+    return chrome.i18n.getMessage(key, subs) || key;
 }
 
 function updateUI(active: boolean): void {
@@ -39,6 +66,27 @@ function updateBlockerUI(active: boolean): void {
     }
 }
 
+function updateMiniToggle(elementId: string, active: boolean): void {
+    const toggle = document.getElementById(elementId)!;
+    if (active) {
+        toggle.classList.add('active');
+        toggle.setAttribute('aria-checked', 'true');
+    } else {
+        toggle.classList.remove('active');
+        toggle.setAttribute('aria-checked', 'false');
+    }
+}
+
+function updateDynamicDomainBtn(btn: HTMLElement, domain: string, isMonitored: boolean): void {
+    if (isMonitored) {
+        btn.textContent = t('popup_already_monitored', domain);
+        btn.classList.add('active');
+    } else {
+        btn.textContent = t('popup_add_to_alm', domain);
+        btn.classList.remove('active');
+    }
+}
+
 async function init(): Promise<void> {
     // バージョンを manifest.json から動的取得
     const manifest = chrome.runtime.getManifest();
@@ -49,6 +97,9 @@ async function init(): Promise<void> {
     document.getElementById('sc-title')!.textContent = t('popup_sc_title');
     document.getElementById('footer')!.textContent = t('popup_footer_hint');
     document.getElementById('blocker-label')!.textContent = t('popup_blocker_label');
+    document.getElementById('alm-master-label')!.textContent = t('popup_smart_discard_label');
+    document.getElementById('alm-ahk-label')!.textContent = t('popup_ahk_reclaim_label');
+    document.getElementById('advanced-settings')!.textContent = t('popup_advanced_settings');
 
     // sc-hint: "Press [F] on any page…" を DOM で構築（innerHTML 回避）
     const scHint = document.getElementById('sc-hint')!;
@@ -62,9 +113,35 @@ async function init(): Promise<void> {
     scHint.appendChild(afterText);
 
     // Walker Mode の初期状態読み込み
-    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY]);
+    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, 'alm']);
     updateUI(!!result[STORAGE_KEY]);
     updateBlockerUI(!!result[BLOCKER_KEY]); // デフォルト false (OFF)
+
+    // ALM 初期状態の読み込み
+    const almConfig: AlmConfig = result.alm ?? DEFAULT_ALM_CONFIG;
+    updateMiniToggle('alm-master-toggle', almConfig.enabled);
+    updateMiniToggle('alm-ahk-toggle', almConfig.ahkInfection);
+
+    // Dynamic Domain Button の初期化
+    const domainBtn = document.getElementById('dynamic-domain-btn')!;
+    let currentHostname = '';
+
+    try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url) {
+            currentHostname = new URL(activeTab.url).hostname;
+            // "www." プレフィックスを基本的には除去するが、既存仕様互換でそのまま判定
+            const isMonitored = almConfig.heavyDomains.includes(currentHostname);
+            updateDynamicDomainBtn(domainBtn, currentHostname, isMonitored);
+            domainBtn.style.display = 'block';
+        } else {
+            domainBtn.style.display = 'none';
+        }
+    } catch {
+        domainBtn.style.display = 'none';
+    }
+
+    // ── トグルイベント群 ──
 
     // Walker Mode トグル
     document.getElementById('toggle')!.addEventListener('click', async () => {
@@ -80,6 +157,46 @@ async function init(): Promise<void> {
         const next = !res[BLOCKER_KEY];
         await chrome.storage.local.set({ [BLOCKER_KEY]: next });
         updateBlockerUI(next);
+    });
+
+    // ALM Master トグル
+    document.getElementById('alm-master-toggle')!.addEventListener('click', async () => {
+        const res = await chrome.storage.local.get('alm');
+        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
+        conf.enabled = !conf.enabled;
+        await chrome.storage.local.set({ alm: conf });
+        updateMiniToggle('alm-master-toggle', conf.enabled);
+    });
+
+    // ALM AHK Reclaim トグル
+    document.getElementById('alm-ahk-toggle')!.addEventListener('click', async () => {
+        const res = await chrome.storage.local.get('alm');
+        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
+        conf.ahkInfection = !conf.ahkInfection;
+        await chrome.storage.local.set({ alm: conf });
+        updateMiniToggle('alm-ahk-toggle', conf.ahkInfection);
+    });
+
+    // Dynamic Domain トグルボタン
+    domainBtn.addEventListener('click', async () => {
+        if (!currentHostname) return;
+        const res = await chrome.storage.local.get('alm');
+        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
+        const isMonitored = conf.heavyDomains.includes(currentHostname);
+
+        if (isMonitored) {
+            conf.heavyDomains = conf.heavyDomains.filter(d => d !== currentHostname);
+        } else {
+            conf.heavyDomains.push(currentHostname);
+        }
+
+        await chrome.storage.local.set({ alm: conf });
+        updateDynamicDomainBtn(domainBtn, currentHostname, !isMonitored);
+    });
+
+    // Advanced Settings Link
+    document.getElementById('advanced-settings')!.addEventListener('click', () => {
+        chrome.runtime.openOptionsPage();
     });
 }
 

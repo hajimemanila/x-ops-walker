@@ -1192,6 +1192,7 @@
             } else {
               almStates.set(tabId, { inactiveAt: null, isHeavyDomain: false, veto: true });
             }
+            saveAlmStatesToStorage();
             break;
           }
           case "ALM_VETO_CLEAR": {
@@ -1201,6 +1202,7 @@
               vetoState.veto = false;
               vetoState.inactiveAt = Date.now();
             }
+            saveAlmStatesToStorage();
             break;
           }
           default:
@@ -1232,14 +1234,104 @@
     "notion.so",
     "www.youtube.com"
   ]);
+  var currentAlmConfig = {
+    enabled: true,
+    ahkInfection: true,
+    heavyDomains: Array.from(ALM_HEAVY_DOMAINS)
+  };
+  var isAlmConfigLoaded = false;
+  var configLoadPromise = new Promise((resolve) => {
+    chrome.storage.local.get("alm", (res) => {
+      if (res.alm) {
+        currentAlmConfig = res.alm;
+        ALM_HEAVY_DOMAINS = new Set(res.alm.heavyDomains);
+        if (currentAlmConfig.enabled) {
+          chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
+        } else {
+          chrome.alarms.clear("alm-master-timer");
+        }
+      } else {
+        chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
+      }
+      isAlmConfigLoaded = true;
+      resolve();
+    });
+  });
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes.alm) {
+      const newConf = changes.alm.newValue;
+      if (!newConf) return;
+      const wasEnabled = currentAlmConfig.enabled;
+      currentAlmConfig = newConf;
+      ALM_HEAVY_DOMAINS = new Set(newConf.heavyDomains);
+      if (wasEnabled && !newConf.enabled) {
+        console.debug("[ALM] Master Timer Disabled via UI");
+        chrome.alarms.clear("alm-master-timer");
+      } else if (!wasEnabled && newConf.enabled) {
+        console.debug("[ALM] Master Timer Enabled via UI");
+        chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
+      }
+    }
+  });
   var ALM_GRACE_STANDARD_MS = 8 * 60 * 1e3;
   var ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1e3;
   var ALM_GRACE_HEAVY_MS = 1 * 60 * 1e3;
   var ALM_OVERLOAD_THRESHOLD = 30;
   var ALM_MASTER_INTERVAL_MS = 60 * 1e3;
   var almStates = /* @__PURE__ */ new Map();
+  async function saveAlmStatesToStorage() {
+    try {
+      const statesObj = Object.fromEntries(almStates);
+      await chrome.storage.local.set({ alm_tab_states: statesObj });
+    } catch (e) {
+      console.warn("[ALM] saveAlmStatesToStorage error:", e);
+    }
+  }
+  async function loadAlmStatesFromStorage() {
+    try {
+      const res = await chrome.storage.local.get("alm_tab_states");
+      if (res.alm_tab_states) {
+        for (const [key, value] of Object.entries(res.alm_tab_states)) {
+          almStates.set(Number(key), value);
+        }
+        return true;
+      }
+    } catch (e) {
+      console.warn("[ALM] loadAlmStatesFromStorage error:", e);
+    }
+    return false;
+  }
+  async function initializeAlmStates() {
+    await loadAlmStatesFromStorage();
+    const tabs = await chrome.tabs.query({});
+    const now = Date.now();
+    for (const tab of tabs) {
+      if (tab.id === void 0) continue;
+      if (!almStates.has(tab.id) && !tab.active) {
+        let isHeavy = false;
+        try {
+          if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname);
+        } catch {
+        }
+        almStates.set(tab.id, { inactiveAt: now, isHeavyDomain: isHeavy, veto: false });
+      }
+    }
+    saveAlmStatesToStorage();
+  }
+  initializeAlmStates();
   chrome.tabs.onRemoved.addListener((tabId) => {
     almStates.delete(tabId);
+    saveAlmStatesToStorage();
+  });
+  chrome.tabs.onCreated.addListener((tab) => {
+    if (tab.id === void 0 || tab.active) return;
+    let isHeavy = false;
+    try {
+      if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname);
+    } catch {
+    }
+    almStates.set(tab.id, { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false });
+    saveAlmStatesToStorage();
   });
   async function executeStrategicHibernation(tabId, state) {
     try {
@@ -1252,12 +1344,17 @@
       });
       await new Promise((r) => setTimeout(r, 30));
       await chrome.tabs.discard(tabId);
-      console.debug(`[ALM] Strategic Hibernation executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
+      console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
     } catch (e) {
       console.debug(`[ALM] Hibernation skipped (tab gone): tabId=${tabId}`, e);
     }
   }
   async function scanAndHibernate() {
+    if (!isAlmConfigLoaded) await configLoadPromise;
+    if (!currentAlmConfig.enabled) return;
+    if (almStates.size === 0) {
+      await loadAlmStatesFromStorage();
+    }
     try {
       const allTabs = await chrome.tabs.query({ currentWindow: true });
       const totalTabCount = allTabs.length;
@@ -1271,6 +1368,7 @@
         const elapsed = now - state.inactiveAt;
         if (elapsed >= grace) {
           almStates.delete(tabId);
+          saveAlmStatesToStorage();
           executeStrategicHibernation(tabId, state);
         }
       }
@@ -1296,18 +1394,21 @@
       } catch {
       }
     }
+    saveAlmStatesToStorage();
   });
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url) {
       try {
         const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
         const state = almStates.get(tabId);
-        if (state) state.isHeavyDomain = isHeavy;
+        if (state) {
+          state.isHeavyDomain = isHeavy;
+          saveAlmStatesToStorage();
+        }
       } catch {
       }
     }
   });
-  chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "alm-master-timer") {
       scanAndHibernate();

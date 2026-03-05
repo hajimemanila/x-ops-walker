@@ -837,7 +837,7 @@ chrome.runtime.onMessage.addListener((message: { command: string }) => {
     }
 
     // ── ALM_REFOCUS: AHK 連携用「物理覚醒トリガー」スタブ ─────────────────────────
-    // Strategic Hibernation からの Pure Rebirth 後、AHK スクリプト（Physical Focus Infection）
+    // Smart Tab Discard からの Pure Rebirth 後、AHK スクリプト（Physical Focus Infection）
     // が検知できるように、document.title の先頭に [WAKE] 文字列を一時的に付与する。
     // 0.5秒後に元のタイトルに復元する。
     // AHK 側は WinTitle に "[WAKE]" をポーリングすることで「タブが者に过ぎた」を検知する。
@@ -856,6 +856,9 @@ chrome.runtime.onMessage.addListener((message: { command: string }) => {
     }
 });
 
+// ALM AHK レクレーム設定
+let isAhkInfectionEnabled = true;
+
 // ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────
 // 問題: タブが非アクティブ（frozen/discarded）状態から復帰した直後、
 // chrome.storage.onChanged は発火しないため isWalkerMode が古い値のままになる。
@@ -871,10 +874,16 @@ function pullStateFromStorage(): void {
         document.title = document.title.slice('💤 '.length);
     }
 
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY, 'alm'], (res) => {
+        // any キャストで TS エラー回避
+        const result = res as any;
         isWalkerMode = !!result[STORAGE_KEY];
         hud.setState(isWalkerMode);
         applyOneTapBlocker(!!result[BLOCKER_KEY]);
+
+        if (result.alm && result.alm.ahkInfection !== undefined) {
+            isAhkInfectionEnabled = result.alm.ahkInfection;
+        }
 
         // ── SPA オートフォーカス潰し ───────────────────────────────────────────
         // Gemini/Keep 等の SPA はタブ復帰後に遅延で入力欄にオートフォーカスする。
@@ -905,11 +914,11 @@ window.addEventListener('visibilitychange', onVisibilityChange);
 window.addEventListener('focus', onWindowFocus);
 
 // ── ALM: Vital Heartbeat の発信源群 ─────────────────────────────────────
-// このブロックは kernel の Gate当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番当番
+// このブロックは kernel の Gatekeeper
 // (1) メディア再生 Veto (2) 入力フォーカス Veto (3) 非アクティブ化 TAB_INACTIVE の3つが主要なエントリポイント。
 
 // ── (1) Media-Capture Veto ───────────────────────────────────────────────────
-// audio/video が再生中の間は ALM_VETO を発火し、Strategic Hibernation を終久禁止する。
+// audio/video が再生中の間は ALM_VETO を発火し、Smart Tab Discard を終久禁止する。
 // 停止した時点で ALM_VETO_CLEAR を送り、1分・8分タイマーを再開始させる。
 // 【設計】capture: true を使うことで Shadow DOM 内の media 要素からのバブリングも捕捉。
 (function installMediaVeto() {
@@ -989,7 +998,7 @@ window.addEventListener('focus', onWindowFocus);
 // タブが表示された際（Arrival Shock）、ピン留めタブ等の Execution Dormancy 対策として
 // AHK連携用の物理シグナル（[WAKE] 一時付与）を発動する。
 window.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
+    if (!document.hidden && isAhkInfectionEnabled) {
         // 再表示時（Arrival Shock）: AHK 物理覚醒トリガー
         const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
         document.title = '[WAKE] ' + originalTitle;

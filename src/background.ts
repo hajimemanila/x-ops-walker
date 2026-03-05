@@ -251,7 +251,7 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
 
                 // ── ALM v1.3.0: Kernel からの状態通知 ────────────────────────────────
                 case 'ALM_VETO': {
-                    // 入力中・メディア再生中など、Strategic Hibernation の絶対禁止を宣言する。
+                    // 入力中・メディア再生中など、Smart Tab Discard の絶対禁止を宣言する。
                     // Veto が立っている間は Master Timer がそのタブをスキップする。
                     if (tabId === undefined) break;
                     const state = almStates.get(tabId);
@@ -261,6 +261,7 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                         // 状態が未登録（ページロード直後など）でも Veto だけは確実に記録する
                         almStates.set(tabId, { inactiveAt: null, isHeavyDomain: false, veto: true });
                     }
+                    saveAlmStatesToStorage();
                     break;
                 }
 
@@ -274,6 +275,7 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                         // Veto 解除 = 「今この瞬間から」猶予をカウントし直す
                         vetoState.inactiveAt = Date.now();
                     }
+                    saveAlmStatesToStorage();
                     break;
                 }
 
@@ -307,7 +309,7 @@ chrome.runtime.onConnect.addListener((port) => {
 //
 // 【用語定義 — これらの用語を厳守せよ】
 //   Execution Dormancy   : ブラウザが勝手に行う「安楽死（休止状態）」。ALM が排除する敵。
-//   Strategic Hibernation: ALM が意図的に行う「冷凍休眠（Discard）」。我々が支配する。
+//   Smart Tab Discard: ALM が意図的に行う「冷凍休眠（Discard）」。我々が支配する。
 //   Vital Heartbeat      : kernel から送る「生存信号」。Veto の根拠となる。
 //   Pure Rebirth         : ユーザーがタブを開いた際の再読み込みによる「確実な転生（起動）」。
 //
@@ -319,10 +321,18 @@ chrome.runtime.onConnect.addListener((port) => {
 //
 // ============================================================================
 
-// ── Heavy Domain 定義 ────────────────────────────────────────────────────────
+// ── ALM Configuration ──
+interface AlmConfig {
+    enabled: boolean;
+    ahkInfection: boolean;
+    heavyDomains: string[];
+}
+
+// ── Heavy Domain 定義 (初期値) ────────────────────────────────────────────────────────
 // メモリ消費が激しい「重量ドメイン」。非アクティブになった瞬間に短縮 Grace Period を適用し、
-// よりアグレッシブに Strategic Hibernation を予約する。
-const ALM_HEAVY_DOMAINS = new Set([
+// よりアグレッシブに Smart Tab Discard を予約する。
+// ※ v1.3.2 より初期値となり、実行時は chrome.storage.local で上書きされる。
+let ALM_HEAVY_DOMAINS = new Set([
     'x.com',
     'twitter.com',
     'gemini.google.com',
@@ -338,10 +348,60 @@ const ALM_HEAVY_DOMAINS = new Set([
     'www.youtube.com',
 ]);
 
+// 実行中の ALM コンフィグ
+let currentAlmConfig: AlmConfig = {
+    enabled: true,
+    ahkInfection: true,
+    heavyDomains: Array.from(ALM_HEAVY_DOMAINS)
+};
+
+// コンフィグのロード完了を待機するプロミス
+let isAlmConfigLoaded = false;
+const configLoadPromise = new Promise<void>((resolve) => {
+    chrome.storage.local.get('alm', (res) => {
+        if (res.alm) {
+            currentAlmConfig = res.alm;
+            ALM_HEAVY_DOMAINS = new Set(res.alm.heavyDomains);
+
+            if (currentAlmConfig.enabled) {
+                chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
+            } else {
+                chrome.alarms.clear('alm-master-timer');
+            }
+        } else {
+            chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
+        }
+        isAlmConfigLoaded = true;
+        resolve();
+    });
+});
+
+// UI（Options / Popup）からの設定変更を瞬時に同期する
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.alm) {
+        const newConf = changes.alm.newValue as AlmConfig;
+        if (!newConf) return;
+
+        const wasEnabled = currentAlmConfig.enabled;
+
+        currentAlmConfig = newConf;
+        ALM_HEAVY_DOMAINS = new Set(newConf.heavyDomains);
+
+        // Timer 制御: 有効/無効の切り替え
+        if (wasEnabled && !newConf.enabled) {
+            console.debug('[ALM] Master Timer Disabled via UI');
+            chrome.alarms.clear('alm-master-timer');
+        } else if (!wasEnabled && newConf.enabled) {
+            console.debug('[ALM] Master Timer Enabled via UI');
+            chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
+        }
+    }
+});
+
 // ── Grace Period 定数 (ミリ秒) ─────────────────────────────────────────────
 // Standard: タブ30枚以下のデフォルト。8分の余裕を与える。
 // Standard (Overloaded): タブ30枚超。動的に5分へ短縮し、よりアグレッシブにリソース回収。
-// Heavy: X.com / AI Chat 等の重量ドメイン。1分後に Strategic Hibernation を実行する。
+// Heavy: X.com / AI Chat 等の重量ドメイン。1分後に Smart Tab Discard を実行する。
 //        ただし Vital Heartbeat（入力中・再生中）が届いている間は Veto により絶対禁止。
 const ALM_GRACE_STANDARD_MS = 8 * 60 * 1000;        //   8分
 const ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1000; //   5分（30枚超タブ数で動的短縮）
@@ -362,15 +422,74 @@ interface AlmTabState {
 /** 全タブの ALM 状態を保持するマスターマップ */
 const almStates = new Map<number, AlmTabState>();
 
+// ── 永続化レイヤー (Persistent Storage Layer) ───────────────────────────────
+async function saveAlmStatesToStorage(): Promise<void> {
+    try {
+        const statesObj = Object.fromEntries(almStates);
+        await chrome.storage.local.set({ alm_tab_states: statesObj });
+    } catch (e) {
+        console.warn('[ALM] saveAlmStatesToStorage error:', e);
+    }
+}
+
+async function loadAlmStatesFromStorage(): Promise<boolean> {
+    try {
+        const res = await chrome.storage.local.get('alm_tab_states');
+        if (res.alm_tab_states) {
+            for (const [key, value] of Object.entries(res.alm_tab_states)) {
+                almStates.set(Number(key), value as AlmTabState);
+            }
+            return true;
+        }
+    } catch (e) {
+        console.warn('[ALM] loadAlmStatesFromStorage error:', e);
+    }
+    return false;
+}
+
+// ── Service Worker の起動・再起動時の状態復元 ─────────────────────────────
+// MV3 では SW が休止すると almStates も消滅してしまうため、起動時に全タブの状況を捕捉する。
+async function initializeAlmStates(): Promise<void> {
+    // まずストレージから既存のステートを読み込む
+    await loadAlmStatesFromStorage();
+
+    const tabs = await chrome.tabs.query({});
+    const now = Date.now();
+    for (const tab of tabs) {
+        if (tab.id === undefined) continue;
+        // 「記憶にない（Map に存在しない）非アクティブタブ」のみに現在時刻を付与する。
+        // （記憶にあるタブの inactiveAt は絶対に上書きせず維持する）
+        if (!almStates.has(tab.id) && !tab.active) {
+            let isHeavy = false;
+            try { if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname); } catch { }
+            almStates.set(tab.id, { inactiveAt: now, isHeavyDomain: isHeavy, veto: false });
+        }
+    }
+    // 補完した最新状態を保存
+    saveAlmStatesToStorage();
+}
+// 起動時に呼び出す
+initializeAlmStates();
+
 // ── タブ削除時のクリーンアップ ───────────────────────────────────────────────
 // タブが閉じられた際は almStates から即座に除去し、メモリリークを防ぐ。
 chrome.tabs.onRemoved.addListener((tabId) => {
     almStates.delete(tabId);
+    saveAlmStatesToStorage();
 });
 
-// ── Strategic Hibernation: 実行関数 ──────────────────────────────────────────
+// 新規タブがバックグラウンドで開かれた場合も初期化する
+chrome.tabs.onCreated.addListener((tab) => {
+    if (tab.id === undefined || tab.active) return;
+    let isHeavy = false;
+    try { if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname); } catch { }
+    almStates.set(tab.id, { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false });
+    saveAlmStatesToStorage();
+});
+
+// ── Smart Tab Discard: 実行関数 ──────────────────────────────────────────
 /**
- * 指定タブに対して Strategic Hibernation (chrome.tabs.discard) を実行する。
+ * 指定タブに対して Smart Tab Discard (chrome.tabs.discard) を実行する。
  * discard 直前に「本当にそのタブが非アクティブか」を再確認するガード節を持ち、
  * 万が一タブが復帰していた場合には Hibernation を中止する（二重確認の絶対保証）。
  *
@@ -401,7 +520,7 @@ async function executeStrategicHibernation(tabId: number, state: AlmTabState): P
         await new Promise<void>(r => setTimeout(r, 30));
         await chrome.tabs.discard(tabId);
 
-        console.debug(`[ALM] Strategic Hibernation executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
+        console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
     } catch (e) {
         // タブが既に存在しない（ユーザーが手動で閉じた等）は正常系 — 静かに無視
         console.debug(`[ALM] Hibernation skipped (tab gone): tabId=${tabId}`, e);
@@ -410,15 +529,20 @@ async function executeStrategicHibernation(tabId: number, state: AlmTabState): P
 
 // ── Master Heartbeat Timer: 全タブを走査・一括処理 ───────────────────────────
 /**
- * 1分ごとに発火する「マスタータイマー」のコア処理。
- * タブごとに個別タイマーを持つことなく、全タブの状態を一括で走査する。
- *
- * 【動的負荷調整ロジック】
- *   現在ウィンドウ内のタブ総数が ALM_OVERLOAD_THRESHOLD（30枚）を超えた場合、
- *   Standard ドメインの Grace Period を 8分 → 5分 に自動短縮する。
- *   これにより過負荷状態でもアグレッシブにリソースを回収する。
+ * Master Heartbeat Timer ループ関数。全タブを一括走査する。
+ * alm.enabled が false の時は 発火しない。
  */
 async function scanAndHibernate(): Promise<void> {
+    // 確実な初期化のため、ストレージ読み込みが完了するまで待機する
+    if (!isAlmConfigLoaded) await configLoadPromise;
+
+    if (!currentAlmConfig.enabled) return;
+
+    // Map が空の場合は念のためストレージからロードを試行する
+    if (almStates.size === 0) {
+        await loadAlmStatesFromStorage();
+    }
+
     try {
         // 全タブを取得して総数を把握する
         const allTabs = await chrome.tabs.query({ currentWindow: true });
@@ -449,9 +573,10 @@ async function scanAndHibernate(): Promise<void> {
             const elapsed = now - state.inactiveAt;
 
             if (elapsed >= grace) {
-                // 猶予期間満了 → Strategic Hibernation を実行
+                // 猶予期間満了 → Smart Tab Discard を実行
                 // almStates から先に削除することで、次のティックで二重実行されるのを防ぐ
                 almStates.delete(tabId);
+                saveAlmStatesToStorage();
                 // 非同期実行（await しない）— タブが複数あっても並列で処理する
                 executeStrategicHibernation(tabId, state);
             }
@@ -487,6 +612,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
             // 前のタブがすでに閉じられている場合は無視
         }
     }
+    saveAlmStatesToStorage();
 });
 
 // URL 変更時（ナビゲーション）に Heavy Domain 判定を更新
@@ -495,14 +621,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         try {
             const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
             const state = almStates.get(tabId);
-            if (state) state.isHeavyDomain = isHeavy;
+            if (state) {
+                state.isHeavyDomain = isHeavy;
+                saveAlmStatesToStorage();
+            }
         } catch { }
     }
 });
 
 // ── Master Heartbeat Timer の Alarm 化 (スロットリング対策) ─────────────────
 // setInterval を廃止し、OS レベルで発火が保証される chrome.alarms に変更。
-chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
+// 作成処理はストレージ初期化時および onChanged 時に制御される。
 
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'alm-master-timer') {

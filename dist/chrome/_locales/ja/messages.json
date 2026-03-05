@@ -106,5 +106,35 @@
     },
     "popup_blocker_label": {
         "message": "Google One Tap をブロック"
+    },
+    "popup_smart_discard_label": {
+        "message": "スマートタブメモリ開放"
+    },
+    "popup_ahk_reclaim_label": {
+        "message": "AHKアクティブ化信号"
+    },
+    "popup_monitored_domains_label": {
+        "message": "監視対象ドメイン"
+    },
+    "popup_add_to_alm": {
+        "message": "＋ $1 を監視対象に追加",
+        "placeholders": {
+            "1": {
+                "content": "$1",
+                "example": "github.com"
+            }
+        }
+    },
+    "popup_already_monitored": {
+        "message": "✓ $1 は監視中です",
+        "placeholders": {
+            "1": {
+                "content": "$1",
+                "example": "github.com"
+            }
+        }
+    },
+    "popup_advanced_settings": {
+        "message": "⚙️ 詳細設定 (Options)"
     }
 }
