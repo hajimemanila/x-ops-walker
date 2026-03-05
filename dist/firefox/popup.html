@@ -325,6 +325,26 @@
             margin: 10px 0;
         }
 
+        /* ── Sections (v2.1) ── */
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .section-container {
+            margin-bottom: 16px;
+        }
+
+        .sub-settings {
+            padding-left: 20px;
+            margin-top: 8px;
+            border-left: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
         /* ── Footer ── */
         #footer {
             padding: 10px 16px 12px;
@@ -332,6 +352,32 @@
             font-size: 10px;
             color: rgba(255, 255, 255, 0.18);
             letter-spacing: 0.05em;
+        }
+
+        /* ── Custom Scrollbar (v2.1.1) ── */
+        /* Firefox */
+        html,
+        body {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+        }
+
+        /* WebKit (Chrome/Edge/Safari) */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
@@ -368,47 +414,62 @@
 
     <!-- Settings Card -->
     <div id="settings-card">
-        <!-- Google One Tap Blocker -->
-        <div class="setting-row">
-            <span class="setting-label" id="blocker-label"></span>
-            <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+
+        <!-- Global Systems Section -->
+        <div class="section-container">
+            <div class="section-title" id="section-global-title">🌍 Global Systems</div>
+
+            <!-- Google One Tap Blocker -->
+            <div class="setting-row">
+                <span class="setting-label" id="blocker-label"></span>
+                <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+            </div>
+
+            <div class="card-separator"></div>
+
+            <!-- ALM: Strategic Hibernation -->
+            <div class="setting-row">
+                <span class="setting-label" id="alm-master-label">Smart Tab Discard</span>
+                <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
+            </div>
+
+            <!-- Dynamic Domain Button (Smart Tab Discard専用) -->
+            <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
+
+            <div class="card-separator"></div>
+
+            <!-- ALM: AHK Physical Reclaim -->
+            <div class="setting-row">
+                <span class="setting-label" id="alm-ahk-label">AHK Physical Reclaim ([WAKE])</span>
+                <div id="alm-ahk-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
+            </div>
+
+            <div class="card-separator"></div>
+
+            <!-- ALM: Chat SafetyEnter -->
+            <div class="setting-row" id="alm-safety-row">
+                <span class="setting-label" id="alm-safety-label">Chat SafetyEnter</span>
+                <div id="alm-safety-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
+            </div>
         </div>
 
         <div class="card-separator"></div>
 
-        <!-- ALM: Strategic Hibernation -->
-        <div class="setting-row">
-            <span class="setting-label" id="alm-master-label">Smart Tab Discard</span>
-            <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
-        </div>
-
-        <!-- Dynamic Domain Button (Smart Tab Discard専用) -->
-        <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
-
-        <div class="card-separator"></div>
-
-        <!-- ALM: AHK Physical Reclaim -->
-        <div class="setting-row">
-            <span class="setting-label" id="alm-ahk-label">AHK Physical Reclaim ([WAKE])</span>
-            <div id="alm-ahk-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
-        </div>
-
-        <div class="card-separator"></div>
-
-        <!-- ALM: Chat SafetyEnter -->
-        <div class="setting-row" id="alm-safety-row">
-            <span class="setting-label" id="alm-safety-label">Chat SafetyEnter</span>
-            <div id="alm-safety-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
-        </div>
-
-        <div class="card-separator"></div>
-
-        <!-- Domain-Specific Protocols -->
+        <!-- Domain-Specific Protocols Section -->
         <div id="domain-protocol-container">
+            <div class="section-title" id="section-domain-title">📍 Domain Protocols</div>
+
             <div id="protocol-x" style="display: none;">
                 <div class="setting-row">
                     <span class="setting-label" id="protocol-x-title">X Timeline Walker</span>
                     <div id="toggle-protocol-x" class="mini-toggle" role="switch" aria-checked="false"></div>
+                </div>
+                <!-- Sub Settings for X -->
+                <div id="protocol-x-sub" class="sub-settings">
+                    <div class="setting-row">
+                        <span class="setting-label" id="x-right-column-title">Right Column Dashboard</span>
+                        <div id="toggle-x-right-column" class="mini-toggle" role="switch" aria-checked="false"></div>
+                    </div>
                 </div>
             </div>
             <div id="protocol-gemini" style="display: none;">

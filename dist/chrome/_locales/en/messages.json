@@ -148,5 +148,14 @@
     },
     "protocol_none_msg": {
         "message": "No specific protocol for this site."
+    },
+    "section_global": {
+        "message": "🌍 Global Systems"
+    },
+    "section_domain": {
+        "message": "📍 Domain Protocols"
+    },
+    "x_right_column_title": {
+        "message": "Right Column Dashboard"
     }
 }

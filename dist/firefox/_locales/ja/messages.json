@@ -151,5 +151,14 @@
     },
     "protocol_none_msg": {
         "message": "このサイト固有のプロトコルはありません"
+    },
+    "section_global": {
+        "message": "🌍 Global Systems"
+    },
+    "section_domain": {
+        "message": "📍 Domain Protocols"
+    },
+    "x_right_column_title": {
+        "message": "Right Column Dashboard"
     }
 }
