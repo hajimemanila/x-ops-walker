@@ -105,6 +105,11 @@ async function init(): Promise<void> {
     document.getElementById('alm-safety-row')!.title = t('popup_safety_enter_desc');
     document.getElementById('advanced-settings')!.textContent = t('popup_advanced_settings');
 
+    // Context-Aware UI i18n
+    document.getElementById('protocol-x-title')!.textContent = t('protocol_x_title');
+    document.getElementById('protocol-gemini-title')!.textContent = t('protocol_gemini_title');
+    document.getElementById('protocol-none-msg')!.textContent = t('protocol_none_msg');
+
     // sc-hint: "Press [F] on any page…" を DOM で構築（innerHTML 回避）
     const scHint = document.getElementById('sc-hint')!;
     const beforeText = document.createTextNode(t('popup_sc_hint_before') + ' ');
@@ -139,11 +144,26 @@ async function init(): Promise<void> {
             const isMonitored = almConfig.heavyDomains.includes(currentHostname);
             updateDynamicDomainBtn(domainBtn, currentHostname, isMonitored);
             domainBtn.style.display = 'block';
+
+            // Context-Aware UI Logic
+            const protocolX = document.getElementById('protocol-x')!;
+            const protocolGemini = document.getElementById('protocol-gemini')!;
+            const protocolNone = document.getElementById('protocol-none')!;
+
+            if (currentHostname.includes('x.com') || currentHostname.includes('twitter.com')) {
+                protocolX.style.display = 'block';
+            } else if (currentHostname.includes('gemini.google.com')) {
+                protocolGemini.style.display = 'block';
+            } else {
+                protocolNone.style.display = 'block';
+            }
         } else {
             domainBtn.style.display = 'none';
+            document.getElementById('protocol-none')!.style.display = 'block';
         }
     } catch {
         domainBtn.style.display = 'none';
+        document.getElementById('protocol-none')!.style.display = 'block';
     }
 
     // ── トグルイベント群 ──

@@ -1118,6 +1118,9 @@
     document.getElementById("alm-safety-label").textContent = t("popup_safety_enter_label");
     document.getElementById("alm-safety-row").title = t("popup_safety_enter_desc");
     document.getElementById("advanced-settings").textContent = t("popup_advanced_settings");
+    document.getElementById("protocol-x-title").textContent = t("protocol_x_title");
+    document.getElementById("protocol-gemini-title").textContent = t("protocol_gemini_title");
+    document.getElementById("protocol-none-msg").textContent = t("protocol_none_msg");
     const scHint = document.getElementById("sc-hint");
     const beforeText = document.createTextNode(t("popup_sc_hint_before") + " ");
     const keyBadge = document.createElement("span");
@@ -1143,11 +1146,23 @@
         const isMonitored = almConfig.heavyDomains.includes(currentHostname);
         updateDynamicDomainBtn(domainBtn, currentHostname, isMonitored);
         domainBtn.style.display = "block";
+        const protocolX = document.getElementById("protocol-x");
+        const protocolGemini = document.getElementById("protocol-gemini");
+        const protocolNone = document.getElementById("protocol-none");
+        if (currentHostname.includes("x.com") || currentHostname.includes("twitter.com")) {
+          protocolX.style.display = "block";
+        } else if (currentHostname.includes("gemini.google.com")) {
+          protocolGemini.style.display = "block";
+        } else {
+          protocolNone.style.display = "block";
+        }
       } else {
         domainBtn.style.display = "none";
+        document.getElementById("protocol-none").style.display = "block";
       }
     } catch {
       domainBtn.style.display = "none";
+      document.getElementById("protocol-none").style.display = "block";
     }
     document.getElementById("toggle").addEventListener("click", async () => {
       const res = await chrome.storage.local.get(STORAGE_KEY);

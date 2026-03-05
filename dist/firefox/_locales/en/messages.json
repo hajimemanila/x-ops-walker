@@ -139,5 +139,14 @@
     },
     "popup_advanced_settings": {
         "message": "⚙️ Advanced Settings"
+    },
+    "protocol_x_title": {
+        "message": "X Timeline Walker"
+    },
+    "protocol_gemini_title": {
+        "message": "Gemini Walker"
+    },
+    "protocol_none_msg": {
+        "message": "No specific protocol for this site."
     }
 }

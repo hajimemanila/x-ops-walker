@@ -142,5 +142,14 @@
     },
     "popup_advanced_settings": {
         "message": "⚙️ 詳細設定 (Options)"
+    },
+    "protocol_x_title": {
+        "message": "X Timeline Walker"
+    },
+    "protocol_gemini_title": {
+        "message": "Gemini Walker"
+    },
+    "protocol_none_msg": {
+        "message": "このサイト固有のプロトコルはありません"
     }
 }
