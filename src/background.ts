@@ -131,18 +131,13 @@ type FoxWalkerCommand =
     | 'DUPLICATE_TAB'
     | 'CLEAN_UP'
     // ── ALM v1.3.0 ────────────────────────────────────────────────────────────
-    // TAB_INACTIVE  : kernel が visibilitychange で「タブが非アクティブになった」を通知する。
-    //                 ALM Master Timer がこのタイムスタンプを起点に Strategic Hibernation を予約する。
     // ALM_VETO      : 入力中・メディア再生中など、Hibernation を絶対禁止すべき状態を通知する。
     // ALM_VETO_CLEAR: Veto 状態が解除されたことを通知する（入力完了・再生停止等）。
-    | 'TAB_INACTIVE'
     | 'ALM_VETO'
     | 'ALM_VETO_CLEAR';
 
 interface FoxWalkerMessage {
     command: FoxWalkerCommand;
-    // TAB_INACTIVE payload
-    isHeavyDomain?: boolean;
 }
 
 // ── メインリスナー ─────────────────────────────────────────────────────────────
@@ -255,20 +250,6 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                 }
 
                 // ── ALM v1.3.0: Kernel からの状態通知 ────────────────────────────────
-                case 'TAB_INACTIVE': {
-                    // kernel.ts の visibilitychange から受信。
-                    // タブが非アクティブになった瞬間のタイムスタンプを記録し、
-                    // Master Timer がこの値を起点に Strategic Hibernation を予約する。
-                    if (tabId === undefined) break;
-                    const existing = almStates.get(tabId);
-                    almStates.set(tabId, {
-                        inactiveAt: Date.now(),
-                        isHeavyDomain: message.isHeavyDomain ?? existing?.isHeavyDomain ?? false,
-                        veto: existing?.veto ?? false,
-                    });
-                    break;
-                }
-
                 case 'ALM_VETO': {
                     // 入力中・メディア再生中など、Strategic Hibernation の絶対禁止を宣言する。
                     // Veto が立っている間は Master Timer がそのタブをスキップする。
@@ -480,10 +461,51 @@ async function scanAndHibernate(): Promise<void> {
     }
 }
 
-// ── Master Heartbeat Timer の起動 ─────────────────────────────────────────────
-// 【注意】setInterval は Service Worker 内では信頼性が低い。
-// しかし、kernel.ts 側の connectKeepAlivePort() が walker-keepalive Port を常時接続し、
-// Chrome MV3 公式仕様により「Port 接続中は SW を休止させない」状態を維持している。
-// このため、ALM の Master Timer は walker-keepalive に完全に依存して動作する。
-// keepalive Port なしで ALM は機能しない — これは意図的な設計上の依存関係である。
-setInterval(scanAndHibernate, ALM_MASTER_INTERVAL_MS);
+// ── 堅牢な ALM 状態トラッキング (Background 完結型) ──────────────────────────
+// タブのアクティブ状態は kernel.ts の通信に頼らず、ブラウザネイティブの API で完璧に監視する。
+const windowActiveTabs = new Map<number, number>();
+
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    const prevTabId = windowActiveTabs.get(activeInfo.windowId);
+    windowActiveTabs.set(activeInfo.windowId, activeInfo.tabId);
+
+    // 1. 新しくアクティブになったタブのタイマーをリセット（inactiveAt = null）
+    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isHeavyDomain: false, veto: false };
+    newState.inactiveAt = null;
+    almStates.set(activeInfo.tabId, newState);
+
+    // 2. 前までアクティブだったタブ（存在すれば）に非アクティブ時間を記録
+    if (prevTabId !== undefined) {
+        try {
+            const prevTab = await chrome.tabs.get(prevTabId);
+            const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(prevTab.url ?? '').hostname);
+            const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false };
+            prevState.inactiveAt = Date.now();
+            prevState.isHeavyDomain = isHeavy;
+            almStates.set(prevTabId, prevState);
+        } catch {
+            // 前のタブがすでに閉じられている場合は無視
+        }
+    }
+});
+
+// URL 変更時（ナビゲーション）に Heavy Domain 判定を更新
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url) {
+        try {
+            const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
+            const state = almStates.get(tabId);
+            if (state) state.isHeavyDomain = isHeavy;
+        } catch { }
+    }
+});
+
+// ── Master Heartbeat Timer の Alarm 化 (スロットリング対策) ─────────────────
+// setInterval を廃止し、OS レベルで発火が保証される chrome.alarms に変更。
+chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'alm-master-timer') {
+        scanAndHibernate();
+    }
+});

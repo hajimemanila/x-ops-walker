@@ -1180,24 +1180,6 @@
   window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
-  var ALM_HEAVY_DOMAIN_SET = /* @__PURE__ */ new Set([
-    "x.com",
-    "twitter.com",
-    "gemini.google.com",
-    "chatgpt.com",
-    "claude.ai",
-    "chat.deepseek.com",
-    "copilot.microsoft.com",
-    "perplexity.ai",
-    "grok.com",
-    "figma.com",
-    "canva.com",
-    "notion.so",
-    "www.youtube.com"
-  ]);
-  function isHeavyDomain() {
-    return ALM_HEAVY_DOMAIN_SET.has(window.location.hostname);
-  }
   var REGISTERED_ROUTER_KEYS = /* @__PURE__ */ new Set([
     "a",
     "d",
@@ -1844,9 +1826,7 @@
     document.addEventListener("focusout", onInputBlur, { capture: true });
   })();
   window.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      safeSendMessage({ command: "TAB_INACTIVE", isHeavyDomain: isHeavyDomain() });
-    } else {
+    if (!document.hidden) {
       const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
       document.title = "[WAKE] " + originalTitle;
       setTimeout(() => {

@@ -985,16 +985,11 @@ window.addEventListener('focus', onWindowFocus);
     document.addEventListener('focusout', onInputBlur, { capture: true });
 })();
 
-// ── (3) TAB_INACTIVE & Arrival Shock: visibilitychange 内の ALM シグナル ──────────────────────────
-// タブが非表示になった瞬間に background へ TAB_INACTIVE を送信する。
-// isHeavyDomain フラグを添付することで、background 側が Grace Period を適切に別けられる。
-// 逆にタブが表示された際（Arrival Shock）、ピン留めタブ等の Execution Dormancy 対策として
+// ── (3) Arrival Shock: visibilitychange 内の ALM シグナル ──────────────────────────
+// タブが表示された際（Arrival Shock）、ピン留めタブ等の Execution Dormancy 対策として
 // AHK連携用の物理シグナル（[WAKE] 一時付与）を発動する。
 window.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        // 非表示化 → Background に「今からのタイムスタンプを起点に Grace Period をカウント」を指示
-        safeSendMessage({ command: 'TAB_INACTIVE', isHeavyDomain: isHeavyDomain() });
-    } else {
+    if (!document.hidden) {
         // 再表示時（Arrival Shock）: AHK 物理覚醒トリガー
         const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
         document.title = '[WAKE] ' + originalTitle;

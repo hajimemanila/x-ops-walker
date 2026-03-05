@@ -154,16 +154,6 @@
             break;
           }
           // ── ALM v1.3.0: Kernel からの状態通知 ────────────────────────────────
-          case "TAB_INACTIVE": {
-            if (tabId === void 0) break;
-            const existing = almStates.get(tabId);
-            almStates.set(tabId, {
-              inactiveAt: Date.now(),
-              isHeavyDomain: message.isHeavyDomain ?? existing?.isHeavyDomain ?? false,
-              veto: existing?.veto ?? false
-            });
-            break;
-          }
           case "ALM_VETO": {
             if (tabId === void 0) break;
             const state = almStates.get(tabId);
@@ -197,6 +187,21 @@
     port.onDisconnect.addListener(() => {
     });
   });
+  var ALM_HEAVY_DOMAINS = /* @__PURE__ */ new Set([
+    "x.com",
+    "twitter.com",
+    "gemini.google.com",
+    "chatgpt.com",
+    "claude.ai",
+    "chat.deepseek.com",
+    "copilot.microsoft.com",
+    "perplexity.ai",
+    "grok.com",
+    "figma.com",
+    "canva.com",
+    "notion.so",
+    "www.youtube.com"
+  ]);
   var ALM_GRACE_STANDARD_MS = 8 * 60 * 1e3;
   var ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1e3;
   var ALM_GRACE_HEAVY_MS = 1 * 60 * 1e3;
@@ -243,5 +248,39 @@
       console.warn("[ALM] scanAndHibernate error:", e);
     }
   }
-  setInterval(scanAndHibernate, ALM_MASTER_INTERVAL_MS);
+  var windowActiveTabs = /* @__PURE__ */ new Map();
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    const prevTabId = windowActiveTabs.get(activeInfo.windowId);
+    windowActiveTabs.set(activeInfo.windowId, activeInfo.tabId);
+    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isHeavyDomain: false, veto: false };
+    newState.inactiveAt = null;
+    almStates.set(activeInfo.tabId, newState);
+    if (prevTabId !== void 0) {
+      try {
+        const prevTab = await chrome.tabs.get(prevTabId);
+        const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(prevTab.url ?? "").hostname);
+        const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false };
+        prevState.inactiveAt = Date.now();
+        prevState.isHeavyDomain = isHeavy;
+        almStates.set(prevTabId, prevState);
+      } catch {
+      }
+    }
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url) {
+      try {
+        const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
+        const state = almStates.get(tabId);
+        if (state) state.isHeavyDomain = isHeavy;
+      } catch {
+      }
+    }
+  });
+  chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "alm-master-timer") {
+      scanAndHibernate();
+    }
+  });
 })();
