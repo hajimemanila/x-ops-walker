@@ -696,6 +696,101 @@ function normalizeKey(event: KeyboardEvent): string {
     return event.key.toLowerCase();
 }
 
+// ── Chat SafetyEnter (Enter誤爆防止) ──────────────────────────────────────────
+let isSafetyEnterEnabled = true;
+
+function showSafetyEnterOSD(target: HTMLElement) {
+    const existing = document.getElementById('x-ops-safety-osd');
+    if (existing) existing.remove();
+
+    const osd = document.createElement('div');
+    osd.id = 'x-ops-safety-osd';
+    // Shadow DOM等を使わずとも、絶対的なz-indexと固定スタイルで保護
+    osd.style.cssText = `
+        position: absolute;
+        background: rgba(43, 45, 49, 0.95);
+        color: #fff;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(255,140,0,0.4);
+        pointer-events: none;
+        z-index: 2147483647;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    osd.textContent = '💡 Ctrl+Enter で送信';
+
+    const rect = target.getBoundingClientRect();
+    // 入力欄の右下に配置
+    osd.style.top = `${window.scrollY + rect.bottom - 25}px`;
+    osd.style.left = `${window.scrollX + rect.right - 120}px`;
+
+    document.body.appendChild(osd);
+
+    // フェードイン＆アウト
+    requestAnimationFrame(() => {
+        osd.style.opacity = '1';
+        setTimeout(() => {
+            osd.style.opacity = '0';
+            setTimeout(() => osd.remove(), 200);
+        }, 1500);
+    });
+}
+
+function handleSafetyEnter(event: KeyboardEvent) {
+    // P1: 亡霊チェック
+    if (isOrphan()) return;
+
+    if (!isSafetyEnterEnabled) return;
+    if (event.key !== 'Enter') return;
+
+    // 【魔境の防波堤】IME変換中（日本語入力の確定）は絶対に干渉しない
+    if (event.isComposing || event.keyCode === 229) return;
+
+    const target = event.target as HTMLElement;
+    if (!target) return;
+
+    // 複数行入力可能なエリア（textarea または contenteditable）のみを対象とする
+    // 検索窓などの <input type="text"> は除外
+    const isTextarea = target.tagName === 'TEXTAREA';
+    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
+    if (!isTextarea && !isContentEditable) return;
+
+    // Ctrl / Meta (Mac) / Shift が押されている場合は透過（本来の挙動へ）
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+        // ※ここでサイト側のネイティブなCtrl+Enter送信に任せる（透過パス）
+        // SPAの合成イベント問題を避けるため、まずは「透過」を基本戦略とする
+    }
+
+    // --- ここから下は「単なるEnter（誤爆）」のブロック処理 ---
+
+    event.stopPropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    // 1. OSDでユーザーに通知
+    showSafetyEnterOSD(target);
+
+    // 2. Undo履歴(Ctrl+Z)を破壊せずに改行をねじ込む（非推奨APIだがこれ以外に汎用解がない）
+    document.execCommand('insertText', false, '\n');
+
+    // 3. React/Vue等の状態管理（Virtual DOM）に「入力が変わった」と錯覚させる
+    target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+
+    // 4. スクロール追従（キャレット位置を可視範囲に）
+    setTimeout(() => {
+        if (typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
+    }, 0);
+}
+
+
 
 // ── P3: メインキーダウンリスナー ──────────────────────────────────────────────
 // 【設計上の重要事項】
@@ -779,6 +874,7 @@ function keydownHandler(event: KeyboardEvent): void {
 }
 
 // capture: true — DOMツリーのキャプチャフェーズ最上流でイベントを捕捉する
+window.addEventListener('keydown', handleSafetyEnter, true); // SafetyEnter を先頭付近で捕捉
 window.addEventListener('keydown', keydownHandler, { capture: true });
 
 
@@ -810,6 +906,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
     if (BLOCKER_KEY in changes) {
         applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    }
+
+    if ('alm' in changes) {
+        const alm = changes['alm'].newValue;
+        if (alm && alm.safetyEnter !== undefined) {
+            isSafetyEnterEnabled = alm.safetyEnter;
+        }
     }
 });
 
@@ -883,6 +986,10 @@ function pullStateFromStorage(): void {
 
         if (result.alm && result.alm.ahkInfection !== undefined) {
             isAhkInfectionEnabled = result.alm.ahkInfection;
+        }
+
+        if (result.alm && result.alm.safetyEnter !== undefined) {
+            isSafetyEnterEnabled = result.alm.safetyEnter;
         }
 
         // ── SPA オートフォーカス潰し ───────────────────────────────────────────

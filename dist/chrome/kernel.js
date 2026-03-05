@@ -630,6 +630,66 @@
     if (code === "Space") return " ";
     return event.key.toLowerCase();
   }
+  var isSafetyEnterEnabled = true;
+  function showSafetyEnterOSD(target) {
+    const existing = document.getElementById("x-ops-safety-osd");
+    if (existing) existing.remove();
+    const osd = document.createElement("div");
+    osd.id = "x-ops-safety-osd";
+    osd.style.cssText = `
+        position: absolute;
+        background: rgba(43, 45, 49, 0.95);
+        color: #fff;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(255,140,0,0.4);
+        pointer-events: none;
+        z-index: 2147483647;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    osd.textContent = "\u{1F4A1} Ctrl+Enter \u3067\u9001\u4FE1";
+    const rect = target.getBoundingClientRect();
+    osd.style.top = `${window.scrollY + rect.bottom - 25}px`;
+    osd.style.left = `${window.scrollX + rect.right - 120}px`;
+    document.body.appendChild(osd);
+    requestAnimationFrame(() => {
+      osd.style.opacity = "1";
+      setTimeout(() => {
+        osd.style.opacity = "0";
+        setTimeout(() => osd.remove(), 200);
+      }, 1500);
+    });
+  }
+  function handleSafetyEnter(event) {
+    if (isOrphan()) return;
+    if (!isSafetyEnterEnabled) return;
+    if (event.key !== "Enter") return;
+    if (event.isComposing || event.keyCode === 229) return;
+    const target = event.target;
+    if (!target) return;
+    const isTextarea = target.tagName === "TEXTAREA";
+    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
+    if (!isTextarea && !isContentEditable) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+    event.stopPropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    showSafetyEnterOSD(target);
+    document.execCommand("insertText", false, "\n");
+    target.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+    setTimeout(() => {
+      if (typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }, 0);
+  }
   function keydownHandler(event) {
     if (isOrphan()) return;
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
@@ -669,6 +729,7 @@
       return;
     }
   }
+  window.addEventListener("keydown", handleSafetyEnter, true);
   window.addEventListener("keydown", keydownHandler, { capture: true });
   safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     isWalkerMode = !!result[STORAGE_KEY];
@@ -684,6 +745,12 @@
     }
     if (BLOCKER_KEY in changes) {
       applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    }
+    if ("alm" in changes) {
+      const alm = changes["alm"].newValue;
+      if (alm && alm.safetyEnter !== void 0) {
+        isSafetyEnterEnabled = alm.safetyEnter;
+      }
     }
   });
   chrome.runtime.onMessage.addListener((message) => {
@@ -723,6 +790,9 @@
       applyOneTapBlocker(!!result[BLOCKER_KEY]);
       if (result.alm && result.alm.ahkInfection !== void 0) {
         isAhkInfectionEnabled = result.alm.ahkInfection;
+      }
+      if (result.alm && result.alm.safetyEnter !== void 0) {
+        isSafetyEnterEnabled = result.alm.safetyEnter;
       }
       if (isWalkerMode) {
         setTimeout(() => {
