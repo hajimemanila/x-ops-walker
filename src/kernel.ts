@@ -697,7 +697,8 @@ function normalizeKey(event: KeyboardEvent): string {
 }
 
 // ── Chat SafetyEnter (Enter誤爆防止) ──────────────────────────────────────────
-let isSafetyEnterEnabled = true;
+let isSafetyEnterEnabled = true; // storage.onChangedで動的に書き換わる前提
+let isSynthesizing = false;
 
 function showSafetyEnterOSD(target: HTMLElement) {
     const existing = document.getElementById('x-ops-safety-osd');
@@ -705,33 +706,18 @@ function showSafetyEnterOSD(target: HTMLElement) {
 
     const osd = document.createElement('div');
     osd.id = 'x-ops-safety-osd';
-    // Shadow DOM等を使わずとも、絶対的なz-indexと固定スタイルで保護
     osd.style.cssText = `
-        position: absolute;
-        background: rgba(43, 45, 49, 0.95);
-        color: #fff;
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 4px 8px;
-        border-radius: 4px;
-        border: 1px solid rgba(255,140,0,0.4);
-        pointer-events: none;
-        z-index: 2147483647;
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
+        position: absolute; background: rgba(43, 45, 49, 0.95); color: #fff;
+        font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+        padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,140,0,0.4);
+        pointer-events: none; z-index: 2147483647; opacity: 0; transition: opacity 0.2s;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     `;
     osd.textContent = '💡 Ctrl+Enter で送信';
-
     const rect = target.getBoundingClientRect();
-    // 入力欄の右下に配置
     osd.style.top = `${window.scrollY + rect.bottom - 25}px`;
     osd.style.left = `${window.scrollX + rect.right - 120}px`;
-
     document.body.appendChild(osd);
-
-    // フェードイン＆アウト
     requestAnimationFrame(() => {
         osd.style.opacity = '1';
         setTimeout(() => {
@@ -741,55 +727,63 @@ function showSafetyEnterOSD(target: HTMLElement) {
     });
 }
 
+function triggerForcedSend(target: HTMLElement) {
+    isSynthesizing = true;
+    try {
+        const keyData = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
+        target.dispatchEvent(new KeyboardEvent('keydown', keyData));
+        target.dispatchEvent(new KeyboardEvent('keypress', keyData));
+        target.dispatchEvent(new KeyboardEvent('keyup', keyData));
+
+        setTimeout(() => {
+            const sendBtn = target.closest('form')?.querySelector('button[type="submit"]') ||
+                document.querySelector('button[data-testid="send-button"]') ||
+                document.querySelector('button[aria-label="Send Message"]');
+            if (sendBtn && !(sendBtn as HTMLButtonElement).disabled) {
+                (sendBtn as HTMLElement).click();
+            }
+        }, 50);
+    } finally {
+        setTimeout(() => { isSynthesizing = false; }, 50);
+    }
+}
+
 function handleSafetyEnter(event: KeyboardEvent) {
+    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== 'Enter') return;
+
     // P1: 亡霊チェック
     if (isOrphan()) return;
 
-    if (!isSafetyEnterEnabled) return;
-    if (event.key !== 'Enter') return;
-
-    // 【魔境の防波堤】IME変換中（日本語入力の確定）は絶対に干渉しない
+    // IME変換中は絶対不可侵
     if (event.isComposing || event.keyCode === 229) return;
-
     const target = event.target as HTMLElement;
     if (!target) return;
-
-    // 複数行入力可能なエリア（textarea または contenteditable）のみを対象とする
-    // 検索窓などの <input type="text"> は除外
     const isTextarea = target.tagName === 'TEXTAREA';
     const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
     if (!isTextarea && !isContentEditable) return;
-
-    // Ctrl / Meta (Mac) / Shift が押されている場合は透過（本来の挙動へ）
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-        return;
-        // ※ここでサイト側のネイティブなCtrl+Enter送信に任せる（透過パス）
-        // SPAの合成イベント問題を避けるため、まずは「透過」を基本戦略とする
-    }
-
-    // --- ここから下は「単なるEnter（誤爆）」のブロック処理 ---
-
+    // 【透過パス】Shift+Enter はサイト側の改行処理に任せる
+    if (event.shiftKey) return;
+    // 波状ブロック: イベント伝播を完全に遮断
     event.stopPropagation();
     event.preventDefault();
     event.stopImmediatePropagation();
+    // 【送信強制】Ctrl+Enter (または Cmd+Enter)
+    if (event.ctrlKey || event.metaKey) {
+        if (event.type === 'keydown') triggerForcedSend(target);
+        return;
+    }
+    // 【誤爆ブロック】単なる Enter (改行への変換)
+    if (event.type === 'keydown') {
+        showSafetyEnterOSD(target);
+        // ChatGPTのアドバイスを採用し、insertLineBreakを使用
+        document.execCommand('insertLineBreak');
+        target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
 
-    // 1. OSDでユーザーに通知
-    showSafetyEnterOSD(target);
-
-    // 2. Undo履歴(Ctrl+Z)を破壊せずに改行をねじ込む（非推奨APIだがこれ以外に汎用解がない）
-    document.execCommand('insertText', false, '\n');
-
-    // 3. React/Vue等の状態管理（Virtual DOM）に「入力が変わった」と錯覚させる
-    target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-
-    // 4. スクロール追従（キャレット位置を可視範囲に）
-    setTimeout(() => {
-        if (typeof target.scrollIntoView === 'function') {
-            target.scrollIntoView({ block: "nearest", inline: "nearest" });
-        }
-    }, 0);
+        setTimeout(() => {
+            if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }, 0);
+    }
 }
-
 
 
 // ── P3: メインキーダウンリスナー ──────────────────────────────────────────────
@@ -873,8 +867,12 @@ function keydownHandler(event: KeyboardEvent): void {
     }
 }
 
+// 波状ブロックの登録 (既存のkeydownHandlerより前に記述)
+window.addEventListener('keydown', handleSafetyEnter, true);
+window.addEventListener('keypress', handleSafetyEnter, true);
+window.addEventListener('keyup', handleSafetyEnter, true);
+
 // capture: true — DOMツリーのキャプチャフェーズ最上流でイベントを捕捉する
-window.addEventListener('keydown', handleSafetyEnter, true); // SafetyEnter を先頭付近で捕捉
 window.addEventListener('keydown', keydownHandler, { capture: true });
 
 

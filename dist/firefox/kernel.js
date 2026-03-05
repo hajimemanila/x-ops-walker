@@ -1666,25 +1666,17 @@
     return event.key.toLowerCase();
   }
   var isSafetyEnterEnabled = true;
+  var isSynthesizing = false;
   function showSafetyEnterOSD(target) {
     const existing = document.getElementById("x-ops-safety-osd");
     if (existing) existing.remove();
     const osd = document.createElement("div");
     osd.id = "x-ops-safety-osd";
     osd.style.cssText = `
-        position: absolute;
-        background: rgba(43, 45, 49, 0.95);
-        color: #fff;
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 4px 8px;
-        border-radius: 4px;
-        border: 1px solid rgba(255,140,0,0.4);
-        pointer-events: none;
-        z-index: 2147483647;
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
+        position: absolute; background: rgba(43, 45, 49, 0.95); color: #fff;
+        font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+        padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,140,0,0.4);
+        pointer-events: none; z-index: 2147483647; opacity: 0; transition: opacity 0.2s;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     `;
     osd.textContent = "\u{1F4A1} Ctrl+Enter \u3067\u9001\u4FE1";
@@ -1700,30 +1692,50 @@
       }, 1500);
     });
   }
+  function triggerForcedSend(target) {
+    isSynthesizing = true;
+    try {
+      const keyData = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
+      target.dispatchEvent(new KeyboardEvent("keydown", keyData));
+      target.dispatchEvent(new KeyboardEvent("keypress", keyData));
+      target.dispatchEvent(new KeyboardEvent("keyup", keyData));
+      setTimeout(() => {
+        const sendBtn = target.closest("form")?.querySelector('button[type="submit"]') || document.querySelector('button[data-testid="send-button"]') || document.querySelector('button[aria-label="Send Message"]');
+        if (sendBtn && !sendBtn.disabled) {
+          sendBtn.click();
+        }
+      }, 50);
+    } finally {
+      setTimeout(() => {
+        isSynthesizing = false;
+      }, 50);
+    }
+  }
   function handleSafetyEnter(event) {
+    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== "Enter") return;
     if (isOrphan()) return;
-    if (!isSafetyEnterEnabled) return;
-    if (event.key !== "Enter") return;
     if (event.isComposing || event.keyCode === 229) return;
     const target = event.target;
     if (!target) return;
     const isTextarea = target.tagName === "TEXTAREA";
     const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
     if (!isTextarea && !isContentEditable) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      return;
-    }
+    if (event.shiftKey) return;
     event.stopPropagation();
     event.preventDefault();
     event.stopImmediatePropagation();
-    showSafetyEnterOSD(target);
-    document.execCommand("insertText", false, "\n");
-    target.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
-    setTimeout(() => {
-      if (typeof target.scrollIntoView === "function") {
-        target.scrollIntoView({ block: "nearest", inline: "nearest" });
-      }
-    }, 0);
+    if (event.ctrlKey || event.metaKey) {
+      if (event.type === "keydown") triggerForcedSend(target);
+      return;
+    }
+    if (event.type === "keydown") {
+      showSafetyEnterOSD(target);
+      document.execCommand("insertLineBreak");
+      target.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      setTimeout(() => {
+        if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }, 0);
+    }
   }
   function keydownHandler(event) {
     if (isOrphan()) return;
@@ -1765,6 +1777,8 @@
     }
   }
   window.addEventListener("keydown", handleSafetyEnter, true);
+  window.addEventListener("keypress", handleSafetyEnter, true);
+  window.addEventListener("keyup", handleSafetyEnter, true);
   window.addEventListener("keydown", keydownHandler, { capture: true });
   safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     isWalkerMode = !!result[STORAGE_KEY];
