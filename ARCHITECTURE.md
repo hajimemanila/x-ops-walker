@@ -1,10 +1,32 @@
-# X-Ops Walker: Architecture & Contributor Guide (v1.3.2)
+# X-Ops Walker: Architecture & Contributor Guide (v2.0.0)
 
 このドキュメントは、X-Ops Walker の中核となるアーキテクチャ、DOM干渉の哲学、および新しいドメイン（サイト固有の挙動）を追加する際のルールを解説します。コントリビュータは、コードを追加したりIssueを立てたりする前に必ず本ドキュメントを一読してください。私たちは堅牢性とセキュリティを妥協なく追求する環境を構築しています。
 
 ---
 
-## 1. 思想：Gatekeeper と Protocol の分離
+## 1. プロジェクトのフェーズとロードマップ (Roadmap)
+
+X-Ops Walker は v1 系（システム基盤・Universal 機能の完成）を終え、いよいよ v2 系（ドメイン特化型プロトコル・Domain-Specific Protocols の実装）フェーズへ突入します。
+v2 系の最大の目標は「ドメイン特化型知能（Domain-Specific Protocols）の統合」です。
+
+- **v2.0.0**: Context-Aware UI の実装（ポップアップのドメイン適応化） ※完了済
+- **v2.1.x**: X Timeline Walker の実装（Right Column Dashboard、巡回ロジック等）
+- **v2.2.x**: Gemini Walker の実装
+- **Future**: 複雑な詳細設定の `options.html` への分離
+
+---
+
+## 2. v2系の基本方針（Architecture Principles for v2）
+
+v2 系の開発において、以下の3つの機能設計原則を厳守します。
+
+- **ルーター・パターンの徹底 (Isolation)**: `kernel.ts` は「交通整理（ルーター）」と「Universal機能（SafetyEnter等）」の実行に専念する。特定のURL（XやGeminiなど）に依存する複雑なDOM操作やロジックは絶対に `kernel.ts` に混入させず、必ず `src/protocols/` ディレクトリ配下の専用モジュール（`x-timeline.ts` 等）へ委譲・隔離する。
+- **Context-Aware UI (文脈適応型ポップアップ)**: `popup.html` および `popup.ts` は、現在アクティブなタブのURLを検知し、そのドメインに関連する設定項目（プロトコルのトグルなど）だけを動的に表示する。これによりUIの肥大化を防ぎ、ユーザーに文脈に合った操作を提供する。
+- **Storage の区画整理 (Compartmentalization)**: `chrome.storage.local` のデータ構造はドメインごとに明確に分離する。システム基盤（`alm`）と、各プロトコル専用の設定（`xWalker`, `geminiWalker` 等）が互いに干渉しないように設計する。
+
+---
+
+## 3. 思想：Gatekeeper と Protocol の分離
 X-Ops Walker は、明確に責務が分かれた3層構造を採用しています。特定のWebサイトのDOMに直接依存したダーティなハックが、他のタブやブラウザ全体の安定性を損なうことを防ぐためです。
 
 - **Kernel (Gatekeeper)**: 絶対的防壁。ブラウザネイティブのイベントを最上流で奪い、安全か（入力欄ではないか等のXray-safe判定）を確認し、最適なスクロールコンテナを特定します。
@@ -13,29 +35,29 @@ X-Ops Walker は、明確に責務が分かれた3層構造を採用していま
 
 ---
 
-## 2. 次世代タブライフサイクル管理 (ALM / Smart Tab Discard)
+## 4. 次世代タブライフサイクル管理 (ALM / Smart Tab Discard)
 v1.3.2 において、拡張機能はタブのメモリライフサイクルを完全に掌握するための革新的なアプローチ（Adaptive Lifecycle Management - ALM）を確立しました。
 
-### 2.1. コア機能の名称と定義
+### 4.1. コア機能の名称と定義
 アーキテクチャおよびソースコード全体において、以下の厳密な定義を使用します。
 - **Execution Dormancy**: ブラウザ（Chromium / Firefox）が不要と判断して勝手に行う「プロセス凍結/安楽死」。これは拡張機能の JavaScript が発火しなくなる「敵」です。
 - **Smart Tab Discard**: X-Ops Walker が自らの意思とタイマーによって意図的に行う「メモリ解放（`chrome.tabs.discard`）」。我々が支配する休眠です。（旧称：Strategic Hibernation）
 - **Vital Heartbeat**: 入力中やメディア再生中等に発する「絶対生存信号」。これにより Smart Tab Discard が Veto（拒否）されます。
 
-### 2.2. Background-Driven アーキテクチャへの移行
+### 4.2. Background-Driven アーキテクチャへの移行
 初期実装では Content Script（`kernel.ts`）からの報告に依存して非アクティブ時間を記録していましたが、通信の瞬断やページロード遅延による「漏れ」が多発したため、v1.3.1 以降は **完全に Background スクリプト主導の中央集権型** へ移行しました。
 
 - **状態監視の純化**: `chrome.tabs.onActivated` と `onUpdated` を直接リッスンし、タブの遷移をブラウザネイティブAPIでミリ秒単位で捕捉します。
 - **Timer の OS 化**: `setInterval` などの不安定な仮想タイマーを廃止し、OSレベルで発火が保証される **`chrome.alarms`** へ換装しました。
 
-### 2.3. 永続化レイヤー (Persistent Storage Layer)
+### 4.3. 永続化レイヤー (Persistent Storage Layer)
 Manifest V3 (MV3) アーキテクチャにおいて、Chrome の Service Worker や Firefox の Event Page は頻繁にサスペンド（休止）されます。
 これによる `almStates` (Map) の「記憶喪失」と「タイマーリセットループ」を防ぐため、以下のロジックが組み込まれています。
 
 - すべての状態遷移（タブ切り替え、Veto等）の末尾で `saveAlmStatesToStorage()` を経由し、状態を即座に `chrome.storage.local` (JSON) へコミット。
 - Background 起動（WakeUp）の瞬間に `loadAlmStatesFromStorage()` で記憶を復元し、前回の続きから正確に猶予時間（1分/8分）を計算して Discard を完遂させます。
 
-### 2.4. ネイティブ・シンビオシス: Arrival Shock (AHK連携)
+### 4.4. ネイティブ・シンビオシス: Arrival Shock (AHK連携)
 ブラウザの深い Execution Dormancy の壁を破るため、外部ツールとの連携設計を根本から転換しました。
 定期的に ControlSend を送る「定期パルス」方式はリソースの無駄であり無力であると結論付け、**「Arrival Shock (オンデマンド覚醒)」** 方式へシフトしました。
 
@@ -44,13 +66,13 @@ Manifest V3 (MV3) アーキテクチャにおいて、Chrome の Service Worker 
 2. 0.5秒間だけ限定的に `document.title` の先頭に **`[WAKE]`** というシグナルを付与します。
 3. 外部の AHK スクリプト（Watchman Agent）が WinTitle をポーリングしており、`[WAKE]` を検知した瞬間に一度だけ「物理的な Ctrl キー空打ち」を送り込み、DOMへの完全なフォーカスを拡張機能に引き渡します。
 
-### 2.5. Command & Control (UI同期の動的化)
+### 4.5. Command & Control (UI同期の動的化)
 ポップアップUIにおける ALM 設定 (`alm.enabled`, `alm.ahkInfection`, `alm.heavyDomains`) の変更はすべて `chrome.storage.local` へ書き込まれます。
 Background および Kernel は `chrome.storage.onChanged` を通じてこの変更を即座に捉え、マスターアラームの生成/破棄や、Arrival Shock の有効/無効をリアルタイムに切り替えます。
 
 ---
 
-## 3. システム構成図 (Mermaid)
+## 5. システム構成図 (Mermaid)
 
 ```mermaid
 graph TD
@@ -76,7 +98,7 @@ graph TD
 
 ---
 
-## 4. ディレクトリ構造と各ファイルの役割
+## 6. ディレクトリ構造と各ファイルの役割
 
 ```plaintext
 src/
@@ -85,15 +107,14 @@ src/
  │    ├── router.ts          # 【ルーター】URLベースのプロトコル切り替え
  │    └── protocols/         # 【振る舞い】サイトごとの個別ロジック
  │         ├── base.ts       # デフォルトの汎用アクション (W/S/A/D/Z等)
- │         ├── ai-chat.ts    # AIチャット専用 (Gemini, ChatGPT等) の最適化
- │         ├── (将来の追加ドメイン: x-timeline.ts 等)
- │         ├── base.ts       # デフォルトの汎用アクション
+ │         ├── safety-enter.ts # 【Middleware】Chat SafetyEnter
+ │         ├── x-timeline.ts # 【ドメイン等化】X Timeline Walker (v2.1)
+ │         ├── gemini-walker.ts # 【ドメイン等化】Gemini Walker (v2.2)
  │         └── ai-chat.ts    # AIチャット専用の最適化
  ├── background.ts           # 【中枢】状態管理・ALM・Smart Tab Discard監視
  ├── popup.ts                # 【UI】Command & Control ロジック
  └── options/                # 詳細設定ページ
 ```
-
 
 ### 🛡️ [kernel.ts](file:///c:/Users/Predator/Desktop/FoxWalkerExt/src/kernel.ts) (The Gatekeeper)
 ブラウザのEvent Captureフェーズの最上流（`window.addEventListener(..., {capture: true})`）に常駐し、SPAの独自リスナーよりも**先**にキーボードイベントを捕捉します。
@@ -127,7 +148,7 @@ src/
 
 ---
 
-## 3. 現在のキーバインド一覧 (Base Protocol)
+## 7. 現在のキーバインド一覧 (Base Protocol)
 
 以下は、いかなる特化プロトコルにも該当しない場合（[base.ts](file:///c:/Users/Predator/Desktop/FoxWalkerExt/src/protocols/base.ts)）のデフォルトマッピングです。
 
@@ -156,7 +177,7 @@ src/
 
 ---
 
-## 4. 拡張ルール：新しいドメインプロトコルを追加するには
+## 8. 拡張ルール：新しいドメインプロトコルを追加するには
 
 X.com や YouTube など、特定のサイト専用の特殊な操作（Domain Protocols）を追加する場合は、以下の厳格なルールに従ってください。
 
@@ -192,7 +213,7 @@ export class XTimelineProtocol implements DomainProtocol {
 
 ---
 
-## 5. 汎用設定（General Settings）拡張のガイドライン
+## 9. 汎用設定（General Settings）拡張のガイドライン
 
 今後プロジェクトに、特定の1つのサイトではなく、「複数のサイト」または「全サイト」にまたがって動作するような機能フラグ（例：「SafetyEnter設定」「動画倍速汎用化」など）を追加する場合のルールです。
 
@@ -206,4 +227,3 @@ export class XTimelineProtocol implements DomainProtocol {
    - 処理しなかったキーについては `false` を返し、次のプロトコル（AI Chatなど）やBaseへ流します。
 
 これにより、一切 `kernel.ts` を汚すことなく、強力な汎用機能を全ドメインに安全にデプロイし、トグル可能にすることができます。プラグインのように扱ってください。
-

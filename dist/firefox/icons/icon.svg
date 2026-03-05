@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background -->
+  <rect width="128" height="128" rx="20" fill="#12121C"/>
+  
+  <!-- Fox ears (orange triangles) -->
+  <polygon points="20,60 38,10 56,55" fill="#FF8C00"/>
+  <polygon points="72,55 90,10 108,60" fill="#FF8C00"/>
+  <!-- Inner ears -->
+  <polygon points="26,55 38,20 50,52" fill="#FFB347"/>
+  <polygon points="78,52 90,20 102,55" fill="#FFB347"/>
+  
+  <!-- Fox head -->
+  <ellipse cx="64" cy="80" rx="42" ry="36" fill="#FF8C00"/>
+  
+  <!-- White muzzle area -->
+  <ellipse cx="64" cy="92" rx="22" ry="18" fill="#FFF5E6"/>
+  
+  <!-- Eyes -->
+  <ellipse cx="48" cy="72" rx="7" ry="8" fill="#1A1A2E"/>
+  <ellipse cx="80" cy="72" rx="7" ry="8" fill="#1A1A2E"/>
+  <!-- Eye shine -->
+  <circle cx="51" cy="69" r="2.5" fill="white"/>
+  <circle cx="83" cy="69" r="2.5" fill="white"/>
+  
+  <!-- Nose -->
+  <ellipse cx="64" cy="86" rx="5" ry="3.5" fill="#1A1A2E"/>
+  
+  <!-- Mouth -->
+  <path d="M57 92 Q64 98 71 92" stroke="#1A1A2E" stroke-width="2" fill="none" stroke-linecap="round"/>
+  
+  <!-- Subtle amber glow at bottom -->
+  <ellipse cx="64" cy="118" rx="30" ry="6" fill="#FF8C00" opacity="0.25"/>
+</svg>

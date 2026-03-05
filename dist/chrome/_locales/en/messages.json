@@ -1,0 +1,152 @@
+{
+    "hud_label": {
+        "message": "Walker Mode"
+    },
+    "hud_on": {
+        "message": "ON"
+    },
+    "hud_off": {
+        "message": "OFF"
+    },
+    "cs_badge": {
+        "message": "Cheatsheet"
+    },
+    "cs_section_nav": {
+        "message": "Navigation"
+    },
+    "cs_section_tab": {
+        "message": "Tab Actions (Shift + Key)"
+    },
+    "cs_section_sys": {
+        "message": "System"
+    },
+    "cs_nav_ad": {
+        "message": "Previous / Next Tab"
+    },
+    "cs_nav_space": {
+        "message": "Next Tab  ·  Shift+Space for Prev"
+    },
+    "cs_nav_ws": {
+        "message": "Scroll Up / Down"
+    },
+    "cs_nav_qe": {
+        "message": "History Back / Forward"
+    },
+    "cs_tab_xx": {
+        "message": "Close Tab"
+    },
+    "cs_tab_zz": {
+        "message": "Restore Closed Tab"
+    },
+    "cs_tab_rr": {
+        "message": "Reload Tab"
+    },
+    "cs_tab_mm": {
+        "message": "Toggle Mute"
+    },
+    "cs_tab_gg": {
+        "message": "Discard Inactive Tabs"
+    },
+    "cs_tab_tt": {
+        "message": "Close All Other Tabs"
+    },
+    "cs_tab_ww": {
+        "message": "Scroll to Top"
+    },
+    "cs_tab_ss": {
+        "message": "Scroll to Bottom"
+    },
+    "cs_tab_cc": {
+        "message": "Duplicate Tab"
+    },
+    "cs_sys_esc": {
+        "message": "Toggle Walker Mode"
+    },
+    "cs_sys_f": {
+        "message": "Toggle Cheatsheet"
+    },
+    "cs_sys_z": {
+        "message": "DOM Reset (blur focus)"
+    },
+    "cs_sys_altz": {
+        "message": "Emergency Focus Override (bypass input lock)"
+    },
+    "cs_footer": {
+        "message": "Press F or Esc to close"
+    },
+    "popup_mode_label": {
+        "message": "Walker Mode"
+    },
+    "popup_status_on": {
+        "message": "Active"
+    },
+    "popup_status_off": {
+        "message": "Inactive"
+    },
+    "popup_detail_on": {
+        "message": "Walker Mode is running"
+    },
+    "popup_detail_off": {
+        "message": "Walker Mode is paused"
+    },
+    "popup_sc_title": {
+        "message": "Keyboard Shortcuts"
+    },
+    "popup_sc_hint_before": {
+        "message": "Press"
+    },
+    "popup_sc_hint_after": {
+        "message": "on any page to open the cheatsheet"
+    },
+    "popup_footer_hint": {
+        "message": "Esc toggles Walker Mode on any page"
+    },
+    "popup_blocker_label": {
+        "message": "Block Google One Tap"
+    },
+    "popup_smart_discard_label": {
+        "message": "Smart Tab Discard"
+    },
+    "popup_ahk_reclaim_label": {
+        "message": "AHK Physical Reclaim"
+    },
+    "popup_monitored_domains_label": {
+        "message": "Monitored Domains"
+    },
+    "popup_add_to_alm": {
+        "message": "＋ Add $1 to List",
+        "placeholders": {
+            "1": {
+                "content": "$1",
+                "example": "github.com"
+            }
+        }
+    },
+    "popup_already_monitored": {
+        "message": "✓ $1 is Monitored",
+        "placeholders": {
+            "1": {
+                "content": "$1",
+                "example": "github.com"
+            }
+        }
+    },
+    "popup_safety_enter_label": {
+        "message": "Chat SafetyEnter (Block)"
+    },
+    "popup_safety_enter_desc": {
+        "message": "Prevent accidental sends with Enter"
+    },
+    "popup_advanced_settings": {
+        "message": "⚙️ Advanced Settings"
+    },
+    "protocol_x_title": {
+        "message": "X Timeline Walker"
+    },
+    "protocol_gemini_title": {
+        "message": "Gemini Walker"
+    },
+    "protocol_none_msg": {
+        "message": "No specific protocol for this site."
+    }
+}
