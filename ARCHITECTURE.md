@@ -1,30 +1,99 @@
-# X-Ops Walker: Architecture & Contributor Guide (v1.2.0)
+# X-Ops Walker: Architecture & Contributor Guide (v1.3.2)
 
 このドキュメントは、X-Ops Walker の中核となるアーキテクチャ、DOM干渉の哲学、および新しいドメイン（サイト固有の挙動）を追加する際のルールを解説します。コントリビュータは、コードを追加したりIssueを立てたりする前に必ず本ドキュメントを一読してください。私たちは堅牢性とセキュリティを妥協なく追求する環境を構築しています。
 
 ---
 
 ## 1. 思想：Gatekeeper と Protocol の分離
-X-Ops Walker (v1.2.0以降) は、単一の巨大なスクリプトではなく、明確に責務が分かれた3層構造を採用しています。特定のWebサイトのDOMに直接依存したダーティなハックが、他のタブやブラウザ全体の安定性を損なうことを防ぐためです。
+X-Ops Walker は、明確に責務が分かれた3層構造を採用しています。特定のWebサイトのDOMに直接依存したダーティなハックが、他のタブやブラウザ全体の安定性を損なうことを防ぐためです。
 
-- **Kernel (Gatekeeper)**: 絶対的防壁。ブラウザネイティブのイベントを最上流で奪い、安全か（入力欄ではないか等のXray-safe判定）を確認し、最適なスクロールコンテナを特定します。この層は**DOMの物理的状態**のみに関心を持ちます。
+- **Kernel (Gatekeeper)**: 絶対的防壁。ブラウザネイティブのイベントを最上流で奪い、安全か（入力欄ではないか等のXray-safe判定）を確認し、最適なスクロールコンテナを特定します。
 - **Router (Dispatcher)**: 現在のURLを見て、どの Protocol に処理を任せるかを決める交通整理役です。
 - **Protocols (Actions)**: 「Wを押したらスクロールする」「特定のサイトでZを押したら一番下に移動する」といった、具体的な振る舞いの定義（ロジック層）です。
 
 ---
 
-## 2. ディレクトリ構造と各ファイルの役割
+## 2. 次世代タブライフサイクル管理 (ALM / Smart Tab Discard)
+v1.3.2 において、拡張機能はタブのメモリライフサイクルを完全に掌握するための革新的なアプローチ（Adaptive Lifecycle Management - ALM）を確立しました。
+
+### 2.1. コア機能の名称と定義
+アーキテクチャおよびソースコード全体において、以下の厳密な定義を使用します。
+- **Execution Dormancy**: ブラウザ（Chromium / Firefox）が不要と判断して勝手に行う「プロセス凍結/安楽死」。これは拡張機能の JavaScript が発火しなくなる「敵」です。
+- **Smart Tab Discard**: X-Ops Walker が自らの意思とタイマーによって意図的に行う「メモリ解放（`chrome.tabs.discard`）」。我々が支配する休眠です。（旧称：Strategic Hibernation）
+- **Vital Heartbeat**: 入力中やメディア再生中等に発する「絶対生存信号」。これにより Smart Tab Discard が Veto（拒否）されます。
+
+### 2.2. Background-Driven アーキテクチャへの移行
+初期実装では Content Script（`kernel.ts`）からの報告に依存して非アクティブ時間を記録していましたが、通信の瞬断やページロード遅延による「漏れ」が多発したため、v1.3.1 以降は **完全に Background スクリプト主導の中央集権型** へ移行しました。
+
+- **状態監視の純化**: `chrome.tabs.onActivated` と `onUpdated` を直接リッスンし、タブの遷移をブラウザネイティブAPIでミリ秒単位で捕捉します。
+- **Timer の OS 化**: `setInterval` などの不安定な仮想タイマーを廃止し、OSレベルで発火が保証される **`chrome.alarms`** へ換装しました。
+
+### 2.3. 永続化レイヤー (Persistent Storage Layer)
+Manifest V3 (MV3) アーキテクチャにおいて、Chrome の Service Worker や Firefox の Event Page は頻繁にサスペンド（休止）されます。
+これによる `almStates` (Map) の「記憶喪失」と「タイマーリセットループ」を防ぐため、以下のロジックが組み込まれています。
+
+- すべての状態遷移（タブ切り替え、Veto等）の末尾で `saveAlmStatesToStorage()` を経由し、状態を即座に `chrome.storage.local` (JSON) へコミット。
+- Background 起動（WakeUp）の瞬間に `loadAlmStatesFromStorage()` で記憶を復元し、前回の続きから正確に猶予時間（1分/8分）を計算して Discard を完遂させます。
+
+### 2.4. ネイティブ・シンビオシス: Arrival Shock (AHK連携)
+ブラウザの深い Execution Dormancy の壁を破るため、外部ツールとの連携設計を根本から転換しました。
+定期的に ControlSend を送る「定期パルス」方式はリソースの無駄であり無力であると結論付け、**「Arrival Shock (オンデマンド覚醒)」** 方式へシフトしました。
+
+**Mechanism:**
+1. ユーザーが Discard されたタブを開き、再読み込みが走り、`kernel.ts` が起動 (Pure Rebirth) した瞬間。
+2. 0.5秒間だけ限定的に `document.title` の先頭に **`[WAKE]`** というシグナルを付与します。
+3. 外部の AHK スクリプト（Watchman Agent）が WinTitle をポーリングしており、`[WAKE]` を検知した瞬間に一度だけ「物理的な Ctrl キー空打ち」を送り込み、DOMへの完全なフォーカスを拡張機能に引き渡します。
+
+### 2.5. Command & Control (UI同期の動的化)
+ポップアップUIにおける ALM 設定 (`alm.enabled`, `alm.ahkInfection`, `alm.heavyDomains`) の変更はすべて `chrome.storage.local` へ書き込まれます。
+Background および Kernel は `chrome.storage.onChanged` を通じてこの変更を即座に捉え、マスターアラームの生成/破棄や、Arrival Shock の有効/無効をリアルタイムに切り替えます。
+
+---
+
+## 3. システム構成図 (Mermaid)
+
+```mermaid
+graph TD
+    UI[Popup UI / Options] <-->|chrome.storage.local| Storage[(Persistent Storage)]
+    
+    subgraph Background [Background / Event Page]
+        BG_Alm[ALM Manager] <--> Storage
+        BG_Timer((chrome.alarms)) -->|Tick| BG_Alm
+        TabEvents((tabs.onActivated / onUpdated)) --> BG_Alm
+    end
+    
+    subgraph Kernel [Content Script: kernel.ts]
+        Router[Router / Protocols]
+        Events((DOM Events)) --> Router
+        Router -->|Heartbeat / Veto| BG_Alm
+        Router -->|Arrival Shock| Title([document.title = WAKE])
+    end
+    
+    Title -.->|WinTitle Polling| AHK[AHK Watchman Agent]
+    AHK -.->|Ctrl Key| Events
+    BG_Alm -->|tabs.discard| Kernel
+```
+
+---
+
+## 4. ディレクトリ構造と各ファイルの役割
 
 ```plaintext
 src/
  ├── content/
- │    ├── kernel.ts          # 【コア】防壁・探知エンジン・UIフック
+ │    ├── kernel.ts          # 【コア】防壁エンジン・Arrival Shock
  │    ├── router.ts          # 【ルーター】URLベースのプロトコル切り替え
  │    └── protocols/         # 【振る舞い】サイトごとの個別ロジック
  │         ├── base.ts       # デフォルトの汎用アクション (W/S/A/D/Z等)
  │         ├── ai-chat.ts    # AIチャット専用 (Gemini, ChatGPT等) の最適化
- │         └── (将来の追加ドメイン: x-timeline.ts 等)
+ │         ├── (将来の追加ドメイン: x-timeline.ts 等)
+ │         ├── base.ts       # デフォルトの汎用アクション
+ │         └── ai-chat.ts    # AIチャット専用の最適化
+ ├── background.ts           # 【中枢】状態管理・ALM・Smart Tab Discard監視
+ ├── popup.ts                # 【UI】Command & Control ロジック
+ └── options/                # 詳細設定ページ
 ```
+
 
 ### 🛡️ [kernel.ts](file:///c:/Users/Predator/Desktop/FoxWalkerExt/src/kernel.ts) (The Gatekeeper)
 ブラウザのEvent Captureフェーズの最上流（`window.addEventListener(..., {capture: true})`）に常駐し、SPAの独自リスナーよりも**先**にキーボードイベントを捕捉します。
@@ -137,3 +206,4 @@ export class XTimelineProtocol implements DomainProtocol {
    - 処理しなかったキーについては `false` を返し、次のプロトコル（AI Chatなど）やBaseへ流します。
 
 これにより、一切 `kernel.ts` を汚すことなく、強力な汎用機能を全ドメインに安全にデプロイし、トグル可能にすることができます。プラグインのように扱ってください。
+
