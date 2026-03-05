@@ -136,6 +136,11 @@
     }
   };
 
+  // src/protocols/x-timeline.ts
+  function initXWalker() {
+    console.log("[X-Ops Walker] \u{1F43A} X Timeline Walker Protocol Initialized.");
+  }
+
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
   router.register(new AiChatProtocol());
@@ -761,6 +766,15 @@
     hud.setState(isWalkerMode);
     applyOneTapBlocker(!!result[BLOCKER_KEY]);
   });
+  var currentHost = window.location.hostname;
+  if (currentHost === "x.com" || currentHost === "twitter.com") {
+    safeStorageGet(["xWalker"], (res) => {
+      const xWalker = res.xWalker ?? { enabled: true };
+      if (xWalker.enabled) {
+        initXWalker();
+      }
+    });
+  }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (STORAGE_KEY in changes) {

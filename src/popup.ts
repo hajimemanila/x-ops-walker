@@ -122,7 +122,7 @@ async function init(): Promise<void> {
     scHint.appendChild(afterText);
 
     // Walker Mode の初期状態読み込み
-    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, 'alm']);
+    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, 'alm', 'xWalker']);
     updateUI(!!result[STORAGE_KEY]);
     updateBlockerUI(!!result[BLOCKER_KEY]); // デフォルト false (OFF)
 
@@ -131,6 +131,13 @@ async function init(): Promise<void> {
     updateMiniToggle('alm-master-toggle', almConfig.enabled);
     updateMiniToggle('alm-ahk-toggle', almConfig.ahkInfection);
     updateMiniToggle('alm-safety-toggle', !!almConfig.safetyEnter);
+
+    // プロトコル xWalker の初期状態読み込み
+    const xWalkerConfig = result.xWalker ?? { enabled: true };
+    const protocolXToggle = document.getElementById('toggle-protocol-x');
+    if (protocolXToggle) {
+        updateMiniToggle('toggle-protocol-x', xWalkerConfig.enabled);
+    }
 
     // Dynamic Domain Button の初期化
     const domainBtn = document.getElementById('dynamic-domain-btn')!;
@@ -210,6 +217,17 @@ async function init(): Promise<void> {
         await chrome.storage.local.set({ alm: conf });
         updateMiniToggle('alm-safety-toggle', !!conf.safetyEnter);
     });
+
+    // X Timeline Protocol トグル
+    if (protocolXToggle) {
+        protocolXToggle.addEventListener('click', async () => {
+            const res = await chrome.storage.local.get('xWalker');
+            const conf = res.xWalker ?? { enabled: true };
+            conf.enabled = !conf.enabled;
+            await chrome.storage.local.set({ xWalker: conf });
+            updateMiniToggle('toggle-protocol-x', conf.enabled);
+        });
+    }
 
     // Dynamic Domain トグルボタン
     domainBtn.addEventListener('click', async () => {

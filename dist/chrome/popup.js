@@ -100,13 +100,18 @@
     scHint.appendChild(beforeText);
     scHint.appendChild(keyBadge);
     scHint.appendChild(afterText);
-    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, "alm"]);
+    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, "alm", "xWalker"]);
     updateUI(!!result[STORAGE_KEY]);
     updateBlockerUI(!!result[BLOCKER_KEY]);
     const almConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
     updateMiniToggle("alm-ahk-toggle", almConfig.ahkInfection);
     updateMiniToggle("alm-safety-toggle", !!almConfig.safetyEnter);
+    const xWalkerConfig = result.xWalker ?? { enabled: true };
+    const protocolXToggle = document.getElementById("toggle-protocol-x");
+    if (protocolXToggle) {
+      updateMiniToggle("toggle-protocol-x", xWalkerConfig.enabled);
+    }
     const domainBtn = document.getElementById("dynamic-domain-btn");
     let currentHostname = "";
     try {
@@ -167,6 +172,15 @@
       await chrome.storage.local.set({ alm: conf });
       updateMiniToggle("alm-safety-toggle", !!conf.safetyEnter);
     });
+    if (protocolXToggle) {
+      protocolXToggle.addEventListener("click", async () => {
+        const res = await chrome.storage.local.get("xWalker");
+        const conf = res.xWalker ?? { enabled: true };
+        conf.enabled = !conf.enabled;
+        await chrome.storage.local.set({ xWalker: conf });
+        updateMiniToggle("toggle-protocol-x", conf.enabled);
+      });
+    }
     domainBtn.addEventListener("click", async () => {
       if (!currentHostname) return;
       const res = await chrome.storage.local.get("alm");

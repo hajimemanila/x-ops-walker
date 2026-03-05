@@ -10,6 +10,7 @@
 import { WalkerRouter } from './router';
 import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
+import { initXWalker } from './protocols/x-timeline';
 
 const router = new WalkerRouter(new BaseProtocol());
 router.register(new AiChatProtocol());
@@ -897,6 +898,17 @@ safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
     hud.setState(isWalkerMode);
     applyOneTapBlocker(!!result[BLOCKER_KEY]);
 });
+
+// ── X Timeline Walker (v2.1) 初期化判定 ──────────────────────────────────────
+const currentHost = window.location.hostname;
+if (currentHost === 'x.com' || currentHost === 'twitter.com') {
+    safeStorageGet(['xWalker'], (res) => {
+        const xWalker = (res.xWalker as { enabled?: boolean }) ?? { enabled: true };
+        if (xWalker.enabled) {
+            initXWalker();
+        }
+    });
+}
 
 // ── P2: ストレージ変更監視 ───────────────────────────────────────────────────
 // 2つの役割を担う:
