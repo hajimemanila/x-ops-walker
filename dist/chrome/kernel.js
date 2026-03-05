@@ -695,11 +695,6 @@
     }
     if (event.type === "keydown") {
       showSafetyEnterOSD(target);
-      document.execCommand("insertLineBreak");
-      target.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
-      setTimeout(() => {
-        if (typeof target.scrollIntoView === "function") target.scrollIntoView({ block: "nearest", inline: "nearest" });
-      }, 0);
     }
   }
   function keydownHandler(event) {

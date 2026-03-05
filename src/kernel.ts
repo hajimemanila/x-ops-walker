@@ -772,16 +772,9 @@ function handleSafetyEnter(event: KeyboardEvent) {
         if (event.type === 'keydown') triggerForcedSend(target);
         return;
     }
-    // 【誤爆ブロック】単なる Enter (改行への変換)
     if (event.type === 'keydown') {
         showSafetyEnterOSD(target);
-        // ChatGPTのアドバイスを採用し、insertLineBreakを使用
-        document.execCommand('insertLineBreak');
-        target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-
-        setTimeout(() => {
-            if (typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: "nearest", inline: "nearest" });
-        }, 0);
+        // 意図的な虚無（改行処理もinputディスパッチも行わない）
     }
 }
 
