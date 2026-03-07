@@ -35,9 +35,42 @@ let isDashboardEnabled = false;
 let heartbeatId: ReturnType<typeof setInterval> | null = null;
 let syncFrame: number | null = null;
 
+// ── 🐺 Walker States & Config ──
+const CONFIG = {
+    skipReposts: true,
+    skipAds: true,
+    scrollOffset: -150,
+    colors: { recent: '#00ba7c', old: '#ffd400', ancient: '#f4212e', copied: 'rgba(0, 255, 255, 0.2)' },
+    zenOpacity: 0.5,
+    longPressDelay: 400
+};
+
+let isActive = false;
+let currentIndex = -1;
+let targetArticles: HTMLElement[] = [];
+let backspaceTimer: number | null = null;
+let isBackspaceHeld = false;
+let originalTitle = "";
+let isCheatSheetVisible = false;
+
+// 安全なCSS注入（クラッシュ防止）
+function injectWalkerCSS() {
+    if (document.getElementById('x-walker-style')) return;
+    const style = document.createElement('style');
+    style.id = 'x-walker-style';
+    style.textContent = `
+        body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        body.x-walker-active article[data-testid="tweet"].x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
+    `;
+    if (document.head) document.head.appendChild(style);
+    else document.addEventListener('DOMContentLoaded', () => document.head && document.head.appendChild(style));
+}
+
 export function initXWalker(config: XWalkerConfig) {
     isDashboardEnabled = config.enabled && config.rightColumnDashboard;
     console.log('[X-Ops Walker] 🐺 X Timeline Walker Protocol Status:', isDashboardEnabled);
+
+    setWalkerState(config.enabled);
 
     if (isDashboardEnabled) {
         installDashboard();
@@ -46,11 +79,14 @@ export function initXWalker(config: XWalkerConfig) {
     }
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
+chrome.storage.onChanged.addListener((changes: any, area: string) => {
     if (area === 'local') {
         if ('xWalker' in changes) {
             const newConfig = changes.xWalker.newValue as XWalkerConfig;
             isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
+
+            setWalkerState(newConfig.enabled);
+
             if (isDashboardEnabled) {
                 installDashboard();
             } else {
@@ -63,15 +99,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
 });
 
+// ── Dashboard Logic ──
 function installDashboard() {
-    // 0. 重複起動を防ぐための完全クリーンアップ
     removeDashboard();
-
-    // 1. Heartbeat (setInterval): 500msごとにDOMの生存を確認し、必要なら蘇生させる
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
-
-    // 2. Smooth Sync (requestAnimationFrame): 描画フレーム同期
     startSync();
 }
 
@@ -91,11 +123,9 @@ function removeDashboard() {
     if (box) box.remove();
 }
 
-// ── 🛡️ Heartbeat: Reactの破壊から逃げ切り、安定した親を探す ──
 function maintainDOM() {
     if (!isDashboardEnabled) return;
 
-    // 1. 除外URL/モーダルフィルター (TM版ロジック準拠)
     const path = window.location.pathname;
     const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
     const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
@@ -107,10 +137,8 @@ function maintainDOM() {
     }
 
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    // サイドバーが見つからない場合は、このサイクルは終了（Heartbeatが次のチャンスを待つ）
     if (!sidebar) return;
 
-    // Spacerの確保
     let spacer = document.getElementById('x-ops-dashboard-spacer');
     if (!spacer) {
         spacer = document.createElement('div');
@@ -123,48 +151,38 @@ function maintainDOM() {
         spacer.style.pointerEvents = 'none';
     }
 
-    // 2. Smart Pillar: 兄弟要素の出現でコンテナ境界を検知（自身を除外）
     const searchBar = sidebar.querySelector('[role="search"]');
 
     if (spacer && searchBar) {
         let target = searchBar as Element;
         let depth = 0;
-
-        // 検索窓から上に辿り、兄弟要素（トレンドやおすすめユーザー等）を持つ大枠コンテナを見つける
-        // サイドバーの内側コンテナ(sidebarWrapper)を超えないようにガード
         const sidebarWrapper = sidebar.firstElementChild || sidebar;
 
         while (target.parentElement && target.parentElement !== sidebarWrapper && depth < 10) {
-            // 自分自身(spacer)を除外して兄弟要素を数える（無限ループと自作自演防止の要）
             const siblings = Array.from(target.parentElement.children).filter(el => el.id !== 'x-ops-dashboard-spacer');
-
             if (siblings.length > 1) {
-                break; // ここが「検索ブロック」と「他のブロック」の境界線
+                break;
             }
             target = target.parentElement as Element;
             depth++;
         }
 
-        // 見つけた検索ブロックの直後(after)に「見えない柱」を立て、後続コンテンツを押し下げる
         if (target && target.parentElement && target.nextSibling !== spacer) {
             target.after(spacer);
             console.log('[X-Ops Walker] Dashboard spacer secured via Smart Pillar (depth:', depth, ')');
         }
     } else if (spacer && !spacer.isConnected) {
-        // 検索窓がない場合のフォールバック（一番上）
         const wrapper = sidebar.firstElementChild || sidebar;
         if (wrapper.firstChild !== spacer) {
             wrapper.insertBefore(spacer, wrapper.firstChild);
         }
     }
 
-    // Box(UI)の維持
     let box = document.getElementById('x-ops-dashboard-box');
     if (!box) {
         box = document.createElement('div');
         box.id = 'x-ops-dashboard-box';
 
-        // Glassmorphism デザイン
         Object.assign(box.style, {
             position: 'fixed',
             zIndex: '9999',
@@ -176,12 +194,12 @@ function maintainDOM() {
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
             overflow: 'hidden',
             pointerEvents: 'auto',
-            display: 'none', // 初期は隠し、sync() で位置確定後に表示する
-            opacity: '1' // opacity 0 で残らないようにリセット
+            display: 'none',
+            opacity: '1'
         });
 
-        const titleText = chrome.i18n.getMessage('x_dashboard_title') || 'PHANTOM OPS DASHBOARD';
-        const statusText = chrome.i18n.getMessage('x_dashboard_status_ready') || 'SYSTEM READY';
+        const titleText = (window as any).chrome?.i18n?.getMessage('x_dashboard_title') || 'PHANTOM OPS DASHBOARD';
+        const statusText = (window as any).chrome?.i18n?.getMessage('x_dashboard_status_ready') || 'SYSTEM READY';
 
         box.innerHTML = `
             <style>
@@ -203,7 +221,6 @@ function maintainDOM() {
                 <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
             </div>
             <div id="x-ops-bookmark-container" style="max-height: 400px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
-                <!-- Bookmarks injected here -->
             </div>
             <div style="padding: 12px; text-align: center;">
                 <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
@@ -212,7 +229,6 @@ function maintainDOM() {
         document.body.appendChild(box);
         renderBookmarkList();
 
-        // --- Quick Add Logic ---
         const quickAddBtn = box.querySelector('#x-ops-quick-add') as HTMLButtonElement;
         if (quickAddBtn) {
             quickAddBtn.addEventListener('mouseover', () => {
@@ -226,9 +242,8 @@ function maintainDOM() {
 
             quickAddBtn.addEventListener('click', async () => {
                 const url = window.location.href;
-                const title = document.title.replace(/\s*\/ X$/i, '').trim(); // Remove "/ X" suffix
+                const title = document.title.replace(/\s*\/ X$/i, '').trim();
 
-                // cleanUrl implementation (compatible with options.ts)
                 const clean = (u: string) => {
                     let c = u.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
                     return c.toLowerCase().trim();
@@ -236,16 +251,14 @@ function maintainDOM() {
 
                 const cleanedUrl = clean(url);
 
-                const result = await chrome.storage.local.get(['xOpsBookmarks']);
+                const result = await (window as any).chrome.storage.local.get(['xOpsBookmarks']);
                 const bookmarks = (result.xOpsBookmarks || []) as { title: string, url: string }[];
 
-                // Duplicate check
                 if (!bookmarks.some(b => clean(b.url) === cleanedUrl)) {
                     bookmarks.push({ title: title || url, url: cleanedUrl });
-                    await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
+                    await (window as any).chrome.storage.local.set({ xOpsBookmarks: bookmarks });
                 }
 
-                // Feedback
                 const originalText = quickAddBtn.innerText;
                 quickAddBtn.innerText = 'ADDED!';
                 quickAddBtn.style.color = '#00ba7c';
@@ -262,12 +275,10 @@ function maintainDOM() {
     updateTargetHighlight();
 }
 
-// ── 📐 Smooth Sync: requestAnimationFrame による滑らかな座標追従 ──
 function startSync() {
     function sync() {
         if (!isDashboardEnabled) return;
 
-        // 除外URL/モーダルフィルター (syncループ内でもチェックし、表示を即座に消す)
         const path = window.location.pathname;
         const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
         const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
@@ -282,18 +293,15 @@ function startSync() {
         const spacer = document.getElementById('x-ops-dashboard-spacer');
         const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
 
-        // プロトタイプの堅牢性への回帰: spacer が接続されていれば「確実に表示」する
         if (spacer && box && sidebar && spacer.isConnected) {
             if (box.style.display !== 'block') box.style.display = 'block';
 
             const spacerRect = spacer.getBoundingClientRect();
             const boxHeight = box.offsetHeight;
 
-            // 柱の高さを維持
             const newSpacerHeight = (boxHeight + 10) + 'px';
             if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
 
-            // 幅が取得できている場合のみ横位置を更新
             if (spacerRect.width > 0) {
                 const newWidth = spacerRect.width + 'px';
                 if (box.style.width !== newWidth) box.style.width = newWidth;
@@ -301,13 +309,11 @@ function startSync() {
                 const newLeft = spacerRect.left + 'px';
                 if (box.style.left !== newLeft) box.style.left = newLeft;
             } else if (!box.style.left) {
-                // 初回起動時などで幅が0の場合の「左上飛翔バグ」防止用フェイルセーフ
                 const sidebarRect = sidebar.getBoundingClientRect();
                 box.style.left = sidebarRect.left + 'px';
                 box.style.width = sidebarRect.width + 'px';
             }
 
-            // 究極の解決策: UIの縦位置は検索窓の物理座標(bottom)にロックする
             let newTop = '';
             const searchBar = sidebar.querySelector('[role="search"]');
             if (searchBar) {
@@ -320,7 +326,6 @@ function startSync() {
             if (box.style.top !== newTop) box.style.top = newTop;
 
         } else if (box) {
-            // spacerが存在しない、またはDOMツリーから切断された場合のみ隠す
             if (box.style.display !== 'none') box.style.display = 'none';
         }
 
@@ -329,17 +334,15 @@ function startSync() {
     syncFrame = requestAnimationFrame(sync);
 }
 
-// ── 🔖 Bookmark Rendering & Smart Star ──
 async function renderBookmarkList() {
     const container = document.getElementById('x-ops-bookmark-container');
     if (!container) return;
 
-    const result = await chrome.storage.local.get(['xOpsBookmarks']);
+    const result = await (window as any).chrome.storage.local.get(['xOpsBookmarks']);
     const bookmarks = (result.xOpsBookmarks || []) as Bookmark[];
 
     container.innerHTML = '';
 
-    // Automatic Profile Entry
     const profileUrl = getMyProfileUrl();
     container.appendChild(createBookmarkItem("My Profile (自分のプロフィール)", profileUrl));
 
@@ -362,7 +365,6 @@ function createBookmarkItem(title: string, url: string): HTMLElement {
     star.className = 'x-ops-bm-star';
     star.textContent = '☆';
 
-    // プロトタイプのDOM読み取りロジックを活かすため、必ず絶対URLにする
     const absoluteUrl = url.startsWith('http') ? url : 'https://' + url;
 
     item.onclick = (e) => {
@@ -373,15 +375,14 @@ function createBookmarkItem(title: string, url: string): HTMLElement {
     const link = document.createElement('a');
     link.className = 'x-ops-bm-link';
     link.textContent = title;
-    link.href = absoluteUrl; // ここを絶対URLでセット
+    link.href = absoluteUrl;
     link.onclick = (e) => e.preventDefault();
 
     const highlights = getHighlights();
-    // プロトタイプと同じく、判定には raw url ではなく cleanUrl を使う
     const cleanUrlStr = cleanUrl(url);
-    const isActive = highlights[cleanUrlStr];
+    const isActiveHighlight = highlights[cleanUrlStr];
 
-    if (isActive) {
+    if (isActiveHighlight) {
         item.classList.add('active');
     }
 
@@ -397,7 +398,7 @@ function createBookmarkItem(title: string, url: string): HTMLElement {
         saveHighlight(cleanUrlStr, newState);
 
         star.classList.remove('popping');
-        void star.offsetWidth; // Trigger reflow
+        void star.offsetWidth;
         star.classList.add('popping');
     };
 
@@ -423,7 +424,7 @@ function updateTargetHighlight() {
     });
 }
 
-// ── ⌨️ Dashboard Hotkey Listeners ──
+// ── ⌨️ Global Event Listeners & Hotkeys ──
 function isInputActive(): boolean {
     const activeEl = document.activeElement;
     if (!activeEl) return false;
@@ -431,23 +432,67 @@ function isInputActive(): boolean {
 }
 
 window.addEventListener('keydown', (e) => {
-    if (!isDashboardEnabled) return;
     if (isInputActive()) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
 
-    switch (e.code) {
-        case 'KeyN':
-            e.preventDefault();
-            window.dispatchEvent(new CustomEvent('x-ops-toggle-star'));
-            break;
-        case 'KeyM':
-            e.preventDefault();
-            window.dispatchEvent(new CustomEvent('x-ops-next-star'));
-            break;
-        case 'KeyY':
-            e.preventDefault();
-            window.dispatchEvent(new CustomEvent('x-ops-go-profile'));
-            break;
+    // Cheat sheet closure highest priority
+    if (isCheatSheetVisible && e.code !== 'KeyH') {
+        e.preventDefault();
+        toggleCheatSheet();
+        return;
+    }
+
+    if (e.code === 'KeyH') {
+        if (!isActive && !isDashboardEnabled) return;
+        e.preventDefault();
+        toggleCheatSheet();
+        return;
+    }
+
+    // Dashboard / Smart Star keys (M, N, Y)
+    if (isDashboardEnabled && ['KeyN', 'KeyM', 'KeyY'].includes(e.code)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.code === 'KeyN') window.dispatchEvent(new CustomEvent('x-ops-toggle-star'));
+        if (e.code === 'KeyM') window.dispatchEvent(new CustomEvent('x-ops-next-star'));
+        if (e.code === 'KeyY') window.dispatchEvent(new CustomEvent('x-ops-go-profile'));
+        return;
+    }
+
+    // Walker keys (J, K, L, O, Backspace)
+    if (isActive && ['KeyJ', 'KeyK', 'KeyL', 'KeyO', 'Backspace'].includes(e.code)) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (e.code === 'KeyK') { resyncCurrentIndex(); focusArticle(currentIndex - 1); }
+        if (e.code === 'KeyJ') { resyncCurrentIndex(); focusArticle(currentIndex + 1); }
+        if (e.code === 'KeyL') { executeAction('like'); }
+        if (e.code === 'KeyO') { executeAction('repost'); }
+        if (e.code === 'Backspace') {
+            if (e.repeat) return;
+            startDRSDelete();
+        }
+        return;
+    }
+}, true);
+
+window.addEventListener('keyup', (e) => {
+    if (!isActive) return;
+    if (isInputActive()) return;
+
+    if (e.code === 'Backspace') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        isBackspaceHeld = false;
+        if (backspaceTimer !== null) {
+            clearTimeout(backspaceTimer);
+            backspaceTimer = null;
+        }
+
+        if (document.title === "⚠️ DRS ACTIVE ⚠️") {
+            document.title = originalTitle;
+        }
     }
 }, true);
 
@@ -481,8 +526,6 @@ window.addEventListener('x-ops-next-star', () => {
     let currentIdx = targets.findIndex(url => cleanUrl(url) === currentPath);
     let nextUrl: string | null = null;
 
-    // SCENARIO 1: Current page IS starred.
-    // Action: Move to the NEXT sequential bookmark in the list (skip own profile).
     if (currentIdx !== -1 && highlights[cleanUrl(targets[currentIdx])]) {
         let i = 1;
         while (i < targets.length) {
@@ -494,15 +537,11 @@ window.addEventListener('x-ops-next-star', () => {
             }
             i++;
         }
-    }
-    // SCENARIO 2: Current page is NOT starred.
-    // Action: Jump to the existing starred bookmark.
-    else {
+    } else {
         let starredIdx = targets.findIndex(url => highlights[cleanUrl(url)]);
         if (starredIdx !== -1) {
             nextUrl = targets[starredIdx];
         } else {
-            // SCENARIO 3: No stars exist at all. Fallback to just moving to the next item.
             let i = 1;
             while (i < targets.length) {
                 let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
@@ -517,10 +556,8 @@ window.addEventListener('x-ops-next-star', () => {
     }
 
     if (nextUrl && cleanUrl(nextUrl) !== currentPath) {
-        // === SMART STAR PROCESS (Transfer Star) ===
         let modified = false;
 
-        // 1. Unstar the origin
         if (currentIdx !== -1) {
             const originUrl = targets[currentIdx];
             if (cleanUrl(originUrl) !== myProfilePath && highlights[cleanUrl(originUrl)]) {
@@ -529,13 +566,11 @@ window.addEventListener('x-ops-next-star', () => {
             }
         }
 
-        // 2. Star the destination
         if (cleanUrl(nextUrl) !== myProfilePath && !highlights[cleanUrl(nextUrl)]) {
             highlights[cleanUrl(nextUrl)] = true;
             modified = true;
         }
 
-        // 3. Save synchronously and Execute Jump
         if (modified) {
             localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(highlights));
         }
@@ -546,3 +581,218 @@ window.addEventListener('x-ops-next-star', () => {
 window.addEventListener('x-ops-go-profile', () => {
     window.location.href = getMyProfileUrl();
 });
+
+window.addEventListener('x-ops-global-reset', () => {
+    if (!isActive) return;
+    forceClearFocus();
+    currentIndex = -1;
+});
+
+
+// ── 🐺 Timeline Walker Core Logic ──
+function setWalkerState(enabled: boolean) {
+    if (isActive === enabled) return;
+    isActive = enabled;
+
+    if ((window as any).PhantomUI) {
+        (window as any).PhantomUI.update(enabled);
+    }
+
+    if (isActive) {
+        injectWalkerCSS();
+        document.body.classList.add('x-walker-active');
+        updateTargets();
+        if (window.scrollY < 200) currentIndex = -1; else findClosestIndex();
+    } else {
+        document.body.classList.remove('x-walker-active');
+        forceClearFocus();
+        currentIndex = -1;
+        targetArticles = [];
+    }
+}
+
+function forceClearFocus() {
+    document.querySelectorAll('.x-walker-focused').forEach(el => {
+        el.classList.remove('x-walker-focused');
+        (el as HTMLElement).style.boxShadow = '';
+    });
+}
+
+function findClosestIndex() {
+    if (targetArticles.length === 0) return;
+    let minDiff = Infinity; let bestIdx = 0;
+    const center = window.scrollY + (window.innerHeight * 0.20);
+    targetArticles.forEach((article, i) => {
+        if (!article.isConnected) return;
+        const rect = article.getBoundingClientRect();
+        const diff = Math.abs(center - (window.scrollY + rect.top + rect.height / 2));
+        if (diff < minDiff) { minDiff = diff; bestIdx = i; }
+    });
+    currentIndex = bestIdx;
+}
+
+function updateTargets() {
+    if (document.hidden) { targetArticles = []; return; }
+    targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter(article => {
+        if (!article.isConnected) return false;
+        const text = (article as HTMLElement).innerText;
+        if (CONFIG.skipAds && (text.includes('プロモーション') || text.includes('Promoted'))) return false;
+        if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
+        return true;
+    }) as HTMLElement[];
+}
+
+function resyncCurrentIndex() {
+    const focused = document.querySelector('.x-walker-focused');
+    if (focused?.isConnected) {
+        updateTargets();
+        const newIdx = targetArticles.indexOf(focused as HTMLElement);
+        if (newIdx !== -1) { if (currentIndex !== newIdx) currentIndex = newIdx; } else findClosestIndex();
+    } else if (isActive && currentIndex !== -1) findClosestIndex();
+}
+
+function focusArticle(index: number) {
+    if (!isActive || document.hidden) return;
+    updateTargets();
+
+    if (index < 0) {
+        window.scrollBy(0, -window.innerHeight * 1.5);
+        setTimeout(() => { updateTargets(); findClosestIndex(); }, 300);
+        return;
+    }
+
+    if (targetArticles.length === 0 || index >= targetArticles.length) {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        setTimeout(() => {
+            updateTargets();
+            if (index < targetArticles.length) focusArticle(index);
+        }, 1500);
+        return;
+    }
+
+    forceClearFocus();
+    const target = targetArticles[index];
+    if (target?.isConnected) {
+        target.classList.add('x-walker-focused');
+        const color = (function (a) {
+            const t = a.querySelector('time'); if (!t) return CONFIG.colors.recent;
+            const d = (new Date().getTime() - new Date(t.getAttribute('datetime') || '').getTime()) / (86400000);
+            return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+        })(target);
+        target.style.boxShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
+        const rect = target.getBoundingClientRect();
+        window.scrollTo({ top: window.pageYOffset + rect.top - (window.innerHeight / 2) + (rect.height / 2) - CONFIG.scrollOffset, behavior: 'smooth' });
+        currentIndex = index;
+    } else findClosestIndex();
+}
+
+function flashFeedback(article: HTMLElement, color: string) {
+    if (!article?.isConnected) return;
+    const originalBg = article.style.backgroundColor; article.style.backgroundColor = color;
+    setTimeout(() => { if (article.isConnected) article.style.backgroundColor = originalBg; }, 200);
+}
+
+function waitAndClick(selector: string | (() => HTMLElement | null), callback?: (el: HTMLElement) => void) {
+    let attempts = 0; const interval = setInterval(() => {
+        const el = typeof selector === 'function' ? selector() : document.querySelector(selector) as HTMLElement;
+        if (el) { clearInterval(interval); el.click(); callback?.(el); }
+        else if (++attempts > 40) clearInterval(interval);
+    }, 50);
+}
+
+function executeAction(actionType: string) {
+    if (!isActive) return;
+    resyncCurrentIndex();
+    const article = targetArticles[currentIndex];
+    if (!article?.isConnected) return;
+
+    if (actionType === 'like') {
+        const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]') as HTMLElement;
+        if (btn) btn.click();
+        else flashFeedback(article, 'rgba(249, 24, 128, 0.1)');
+    } else if (actionType === 'repost') {
+        const btn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]') as HTMLElement;
+        if (btn) {
+            btn.click();
+            waitAndClick(btn.getAttribute('data-testid') === 'retweet' ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, 'rgba(0, 186, 124, 0.1)'));
+        }
+    }
+}
+
+function startDRSDelete() {
+    isBackspaceHeld = true;
+    resyncCurrentIndex();
+    const article = targetArticles[currentIndex];
+    if (!article) return;
+
+    originalTitle = document.title;
+    document.title = "⚠️ DRS ACTIVE ⚠️";
+
+    const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
+    if (caret) caret.click();
+
+    setTimeout(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return;
+        const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+        const deleteItem = deleteItems.find(el => el.textContent?.match(/削除|Delete/)) as HTMLElement;
+        if (deleteItem) deleteItem.click();
+    }, 100);
+
+    backspaceTimer = window.setTimeout(() => {
+        if (isBackspaceHeld) {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]') as HTMLElement;
+                if (confirmBtn) {
+                    clearInterval(interval);
+                    confirmBtn.click();
+                    flashFeedback(article, 'rgba(244, 33, 46, 0.3)');
+                    setTimeout(() => {
+                        updateTargets();
+                        if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
+                        focusArticle(currentIndex);
+                    }, 500);
+                } else if (++attempts > 40) {
+                    clearInterval(interval);
+                }
+            }, 50);
+
+            if (document.title === "⚠️ DRS ACTIVE ⚠️") document.title = originalTitle;
+            isBackspaceHeld = false;
+        }
+    }, 600);
+}
+
+function toggleCheatSheet() {
+    let sheet = document.getElementById('x-ops-cheat-sheet');
+    if (sheet) { sheet.remove(); isCheatSheetVisible = false; return; }
+
+    isCheatSheetVisible = true;
+    sheet = document.createElement('div');
+    sheet.id = 'x-ops-cheat-sheet';
+    Object.assign(sheet.style, {
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: '10000',
+        background: 'rgba(10, 10, 22, 0.9)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 140, 0, 0.3)',
+        borderRadius: '20px', padding: '30px', color: '#fff', boxShadow: '0 20px 50px rgba(0,0,0,0.8)', minWidth: '320px'
+    });
+
+    sheet.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 10px; color: #ff8c00; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;">Tactical Manual</div>
+            <div style="font-size: 18px; font-weight: 800;">X-OPS COMMANDS</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 80px 1fr; gap: 15px 20px; font-size: 14px;">
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">J / K</div> <div>Navigate Timeline</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">L / O</div> <div>Like / Repost</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">N / M</div> <div>Star Patrol (Next)</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">Y</div> <div>Go Profile</div>
+            <div style="color: #f4212e; font-weight: 800; text-align: right;">BS Hold</div> <div>DRS Delete</div>
+            <div style="color: #ff8c00; font-weight: 800; text-align: right;">H</div> <div>Toggle Manual</div>
+        </div>
+        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">CLICK ANYWHERE TO CLOSE</div>
+    `;
+    document.body.appendChild(sheet);
+    const closer = () => { sheet?.remove(); isCheatSheetVisible = false; document.removeEventListener('click', closer); };
+    setTimeout(() => document.addEventListener('click', closer), 10);
+}

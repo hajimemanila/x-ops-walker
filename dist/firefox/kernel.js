@@ -1199,9 +1199,36 @@
   var isDashboardEnabled = false;
   var heartbeatId = null;
   var syncFrame = null;
+  var CONFIG = {
+    skipReposts: true,
+    skipAds: true,
+    scrollOffset: -150,
+    colors: { recent: "#00ba7c", old: "#ffd400", ancient: "#f4212e", copied: "rgba(0, 255, 255, 0.2)" },
+    zenOpacity: 0.5,
+    longPressDelay: 400
+  };
+  var isActive = false;
+  var currentIndex = -1;
+  var targetArticles = [];
+  var backspaceTimer = null;
+  var isBackspaceHeld = false;
+  var originalTitle = "";
+  var isCheatSheetVisible = false;
+  function injectWalkerCSS() {
+    if (document.getElementById("x-walker-style")) return;
+    const style = document.createElement("style");
+    style.id = "x-walker-style";
+    style.textContent = `
+        body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        body.x-walker-active article[data-testid="tweet"].x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
+    `;
+    if (document.head) document.head.appendChild(style);
+    else document.addEventListener("DOMContentLoaded", () => document.head && document.head.appendChild(style));
+  }
   function initXWalker(config) {
     isDashboardEnabled = config.enabled && config.rightColumnDashboard;
     console.log("[X-Ops Walker] \u{1F43A} X Timeline Walker Protocol Status:", isDashboardEnabled);
+    setWalkerState(config.enabled);
     if (isDashboardEnabled) {
       installDashboard();
     } else {
@@ -1213,6 +1240,7 @@
       if ("xWalker" in changes) {
         const newConfig = changes.xWalker.newValue;
         isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
+        setWalkerState(newConfig.enabled);
         if (isDashboardEnabled) {
           installDashboard();
         } else {
@@ -1306,12 +1334,10 @@
         overflow: "hidden",
         pointerEvents: "auto",
         display: "none",
-        // 初期は隠し、sync() で位置確定後に表示する
         opacity: "1"
-        // opacity 0 で残らないようにリセット
       });
-      const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
-      const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
+      const titleText = window.chrome?.i18n?.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
+      const statusText = window.chrome?.i18n?.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
       box.innerHTML = `
             <style>
                 #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
@@ -1332,7 +1358,6 @@
                 <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
             </div>
             <div id="x-ops-bookmark-container" style="max-height: 400px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
-                <!-- Bookmarks injected here -->
             </div>
             <div style="padding: 12px; text-align: center;">
                 <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
@@ -1358,11 +1383,11 @@
             return c.toLowerCase().trim();
           };
           const cleanedUrl = clean(url);
-          const result = await chrome.storage.local.get(["xOpsBookmarks"]);
+          const result = await window.chrome.storage.local.get(["xOpsBookmarks"]);
           const bookmarks = result.xOpsBookmarks || [];
           if (!bookmarks.some((b) => clean(b.url) === cleanedUrl)) {
             bookmarks.push({ title: title || url, url: cleanedUrl });
-            await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
+            await window.chrome.storage.local.set({ xOpsBookmarks: bookmarks });
           }
           const originalText = quickAddBtn.innerText;
           quickAddBtn.innerText = "ADDED!";
@@ -1427,7 +1452,7 @@
   async function renderBookmarkList() {
     const container = document.getElementById("x-ops-bookmark-container");
     if (!container) return;
-    const result = await chrome.storage.local.get(["xOpsBookmarks"]);
+    const result = await window.chrome.storage.local.get(["xOpsBookmarks"]);
     const bookmarks = result.xOpsBookmarks || [];
     container.innerHTML = "";
     const profileUrl = getMyProfileUrl();
@@ -1459,8 +1484,8 @@
     link.onclick = (e) => e.preventDefault();
     const highlights = getHighlights();
     const cleanUrlStr = cleanUrl(url);
-    const isActive = highlights[cleanUrlStr];
-    if (isActive) {
+    const isActiveHighlight = highlights[cleanUrlStr];
+    if (isActiveHighlight) {
       item.classList.add("active");
     }
     star.onclick = (e) => {
@@ -1499,22 +1524,65 @@
     return ["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable;
   }
   window.addEventListener("keydown", (e) => {
-    if (!isDashboardEnabled) return;
     if (isInputActive()) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-    switch (e.code) {
-      case "KeyN":
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("x-ops-toggle-star"));
-        break;
-      case "KeyM":
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("x-ops-next-star"));
-        break;
-      case "KeyY":
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
-        break;
+    if (isCheatSheetVisible && e.code !== "KeyH") {
+      e.preventDefault();
+      toggleCheatSheet();
+      return;
+    }
+    if (e.code === "KeyH") {
+      if (!isActive && !isDashboardEnabled) return;
+      e.preventDefault();
+      toggleCheatSheet();
+      return;
+    }
+    if (isDashboardEnabled && ["KeyN", "KeyM", "KeyY"].includes(e.code)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === "KeyN") window.dispatchEvent(new CustomEvent("x-ops-toggle-star"));
+      if (e.code === "KeyM") window.dispatchEvent(new CustomEvent("x-ops-next-star"));
+      if (e.code === "KeyY") window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
+      return;
+    }
+    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "Backspace"].includes(e.code)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === "KeyK") {
+        resyncCurrentIndex();
+        focusArticle(currentIndex - 1);
+      }
+      if (e.code === "KeyJ") {
+        resyncCurrentIndex();
+        focusArticle(currentIndex + 1);
+      }
+      if (e.code === "KeyL") {
+        executeAction("like");
+      }
+      if (e.code === "KeyO") {
+        executeAction("repost");
+      }
+      if (e.code === "Backspace") {
+        if (e.repeat) return;
+        startDRSDelete();
+      }
+      return;
+    }
+  }, true);
+  window.addEventListener("keyup", (e) => {
+    if (!isActive) return;
+    if (isInputActive()) return;
+    if (e.code === "Backspace") {
+      e.preventDefault();
+      e.stopPropagation();
+      isBackspaceHeld = false;
+      if (backspaceTimer !== null) {
+        clearTimeout(backspaceTimer);
+        backspaceTimer = null;
+      }
+      if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
+        document.title = originalTitle;
+      }
     }
   }, true);
   window.addEventListener("x-ops-toggle-star", () => {
@@ -1590,6 +1658,233 @@
   window.addEventListener("x-ops-go-profile", () => {
     window.location.href = getMyProfileUrl();
   });
+  window.addEventListener("x-ops-global-reset", () => {
+    if (!isActive) return;
+    forceClearFocus();
+    currentIndex = -1;
+  });
+  function setWalkerState(enabled) {
+    if (isActive === enabled) return;
+    isActive = enabled;
+    if (window.PhantomUI) {
+      window.PhantomUI.update(enabled);
+    }
+    if (isActive) {
+      injectWalkerCSS();
+      document.body.classList.add("x-walker-active");
+      updateTargets();
+      if (window.scrollY < 200) currentIndex = -1;
+      else findClosestIndex();
+    } else {
+      document.body.classList.remove("x-walker-active");
+      forceClearFocus();
+      currentIndex = -1;
+      targetArticles = [];
+    }
+  }
+  function forceClearFocus() {
+    document.querySelectorAll(".x-walker-focused").forEach((el) => {
+      el.classList.remove("x-walker-focused");
+      el.style.boxShadow = "";
+    });
+  }
+  function findClosestIndex() {
+    if (targetArticles.length === 0) return;
+    let minDiff = Infinity;
+    let bestIdx = 0;
+    const center = window.scrollY + window.innerHeight * 0.2;
+    targetArticles.forEach((article, i) => {
+      if (!article.isConnected) return;
+      const rect = article.getBoundingClientRect();
+      const diff = Math.abs(center - (window.scrollY + rect.top + rect.height / 2));
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIdx = i;
+      }
+    });
+    currentIndex = bestIdx;
+  }
+  function updateTargets() {
+    if (document.hidden) {
+      targetArticles = [];
+      return;
+    }
+    targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter((article) => {
+      if (!article.isConnected) return false;
+      const text = article.innerText;
+      if (CONFIG.skipAds && (text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted"))) return false;
+      if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
+      return true;
+    });
+  }
+  function resyncCurrentIndex() {
+    const focused = document.querySelector(".x-walker-focused");
+    if (focused?.isConnected) {
+      updateTargets();
+      const newIdx = targetArticles.indexOf(focused);
+      if (newIdx !== -1) {
+        if (currentIndex !== newIdx) currentIndex = newIdx;
+      } else findClosestIndex();
+    } else if (isActive && currentIndex !== -1) findClosestIndex();
+  }
+  function focusArticle(index) {
+    if (!isActive || document.hidden) return;
+    updateTargets();
+    if (index < 0) {
+      window.scrollBy(0, -window.innerHeight * 1.5);
+      setTimeout(() => {
+        updateTargets();
+        findClosestIndex();
+      }, 300);
+      return;
+    }
+    if (targetArticles.length === 0 || index >= targetArticles.length) {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      setTimeout(() => {
+        updateTargets();
+        if (index < targetArticles.length) focusArticle(index);
+      }, 1500);
+      return;
+    }
+    forceClearFocus();
+    const target = targetArticles[index];
+    if (target?.isConnected) {
+      target.classList.add("x-walker-focused");
+      const color = (function(a) {
+        const t2 = a.querySelector("time");
+        if (!t2) return CONFIG.colors.recent;
+        const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
+        return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+      })(target);
+      target.style.boxShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
+      const rect = target.getBoundingClientRect();
+      window.scrollTo({ top: window.pageYOffset + rect.top - window.innerHeight / 2 + rect.height / 2 - CONFIG.scrollOffset, behavior: "smooth" });
+      currentIndex = index;
+    } else findClosestIndex();
+  }
+  function flashFeedback(article, color) {
+    if (!article?.isConnected) return;
+    const originalBg = article.style.backgroundColor;
+    article.style.backgroundColor = color;
+    setTimeout(() => {
+      if (article.isConnected) article.style.backgroundColor = originalBg;
+    }, 200);
+  }
+  function waitAndClick(selector, callback) {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      const el = typeof selector === "function" ? selector() : document.querySelector(selector);
+      if (el) {
+        clearInterval(interval);
+        el.click();
+        callback?.(el);
+      } else if (++attempts > 40) clearInterval(interval);
+    }, 50);
+  }
+  function executeAction(actionType) {
+    if (!isActive) return;
+    resyncCurrentIndex();
+    const article = targetArticles[currentIndex];
+    if (!article?.isConnected) return;
+    if (actionType === "like") {
+      const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]');
+      if (btn) btn.click();
+      else flashFeedback(article, "rgba(249, 24, 128, 0.1)");
+    } else if (actionType === "repost") {
+      const btn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]');
+      if (btn) {
+        btn.click();
+        waitAndClick(btn.getAttribute("data-testid") === "retweet" ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, "rgba(0, 186, 124, 0.1)"));
+      }
+    }
+  }
+  function startDRSDelete() {
+    isBackspaceHeld = true;
+    resyncCurrentIndex();
+    const article = targetArticles[currentIndex];
+    if (!article) return;
+    originalTitle = document.title;
+    document.title = "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
+    const caret = article.querySelector('[data-testid="caret"]');
+    if (caret) caret.click();
+    setTimeout(() => {
+      const menu = document.querySelector('[role="menu"]');
+      if (!menu) return;
+      const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      const deleteItem = deleteItems.find((el) => el.textContent?.match(/削除|Delete/));
+      if (deleteItem) deleteItem.click();
+    }, 100);
+    backspaceTimer = window.setTimeout(() => {
+      if (isBackspaceHeld) {
+        let attempts = 0;
+        const interval = setInterval(() => {
+          const confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]');
+          if (confirmBtn) {
+            clearInterval(interval);
+            confirmBtn.click();
+            flashFeedback(article, "rgba(244, 33, 46, 0.3)");
+            setTimeout(() => {
+              updateTargets();
+              if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
+              focusArticle(currentIndex);
+            }, 500);
+          } else if (++attempts > 40) {
+            clearInterval(interval);
+          }
+        }, 50);
+        if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") document.title = originalTitle;
+        isBackspaceHeld = false;
+      }
+    }, 600);
+  }
+  function toggleCheatSheet() {
+    let sheet = document.getElementById("x-ops-cheat-sheet");
+    if (sheet) {
+      sheet.remove();
+      isCheatSheetVisible = false;
+      return;
+    }
+    isCheatSheetVisible = true;
+    sheet = document.createElement("div");
+    sheet.id = "x-ops-cheat-sheet";
+    Object.assign(sheet.style, {
+      position: "fixed",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      zIndex: "10000",
+      background: "rgba(10, 10, 22, 0.9)",
+      backdropFilter: "blur(20px)",
+      border: "1px solid rgba(255, 140, 0, 0.3)",
+      borderRadius: "20px",
+      padding: "30px",
+      color: "#fff",
+      boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
+      minWidth: "320px"
+    });
+    sheet.innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 10px; color: #ff8c00; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;">Tactical Manual</div>
+            <div style="font-size: 18px; font-weight: 800;">X-OPS COMMANDS</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 80px 1fr; gap: 15px 20px; font-size: 14px;">
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">J / K</div> <div>Navigate Timeline</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">L / O</div> <div>Like / Repost</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">N / M</div> <div>Star Patrol (Next)</div>
+            <div style="color: #ffac30; font-weight: 800; text-align: right;">Y</div> <div>Go Profile</div>
+            <div style="color: #f4212e; font-weight: 800; text-align: right;">BS Hold</div> <div>DRS Delete</div>
+            <div style="color: #ff8c00; font-weight: 800; text-align: right;">H</div> <div>Toggle Manual</div>
+        </div>
+        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">CLICK ANYWHERE TO CLOSE</div>
+    `;
+    document.body.appendChild(sheet);
+    const closer = () => {
+      sheet?.remove();
+      isCheatSheetVisible = false;
+      document.removeEventListener("click", closer);
+    };
+    setTimeout(() => document.addEventListener("click", closer), 10);
+  }
 
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
@@ -2251,11 +2546,11 @@
       }
     }
     if (message.command === "ALM_REFOCUS") {
-      const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
-      document.title = "[WAKE] " + originalTitle;
+      const originalTitle2 = document.title.replace(/^\[WAKE\]\s*/, "");
+      document.title = "[WAKE] " + originalTitle2;
       setTimeout(() => {
         if (document.title.startsWith("[WAKE] ")) {
-          document.title = originalTitle;
+          document.title = originalTitle2;
         }
       }, 500);
     }
@@ -2347,11 +2642,11 @@
   })();
   window.addEventListener("visibilitychange", () => {
     if (!document.hidden && isAhkInfectionEnabled) {
-      const originalTitle = document.title.replace(/^\[WAKE\]\s*/, "");
-      document.title = "[WAKE] " + originalTitle;
+      const originalTitle2 = document.title.replace(/^\[WAKE\]\s*/, "");
+      document.title = "[WAKE] " + originalTitle2;
       setTimeout(() => {
         if (document.title.startsWith("[WAKE] ")) {
-          document.title = originalTitle;
+          document.title = originalTitle2;
         }
       }, 500);
     }
