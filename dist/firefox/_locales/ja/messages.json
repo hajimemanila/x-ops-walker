@@ -159,6 +159,15 @@
         "message": "📍 Domain Protocols"
     },
     "x_right_column_title": {
-        "message": "Right Column Dashboard"
+        "message": "右カラムダッシュボード"
+    },
+    "x_right_column": {
+        "message": "右カラム"
+    },
+    "x_dashboard_title": {
+        "message": "X-Ops ダッシュボード"
+    },
+    "x_dashboard_status_ready": {
+        "message": "準備完了"
     }
 }

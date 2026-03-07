@@ -1106,21 +1106,31 @@
       btn.classList.remove("active");
     }
   }
+  function applyI18n() {
+    const elements = document.querySelectorAll("[data-i18n]");
+    elements.forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (key) {
+        const message = t(key);
+        if (message && message !== key) {
+          if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+            el.placeholder = message;
+          } else {
+            el.textContent = message;
+          }
+        }
+      }
+    });
+  }
   async function init() {
     const manifest = chrome.runtime.getManifest();
-    document.getElementById("version-badge").textContent = `v${manifest.version}`;
-    document.getElementById("mode-label").textContent = t("popup_mode_label");
-    document.getElementById("sc-title").textContent = t("popup_sc_title");
-    document.getElementById("footer").textContent = t("popup_footer_hint");
-    document.getElementById("blocker-label").textContent = t("popup_blocker_label");
-    document.getElementById("alm-master-label").textContent = t("popup_smart_discard_label");
-    document.getElementById("alm-ahk-label").textContent = t("popup_ahk_reclaim_label");
-    document.getElementById("alm-safety-label").textContent = t("popup_safety_enter_label");
-    document.getElementById("alm-safety-row").title = t("popup_safety_enter_desc");
-    document.getElementById("advanced-settings").textContent = t("popup_advanced_settings");
-    document.getElementById("protocol-x-title").textContent = t("protocol_x_title");
-    document.getElementById("protocol-gemini-title").textContent = t("protocol_gemini_title");
-    document.getElementById("protocol-none-msg").textContent = t("protocol_none_msg");
+    const versionBadge = document.getElementById("version-badge");
+    if (versionBadge) versionBadge.textContent = `v${manifest.version}`;
+    applyI18n();
+    const footer = document.getElementById("footer");
+    if (footer) footer.title = t("popup_footer_hint");
+    const almSafetyRow = document.getElementById("alm-safety-row");
+    if (almSafetyRow) almSafetyRow.title = t("popup_safety_enter_desc");
     const scHint = document.getElementById("sc-hint");
     const beforeText = document.createTextNode(t("popup_sc_hint_before") + " ");
     const keyBadge = document.createElement("span");
@@ -1137,10 +1147,12 @@
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
     updateMiniToggle("alm-ahk-toggle", almConfig.ahkInfection);
     updateMiniToggle("alm-safety-toggle", !!almConfig.safetyEnter);
-    const xWalkerConfig = result.xWalker ?? { enabled: true };
-    const protocolXToggle = document.getElementById("toggle-protocol-x");
-    if (protocolXToggle) {
-      updateMiniToggle("toggle-protocol-x", xWalkerConfig.enabled);
+    const xWalkerConfig = result.xWalker ?? { enabled: true, rightColumnDashboard: true };
+    if (document.getElementById("toggle-protocol-x")) {
+      updateMiniToggle("toggle-protocol-x", !!xWalkerConfig.enabled);
+    }
+    if (document.getElementById("toggle-x-right-column")) {
+      updateMiniToggle("toggle-x-right-column", !!xWalkerConfig.rightColumnDashboard);
     }
     const domainBtn = document.getElementById("dynamic-domain-btn");
     let currentHostname = "";
@@ -1202,13 +1214,24 @@
       await chrome.storage.local.set({ alm: conf });
       updateMiniToggle("alm-safety-toggle", !!conf.safetyEnter);
     });
+    const protocolXToggle = document.getElementById("toggle-protocol-x");
     if (protocolXToggle) {
       protocolXToggle.addEventListener("click", async () => {
         const res = await chrome.storage.local.get("xWalker");
-        const conf = res.xWalker ?? { enabled: true };
+        const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
         conf.enabled = !conf.enabled;
         await chrome.storage.local.set({ xWalker: conf });
         updateMiniToggle("toggle-protocol-x", conf.enabled);
+      });
+    }
+    const xRightColumnToggle = document.getElementById("toggle-x-right-column");
+    if (xRightColumnToggle) {
+      xRightColumnToggle.addEventListener("click", async () => {
+        const res = await chrome.storage.local.get("xWalker");
+        const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
+        conf.rightColumnDashboard = !conf.rightColumnDashboard;
+        await chrome.storage.local.set({ xWalker: conf });
+        updateMiniToggle("toggle-x-right-column", conf.rightColumnDashboard);
       });
     }
     domainBtn.addEventListener("click", async () => {

@@ -395,7 +395,7 @@
     <div id="mode-card">
         <div class="row">
             <div class="label-group">
-                <span class="mode-label" id="mode-label">Walker Mode</span>
+                <span class="mode-label" id="mode-label" data-i18n="popup_mode_label">Walker Mode</span>
                 <span id="status-text" class="off">—</span>
             </div>
             <div id="toggle" role="switch" aria-checked="false"></div>
@@ -408,7 +408,7 @@
 
     <!-- Shortcuts Card -->
     <div id="shortcuts-card">
-        <div class="sc-title" id="sc-title"></div>
+        <div class="sc-title" id="sc-title" data-i18n="popup_sc_title"></div>
         <div class="sc-hint" id="sc-hint"></div>
     </div>
 
@@ -417,11 +417,11 @@
 
         <!-- Global Systems Section -->
         <div class="section-container">
-            <div class="section-title" id="section-global-title">🌍 Global Systems</div>
+            <div class="section-title" id="section-global-title" data-i18n="section_global">🌍 Global Systems</div>
 
             <!-- Google One Tap Blocker -->
             <div class="setting-row">
-                <span class="setting-label" id="blocker-label"></span>
+                <span class="setting-label" id="blocker-label" data-i18n="popup_blocker_label"></span>
                 <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
 
@@ -429,7 +429,8 @@
 
             <!-- ALM: Strategic Hibernation -->
             <div class="setting-row">
-                <span class="setting-label" id="alm-master-label">Smart Tab Discard</span>
+                <span class="setting-label" id="alm-master-label" data-i18n="popup_smart_discard_label">Smart Tab
+                    Discard</span>
                 <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
             </div>
 
@@ -440,7 +441,8 @@
 
             <!-- ALM: AHK Physical Reclaim -->
             <div class="setting-row">
-                <span class="setting-label" id="alm-ahk-label">AHK Physical Reclaim ([WAKE])</span>
+                <span class="setting-label" id="alm-ahk-label" data-i18n="popup_ahk_reclaim_label">AHK Physical Reclaim
+                    ([WAKE])</span>
                 <div id="alm-ahk-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
             </div>
 
@@ -448,7 +450,8 @@
 
             <!-- ALM: Chat SafetyEnter -->
             <div class="setting-row" id="alm-safety-row">
-                <span class="setting-label" id="alm-safety-label">Chat SafetyEnter</span>
+                <span class="setting-label" id="alm-safety-label" data-i18n="popup_safety_enter_label">Chat
+                    SafetyEnter</span>
                 <div id="alm-safety-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
         </div>
@@ -457,29 +460,32 @@
 
         <!-- Domain-Specific Protocols Section -->
         <div id="domain-protocol-container">
-            <div class="section-title" id="section-domain-title">📍 Domain Protocols</div>
+            <div class="section-title" id="section-domain-title" data-i18n="section_domain">📍 Domain Protocols</div>
 
             <div id="protocol-x" style="display: none;">
                 <div class="setting-row">
-                    <span class="setting-label" id="protocol-x-title">X Timeline Walker</span>
+                    <span class="setting-label" id="protocol-x-title" data-i18n="protocol_x_title">X Timeline
+                        Walker</span>
                     <div id="toggle-protocol-x" class="mini-toggle" role="switch" aria-checked="false"></div>
                 </div>
                 <!-- Sub Settings for X -->
                 <div id="protocol-x-sub" class="sub-settings">
                     <div class="setting-row">
-                        <span class="setting-label" id="x-right-column-title">Right Column Dashboard</span>
+                        <span class="setting-label" id="x-right-column-title" data-i18n="x_right_column_title">Right
+                            Column Dashboard</span>
                         <div id="toggle-x-right-column" class="mini-toggle" role="switch" aria-checked="false"></div>
                     </div>
                 </div>
             </div>
             <div id="protocol-gemini" style="display: none;">
                 <div class="setting-row">
-                    <span class="setting-label" id="protocol-gemini-title">Gemini Walker</span>
+                    <span class="setting-label" id="protocol-gemini-title" data-i18n="protocol_gemini_title">Gemini
+                        Walker</span>
                     <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
                 </div>
             </div>
             <div id="protocol-none" style="display: none;">
-                <span class="setting-label" id="protocol-none-msg"
+                <span class="setting-label" id="protocol-none-msg" data-i18n="protocol_none_msg"
                     style="display: block; text-align: center; color: rgba(255, 255, 255, 0.4); padding: 5px 0;"></span>
             </div>
         </div>
@@ -487,10 +493,11 @@
     </div>
 
     <!-- Advanced Settings Link -->
-    <a id="advanced-settings" title="Open Extension Options">🛠 Advanced Settings</a>
+    <a id="advanced-settings" title="Open Extension Options" data-i18n="popup_advanced_settings">🛠 Advanced
+        Settings</a>
 
     <!-- Footer -->
-    <div id="footer"></div>
+    <div id="footer" data-i18n="popup_footer_hint"></div>
 
     <script src="popup.js"></script>
 </body>

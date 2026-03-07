@@ -89,26 +89,38 @@ function updateDynamicDomainBtn(btn: HTMLElement, domain: string, isMonitored: b
     }
 }
 
+function applyI18n(): void {
+    const elements = document.querySelectorAll('[data-i18n]');
+    elements.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const message = t(key);
+            if (message && message !== key) {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                    (el as HTMLInputElement).placeholder = message;
+                } else {
+                    el.textContent = message;
+                }
+            }
+        }
+    });
+}
+
 async function init(): Promise<void> {
     // バージョンを manifest.json から動的取得
     const manifest = chrome.runtime.getManifest();
-    document.getElementById('version-badge')!.textContent = `v${manifest.version}`;
+    const versionBadge = document.getElementById('version-badge');
+    if (versionBadge) versionBadge.textContent = `v${manifest.version}`;
 
-    // i18n（textContent で安全に注入）
-    document.getElementById('mode-label')!.textContent = t('popup_mode_label');
-    document.getElementById('sc-title')!.textContent = t('popup_sc_title');
-    document.getElementById('footer')!.textContent = t('popup_footer_hint');
-    document.getElementById('blocker-label')!.textContent = t('popup_blocker_label');
-    document.getElementById('alm-master-label')!.textContent = t('popup_smart_discard_label');
-    document.getElementById('alm-ahk-label')!.textContent = t('popup_ahk_reclaim_label');
-    document.getElementById('alm-safety-label')!.textContent = t('popup_safety_enter_label');
-    document.getElementById('alm-safety-row')!.title = t('popup_safety_enter_desc');
-    document.getElementById('advanced-settings')!.textContent = t('popup_advanced_settings');
+    // Apply i18n to elements with data-i18n attribute
+    applyI18n();
 
-    // Context-Aware UI i18n
-    document.getElementById('protocol-x-title')!.textContent = t('protocol_x_title');
-    document.getElementById('protocol-gemini-title')!.textContent = t('protocol_gemini_title');
-    document.getElementById('protocol-none-msg')!.textContent = t('protocol_none_msg');
+    // Specific title/badge updates
+    const footer = document.getElementById('footer');
+    if (footer) footer.title = t('popup_footer_hint');
+
+    const almSafetyRow = document.getElementById('alm-safety-row');
+    if (almSafetyRow) almSafetyRow.title = t('popup_safety_enter_desc');
 
     // sc-hint: "Press [F] on any page…" を DOM で構築（innerHTML 回避）
     const scHint = document.getElementById('sc-hint')!;
@@ -133,10 +145,12 @@ async function init(): Promise<void> {
     updateMiniToggle('alm-safety-toggle', !!almConfig.safetyEnter);
 
     // プロトコル xWalker の初期状態読み込み
-    const xWalkerConfig = result.xWalker ?? { enabled: true };
-    const protocolXToggle = document.getElementById('toggle-protocol-x');
-    if (protocolXToggle) {
-        updateMiniToggle('toggle-protocol-x', xWalkerConfig.enabled);
+    const xWalkerConfig = result.xWalker ?? { enabled: true, rightColumnDashboard: true };
+    if (document.getElementById('toggle-protocol-x')) {
+        updateMiniToggle('toggle-protocol-x', !!xWalkerConfig.enabled);
+    }
+    if (document.getElementById('toggle-x-right-column')) {
+        updateMiniToggle('toggle-x-right-column', !!xWalkerConfig.rightColumnDashboard);
     }
 
     // Dynamic Domain Button の初期化
@@ -219,13 +233,26 @@ async function init(): Promise<void> {
     });
 
     // X Timeline Protocol トグル
+    const protocolXToggle = document.getElementById('toggle-protocol-x');
     if (protocolXToggle) {
         protocolXToggle.addEventListener('click', async () => {
             const res = await chrome.storage.local.get('xWalker');
-            const conf = res.xWalker ?? { enabled: true };
+            const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
             conf.enabled = !conf.enabled;
             await chrome.storage.local.set({ xWalker: conf });
             updateMiniToggle('toggle-protocol-x', conf.enabled);
+        });
+    }
+
+    // X Right Column Dashboard トグル
+    const xRightColumnToggle = document.getElementById('toggle-x-right-column');
+    if (xRightColumnToggle) {
+        xRightColumnToggle.addEventListener('click', async () => {
+            const res = await chrome.storage.local.get('xWalker');
+            const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
+            conf.rightColumnDashboard = !conf.rightColumnDashboard;
+            await chrome.storage.local.set({ xWalker: conf });
+            updateMiniToggle('toggle-x-right-column', conf.rightColumnDashboard);
         });
     }
 

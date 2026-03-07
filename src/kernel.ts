@@ -903,9 +903,9 @@ safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
 const currentHost = window.location.hostname;
 if (currentHost === 'x.com' || currentHost === 'twitter.com') {
     safeStorageGet(['xWalker'], (res) => {
-        const xWalker = (res.xWalker as { enabled?: boolean }) ?? { enabled: true };
+        const xWalker = (res.xWalker as any) ?? { enabled: true, rightColumnDashboard: true };
         if (xWalker.enabled) {
-            initXWalker();
+            initXWalker(xWalker);
         }
     });
 }
