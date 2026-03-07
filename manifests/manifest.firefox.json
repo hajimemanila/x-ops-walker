@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "X-Ops Walker",
-    "version": "2.1.4",
+    "version": "2.1.5",
     "description": "Ultra-fast, keyboard-driven navigation and DOM management for power users.",
     "default_locale": "en",
     "browser_specific_settings": {
@@ -9,6 +9,10 @@
             "id": "xops-walker@hajimemanila",
             "strict_min_version": "128.0"
         }
+    },
+    "options_ui": {
+        "page": "options.html",
+        "open_in_tab": true
     },
     "permissions": [
         "storage",

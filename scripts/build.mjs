@@ -36,6 +36,7 @@ const entryPoints = [
     join(ROOT, 'src', 'kernel.ts'),
     join(ROOT, 'src', 'background.ts'),
     join(ROOT, 'src', 'popup.ts'),
+    join(ROOT, 'src', 'options.ts'),
 ];
 
 // ── esbuild config ─────────────────────────────────────────────────────────
@@ -64,6 +65,9 @@ function copyStatics() {
 
     // popup.html
     copyFileSync(join(ROOT, 'popup.html'), join(outDir, 'popup.html'));
+
+    // options.html
+    copyFileSync(join(ROOT, 'options.html'), join(outDir, 'options.html'));
 
     // icons/
     copyDir(join(ROOT, 'icons'), join(outDir, 'icons'));
