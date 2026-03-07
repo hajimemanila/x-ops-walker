@@ -1034,6 +1034,7 @@
   var STORAGE_KEY_BOOKMARKS = "xOpsBookmarks";
   var STORAGE_KEY_WALKER_MODE = "isWalkerMode";
   var STORAGE_KEY_ALM = "alm";
+  var editingIndex = null;
   function cleanUrl(url) {
     try {
       let cleaned = url.replace(/^https?:\/\//, "").replace(/^www\./, "");
@@ -1072,24 +1073,68 @@
     bookmarks.forEach((bm, index) => {
       const li = document.createElement("li");
       li.className = "bookmark-item";
+      const isEditing = editingIndex === index;
       li.innerHTML = `
-            <div class="bookmark-info">
-                <span class="bookmark-title">${bm.title}</span>
-                <span class="bookmark-url">${bm.url}</span>
+            <div class="bookmark-info" style="flex: 1; padding-right: 15px;">
+                ${isEditing ? `
+                    <input type="text" class="edit-input" id="edit-title-${index}" value="${bm.title.replace(/"/g, "&quot;")}" placeholder="Title">
+                    <input type="text" class="edit-input" id="edit-url-${index}" value="${bm.url.replace(/"/g, "&quot;")}" placeholder="URL">
+                ` : `
+                    <div class="bookmark-title">${bm.title}</div>
+                    <div class="bookmark-url">${bm.url}</div>
+                `}
             </div>
             <div class="bookmark-actions">
-                <button class="btn btn-danger" data-index="${index}">\u524A\u9664</button>
+                ${!isEditing ? `
+                    <button class="btn btn-reorder btn-up" data-index="${index}" ${index === 0 ? "disabled" : ""}>\u2191</button>
+                    <button class="btn btn-reorder btn-down" data-index="${index}" ${index === bookmarks.length - 1 ? "disabled" : ""}>\u2193</button>
+                    <button class="btn btn-outline btn-edit" data-index="${index}">\u7DE8\u96C6</button>
+                ` : `
+                    <button class="btn btn-save" data-index="${index}">\u4FDD\u5B58</button>
+                    <button class="btn btn-cancel">\u623B\u308B</button>
+                `}
+                <button class="btn btn-danger btn-delete" data-index="${index}">\u524A\u9664</button>
             </div>
         `;
-      list.appendChild(li);
-    });
-    list.querySelectorAll(".btn-danger").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        const index = parseInt(e.target.getAttribute("data-index"));
-        const current = await loadBookmarks();
-        current.splice(index, 1);
-        await saveBookmarks(current);
+      if (isEditing) {
+        li.querySelector(".btn-save").addEventListener("click", async () => {
+          const newTitle = document.getElementById(`edit-title-${index}`).value.trim();
+          const newUrl = cleanUrl(document.getElementById(`edit-url-${index}`).value.trim());
+          if (newTitle && newUrl) {
+            const current = await loadBookmarks();
+            current[index] = { title: newTitle, url: newUrl };
+            editingIndex = null;
+            await saveBookmarks(current);
+          }
+        });
+        li.querySelector(".btn-cancel").addEventListener("click", () => {
+          editingIndex = null;
+          renderBookmarks();
+        });
+      } else {
+        li.querySelector(".btn-edit").addEventListener("click", () => {
+          editingIndex = index;
+          renderBookmarks();
+        });
+        li.querySelector(".btn-up:not(:disabled)")?.addEventListener("click", async () => {
+          const current = await loadBookmarks();
+          [current[index - 1], current[index]] = [current[index], current[index - 1]];
+          await saveBookmarks(current);
+        });
+        li.querySelector(".btn-down:not(:disabled)")?.addEventListener("click", async () => {
+          const current = await loadBookmarks();
+          [current[index], current[index + 1]] = [current[index + 1], current[index]];
+          await saveBookmarks(current);
+        });
+      }
+      li.querySelector(".btn-delete").addEventListener("click", async () => {
+        if (confirm("\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F")) {
+          const current = await loadBookmarks();
+          current.splice(index, 1);
+          await saveBookmarks(current);
+        }
       });
+      list.appendChild(li);
     });
   }
   async function initQuickAdd() {
