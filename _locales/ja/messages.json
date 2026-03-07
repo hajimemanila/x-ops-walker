@@ -169,5 +169,32 @@
     },
     "x_dashboard_status_ready": {
         "message": "準備完了"
+    },
+    "x_cheat_sheet_badge": {
+        "message": "チートシート"
+    },
+    "x_cheat_sheet_sec_nav": {
+        "message": "ナビゲーション"
+    },
+    "x_cheat_sheet_nav": {
+        "message": "タイムライン移動"
+    },
+    "x_cheat_sheet_patrol": {
+        "message": "スター巡回 (次へ)"
+    },
+    "x_cheat_sheet_profile": {
+        "message": "プロフィールに戻る"
+    },
+    "x_cheat_sheet_sec_action": {
+        "message": "タクティカルアクション"
+    },
+    "x_cheat_sheet_action": {
+        "message": "いいね / リポスト"
+    },
+    "x_cheat_sheet_delete": {
+        "message": "DRS 削除 (長押し)"
+    },
+    "x_cheat_sheet_close": {
+        "message": "Hキー または 任意のクリックで閉じる"
     }
 }

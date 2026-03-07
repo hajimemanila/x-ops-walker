@@ -166,5 +166,32 @@
     },
     "x_dashboard_status_ready": {
         "message": "Ready"
+    },
+    "x_cheat_sheet_badge": {
+        "message": "CHEAT SHEET"
+    },
+    "x_cheat_sheet_sec_nav": {
+        "message": "TACTICAL NAVIGATION"
+    },
+    "x_cheat_sheet_nav": {
+        "message": "Navigate Timeline"
+    },
+    "x_cheat_sheet_patrol": {
+        "message": "Star Patrol (Next)"
+    },
+    "x_cheat_sheet_profile": {
+        "message": "Go to Profile"
+    },
+    "x_cheat_sheet_sec_action": {
+        "message": "COMBAT ACTIONS"
+    },
+    "x_cheat_sheet_action": {
+        "message": "Like / Repost"
+    },
+    "x_cheat_sheet_delete": {
+        "message": "DRS Delete"
+    },
+    "x_cheat_sheet_close": {
+        "message": "Press H or click anywhere to close"
     }
 }

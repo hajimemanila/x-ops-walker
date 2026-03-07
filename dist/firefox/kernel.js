@@ -1336,8 +1336,8 @@
         display: "none",
         opacity: "1"
       });
-      const titleText = window.chrome?.i18n?.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
-      const statusText = window.chrome?.i18n?.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
+      const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
+      const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
       box.innerHTML = `
             <style>
                 #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
@@ -1383,11 +1383,11 @@
             return c.toLowerCase().trim();
           };
           const cleanedUrl = clean(url);
-          const result = await window.chrome.storage.local.get(["xOpsBookmarks"]);
+          const result = await chrome.storage.local.get(["xOpsBookmarks"]);
           const bookmarks = result.xOpsBookmarks || [];
           if (!bookmarks.some((b) => clean(b.url) === cleanedUrl)) {
             bookmarks.push({ title: title || url, url: cleanedUrl });
-            await window.chrome.storage.local.set({ xOpsBookmarks: bookmarks });
+            await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
           }
           const originalText = quickAddBtn.innerText;
           quickAddBtn.innerText = "ADDED!";
@@ -1452,7 +1452,7 @@
   async function renderBookmarkList() {
     const container = document.getElementById("x-ops-bookmark-container");
     if (!container) return;
-    const result = await window.chrome.storage.local.get(["xOpsBookmarks"]);
+    const result = await chrome.storage.local.get(["xOpsBookmarks"]);
     const bookmarks = result.xOpsBookmarks || [];
     container.innerHTML = "";
     const profileUrl = getMyProfileUrl();
@@ -1853,29 +1853,45 @@
       left: "50%",
       transform: "translate(-50%, -50%)",
       zIndex: "10000",
-      background: "rgba(10, 10, 22, 0.9)",
-      backdropFilter: "blur(20px)",
-      border: "1px solid rgba(255, 140, 0, 0.3)",
-      borderRadius: "20px",
-      padding: "30px",
-      color: "#fff",
-      boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
-      minWidth: "320px"
+      background: "rgba(15, 15, 20, 0.85)",
+      backdropFilter: "blur(12px)",
+      border: "1px solid rgba(255, 255, 255, 0.1)",
+      borderRadius: "12px",
+      padding: "24px",
+      color: "#e7e9ea",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+      minWidth: "340px",
+      fontFamily: '"Segoe UI", system-ui, sans-serif'
     });
+    const getMsg = (key, fallback) => chrome.i18n.getMessage(key) || fallback;
     sheet.innerHTML = `
-        <div style="text-align: center; margin-bottom: 20px;">
-            <div style="font-size: 10px; color: #ff8c00; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;">Tactical Manual</div>
-            <div style="font-size: 18px; font-weight: 800;">X-OPS COMMANDS</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; margin-bottom: 16px;">
+            <div style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                <span style="color: #ff8c00;">\u26A1</span> X-OPS WALKER
+            </div>
+            <div style="background: rgba(255, 140, 0, 0.15); color: #ffac30; font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 12px; border: 1px solid rgba(255, 140, 0, 0.3);">
+                ${getMsg("x_cheat_sheet_badge", "CHEAT SHEET")}
+            </div>
         </div>
-        <div style="display: grid; grid-template-columns: 80px 1fr; gap: 15px 20px; font-size: 14px;">
-            <div style="color: #ffac30; font-weight: 800; text-align: right;">J / K</div> <div>Navigate Timeline</div>
-            <div style="color: #ffac30; font-weight: 800; text-align: right;">L / O</div> <div>Like / Repost</div>
-            <div style="color: #ffac30; font-weight: 800; text-align: right;">N / M</div> <div>Star Patrol (Next)</div>
-            <div style="color: #ffac30; font-weight: 800; text-align: right;">Y</div> <div>Go Profile</div>
-            <div style="color: #f4212e; font-weight: 800; text-align: right;">BS Hold</div> <div>DRS Delete</div>
-            <div style="color: #ff8c00; font-weight: 800; text-align: right;">H</div> <div>Toggle Manual</div>
+        <div style="font-size: 11px; color: #ff8c00; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg("x_cheat_sheet_sec_nav", "TACTICAL NAVIGATION")}</div>
+        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px; margin-bottom: 16px;">
+            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">J</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">K</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_nav", "Navigate Timeline")}</div>
+            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">N</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">M</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_patrol", "Star Patrol")}</div>
+            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">Y</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_profile", "Go Profile")}</div>
         </div>
-        <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">CLICK ANYWHERE TO CLOSE</div>
+        <div style="font-size: 11px; color: #f4212e; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg("x_cheat_sheet_sec_action", "COMBAT ACTIONS")}</div>
+        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px;">
+            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">L</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">O</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_action", "Like / Repost")}</div>
+            <div style="text-align: right;"><kbd style="background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;">BS Hold</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_delete", "DRS Delete")}</div>
+        </div>
+        <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #71767b;">
+            ${getMsg("x_cheat_sheet_close", "Press H or click anywhere to close")}
+        </div>
     `;
     document.body.appendChild(sheet);
     const closer = () => {
