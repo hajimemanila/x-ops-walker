@@ -44,10 +44,7 @@ function installDashboard() {
     heartbeatId = setInterval(() => maintainDOM(), 500);
 
     // 2. Smooth Sync (requestAnimationFrame): 描画フレーム同期
-    // Chromeにおけるトグル直後のレイアウト計算遅延を回避するための微小猶予を与えてから開始
-    setTimeout(() => {
-        if (isDashboardEnabled) startSync();
-    }, 50);
+    startSync();
 }
 
 function removeDashboard() {
@@ -106,7 +103,10 @@ function maintainDOM() {
         let depth = 0;
 
         // 検索窓から上に辿り、兄弟要素（トレンドやおすすめユーザー等）を持つ大枠コンテナを見つける
-        while (target.parentElement && depth < 10) {
+        // サイドバーの内側コンテナ(sidebarWrapper)を超えないようにガード
+        const sidebarWrapper = sidebar.firstElementChild || sidebar;
+
+        while (target.parentElement && target.parentElement !== sidebarWrapper && depth < 10) {
             // 自分自身(spacer)を除外して兄弟要素を数える（無限ループと自作自演防止の要）
             const siblings = Array.from(target.parentElement.children).filter(el => el.id !== 'x-ops-dashboard-spacer');
 
@@ -179,7 +179,7 @@ function startSync() {
 
         const box = document.getElementById('x-ops-dashboard-box');
         if (isLoginModal || isExcluded) {
-            if (box) box.style.display = 'none';
+            if (box && box.style.display !== 'none') box.style.display = 'none';
             syncFrame = requestAnimationFrame(sync);
             return;
         }
@@ -187,35 +187,46 @@ function startSync() {
         const spacer = document.getElementById('x-ops-dashboard-spacer');
         const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
 
+        // プロトタイプの堅牢性への回帰: spacer が接続されていれば「確実に表示」する
         if (spacer && box && sidebar && spacer.isConnected) {
-            const isSidebarVisible = window.getComputedStyle(sidebar).display !== 'none';
+            if (box.style.display !== 'block') box.style.display = 'block';
+
             const spacerRect = spacer.getBoundingClientRect();
+            const boxHeight = box.offsetHeight;
 
-            // Chromeの初回計算遅延（width: 0）を許容しつつ、表示を確定させる
-            if (isSidebarVisible && spacerRect.width > 0) {
-                box.style.display = 'block';
-                const boxHeight = box.offsetHeight;
+            // 柱の高さを維持
+            const newSpacerHeight = (boxHeight + 10) + 'px';
+            if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
 
-                spacer.style.height = (boxHeight + 10) + 'px';
-                box.style.width = spacerRect.width + 'px';
-                box.style.left = spacerRect.left + 'px';
+            // 幅が取得できている場合のみ横位置を更新
+            if (spacerRect.width > 0) {
+                const newWidth = spacerRect.width + 'px';
+                if (box.style.width !== newWidth) box.style.width = newWidth;
 
-                // 究極の解決策: UIの縦位置は検索窓の物理座標(bottom)にロックする
-                const searchBar = sidebar.querySelector('[role="search"]');
-                if (searchBar) {
-                    const searchRect = searchBar.getBoundingClientRect();
-                    box.style.top = (searchRect.bottom + 12) + 'px';
-                } else {
-                    box.style.top = Math.max(spacerRect.top, 53) + 'px';
-                }
-            } else if (!isSidebarVisible) {
-                // サイドバー自体が非表示（display: none）の場合のみ box を隠す
-                // spacer.width が 0 なだけの時は、レイアウト計算待ちの可能性があるため
-                // box.style.display = 'none' を急がない（チラつき防止）
-                box.style.display = 'none';
+                const newLeft = spacerRect.left + 'px';
+                if (box.style.left !== newLeft) box.style.left = newLeft;
+            } else if (!box.style.left) {
+                // 初回起動時などで幅が0の場合の「左上飛翔バグ」防止用フェイルセーフ
+                const sidebarRect = sidebar.getBoundingClientRect();
+                box.style.left = sidebarRect.left + 'px';
+                box.style.width = sidebarRect.width + 'px';
             }
+
+            // 究極の解決策: UIの縦位置は検索窓の物理座標(bottom)にロックする
+            let newTop = '';
+            const searchBar = sidebar.querySelector('[role="search"]');
+            if (searchBar) {
+                const searchRect = searchBar.getBoundingClientRect();
+                newTop = (searchRect.bottom + 12) + 'px';
+            } else {
+                newTop = Math.max(spacerRect.top, 53) + 'px';
+            }
+
+            if (box.style.top !== newTop) box.style.top = newTop;
+
         } else if (box) {
-            box.style.display = 'none';
+            // spacerが存在しない、またはDOMツリーから切断された場合のみ隠す
+            if (box.style.display !== 'none') box.style.display = 'none';
         }
 
         syncFrame = requestAnimationFrame(sync);

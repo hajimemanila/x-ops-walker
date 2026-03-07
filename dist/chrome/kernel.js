@@ -164,9 +164,7 @@
     removeDashboard();
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
-    setTimeout(() => {
-      if (isDashboardEnabled) startSync();
-    }, 50);
+    startSync();
   }
   function removeDashboard() {
     if (heartbeatId) {
@@ -209,7 +207,8 @@
     if (spacer && searchBar) {
       let target = searchBar;
       let depth = 0;
-      while (target.parentElement && depth < 10) {
+      const sidebarWrapper = sidebar.firstElementChild || sidebar;
+      while (target.parentElement && target.parentElement !== sidebarWrapper && depth < 10) {
         const siblings = Array.from(target.parentElement.children).filter((el) => el.id !== "x-ops-dashboard-spacer");
         if (siblings.length > 1) {
           break;
@@ -268,33 +267,39 @@
       const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
       const box = document.getElementById("x-ops-dashboard-box");
       if (isLoginModal || isExcluded) {
-        if (box) box.style.display = "none";
+        if (box && box.style.display !== "none") box.style.display = "none";
         syncFrame = requestAnimationFrame(sync);
         return;
       }
       const spacer = document.getElementById("x-ops-dashboard-spacer");
       const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
       if (spacer && box && sidebar && spacer.isConnected) {
-        const isSidebarVisible = window.getComputedStyle(sidebar).display !== "none";
+        if (box.style.display !== "block") box.style.display = "block";
         const spacerRect = spacer.getBoundingClientRect();
-        if (isSidebarVisible && spacerRect.width > 0) {
-          box.style.display = "block";
-          const boxHeight = box.offsetHeight;
-          spacer.style.height = boxHeight + 10 + "px";
-          box.style.width = spacerRect.width + "px";
-          box.style.left = spacerRect.left + "px";
-          const searchBar = sidebar.querySelector('[role="search"]');
-          if (searchBar) {
-            const searchRect = searchBar.getBoundingClientRect();
-            box.style.top = searchRect.bottom + 12 + "px";
-          } else {
-            box.style.top = Math.max(spacerRect.top, 53) + "px";
-          }
-        } else if (!isSidebarVisible) {
-          box.style.display = "none";
+        const boxHeight = box.offsetHeight;
+        const newSpacerHeight = boxHeight + 10 + "px";
+        if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
+        if (spacerRect.width > 0) {
+          const newWidth = spacerRect.width + "px";
+          if (box.style.width !== newWidth) box.style.width = newWidth;
+          const newLeft = spacerRect.left + "px";
+          if (box.style.left !== newLeft) box.style.left = newLeft;
+        } else if (!box.style.left) {
+          const sidebarRect = sidebar.getBoundingClientRect();
+          box.style.left = sidebarRect.left + "px";
+          box.style.width = sidebarRect.width + "px";
         }
+        let newTop = "";
+        const searchBar = sidebar.querySelector('[role="search"]');
+        if (searchBar) {
+          const searchRect = searchBar.getBoundingClientRect();
+          newTop = searchRect.bottom + 12 + "px";
+        } else {
+          newTop = Math.max(spacerRect.top, 53) + "px";
+        }
+        if (box.style.top !== newTop) box.style.top = newTop;
       } else if (box) {
-        box.style.display = "none";
+        if (box.style.display !== "none") box.style.display = "none";
       }
       syncFrame = requestAnimationFrame(sync);
     }
