@@ -164,7 +164,9 @@
     removeDashboard();
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
-    startSync();
+    setTimeout(() => {
+      if (isDashboardEnabled) startSync();
+    }, 50);
   }
   function removeDashboard() {
     if (heartbeatId) {
@@ -182,6 +184,14 @@
   }
   function maintainDOM() {
     if (!isDashboardEnabled) return;
+    const path = window.location.pathname;
+    const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+    const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
+    if (isLoginModal || isExcluded) {
+      const box2 = document.getElementById("x-ops-dashboard-box");
+      if (box2) box2.style.display = "none";
+      return;
+    }
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
     if (!sidebar) return;
     let spacer = document.getElementById("x-ops-dashboard-spacer");
@@ -196,20 +206,26 @@
       spacer.style.pointerEvents = "none";
     }
     const searchBar = sidebar.querySelector('[role="search"]');
-    if (spacer && searchBar && !spacer.isConnected) {
+    if (spacer && searchBar) {
       let target = searchBar;
       let depth = 0;
-      const rootWrapper = sidebar.firstChild;
-      while (target.parentElement && target.parentElement !== rootWrapper && depth < 12) {
+      while (target.parentElement && depth < 10) {
+        const siblings = Array.from(target.parentElement.children).filter((el) => el.id !== "x-ops-dashboard-spacer");
+        if (siblings.length > 1) {
+          break;
+        }
         target = target.parentElement;
         depth++;
       }
-      if (target && target.parentElement) {
+      if (target && target.parentElement && target.nextSibling !== spacer) {
         target.after(spacer);
-        console.log("[X-Ops Walker] Dashboard spacer resurrected via Heartbeat (depth:", depth, ")");
+        console.log("[X-Ops Walker] Dashboard spacer secured via Smart Pillar (depth:", depth, ")");
       }
     } else if (spacer && !spacer.isConnected) {
-      sidebar.appendChild(spacer);
+      const wrapper = sidebar.firstElementChild || sidebar;
+      if (wrapper.firstChild !== spacer) {
+        wrapper.insertBefore(spacer, wrapper.firstChild);
+      }
     }
     let box = document.getElementById("x-ops-dashboard-box");
     if (!box) {
@@ -247,8 +263,16 @@
   function startSync() {
     function sync() {
       if (!isDashboardEnabled) return;
-      const spacer = document.getElementById("x-ops-dashboard-spacer");
+      const path = window.location.pathname;
+      const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+      const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
       const box = document.getElementById("x-ops-dashboard-box");
+      if (isLoginModal || isExcluded) {
+        if (box) box.style.display = "none";
+        syncFrame = requestAnimationFrame(sync);
+        return;
+      }
+      const spacer = document.getElementById("x-ops-dashboard-spacer");
       const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
       if (spacer && box && sidebar && spacer.isConnected) {
         const isSidebarVisible = window.getComputedStyle(sidebar).display !== "none";
@@ -259,8 +283,14 @@
           spacer.style.height = boxHeight + 10 + "px";
           box.style.width = spacerRect.width + "px";
           box.style.left = spacerRect.left + "px";
-          box.style.top = Math.max(spacerRect.top, 53) + "px";
-        } else {
+          const searchBar = sidebar.querySelector('[role="search"]');
+          if (searchBar) {
+            const searchRect = searchBar.getBoundingClientRect();
+            box.style.top = searchRect.bottom + 12 + "px";
+          } else {
+            box.style.top = Math.max(spacerRect.top, 53) + "px";
+          }
+        } else if (!isSidebarVisible) {
           box.style.display = "none";
         }
       } else if (box) {

@@ -44,7 +44,10 @@ function installDashboard() {
     heartbeatId = setInterval(() => maintainDOM(), 500);
 
     // 2. Smooth Sync (requestAnimationFrame): 描画フレーム同期
-    startSync();
+    // Chromeにおけるトグル直後のレイアウト計算遅延を回避するための微小猶予を与えてから開始
+    setTimeout(() => {
+        if (isDashboardEnabled) startSync();
+    }, 50);
 }
 
 function removeDashboard() {
@@ -67,6 +70,17 @@ function removeDashboard() {
 function maintainDOM() {
     if (!isDashboardEnabled) return;
 
+    // 1. 除外URL/モーダルフィルター (TM版ロジック準拠)
+    const path = window.location.pathname;
+    const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+    const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
+
+    if (isLoginModal || isExcluded) {
+        const box = document.getElementById('x-ops-dashboard-box');
+        if (box) box.style.display = 'none';
+        return;
+    }
+
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
     // サイドバーが見つからない場合は、このサイクルは終了（Heartbeatが次のチャンスを待つ）
     if (!sidebar) return;
@@ -82,29 +96,38 @@ function maintainDOM() {
         spacer.style.marginBottom = '12px';
         spacer.style.opacity = '0';
         spacer.style.pointerEvents = 'none';
-        // 初回生成時はまだ DOM に繋がっていない状態
     }
 
-    // Deep Hook Re-insertion: !isConnected の場合のみ再注入
+    // 2. Smart Pillar: 兄弟要素の出現でコンテナ境界を検知（自身を除外）
     const searchBar = sidebar.querySelector('[role="search"]');
-    if (spacer && searchBar && !spacer.isConnected) {
+
+    if (spacer && searchBar) {
         let target = searchBar as Element;
         let depth = 0;
-        const rootWrapper = sidebar.firstChild;
 
-        // Xの sidebarColumn -> firstChild (メインラッパー) の直下まで遡る
-        while (target.parentElement && target.parentElement !== rootWrapper && depth < 12) {
+        // 検索窓から上に辿り、兄弟要素（トレンドやおすすめユーザー等）を持つ大枠コンテナを見つける
+        while (target.parentElement && depth < 10) {
+            // 自分自身(spacer)を除外して兄弟要素を数える（無限ループと自作自演防止の要）
+            const siblings = Array.from(target.parentElement.children).filter(el => el.id !== 'x-ops-dashboard-spacer');
+
+            if (siblings.length > 1) {
+                break; // ここが「検索ブロック」と「他のブロック」の境界線
+            }
             target = target.parentElement as Element;
             depth++;
         }
 
-        if (target && target.parentElement) {
+        // 見つけた検索ブロックの直後(after)に「見えない柱」を立て、後続コンテンツを押し下げる
+        if (target && target.parentElement && target.nextSibling !== spacer) {
             target.after(spacer);
-            console.log('[X-Ops Walker] Dashboard spacer resurrected via Heartbeat (depth:', depth, ')');
+            console.log('[X-Ops Walker] Dashboard spacer secured via Smart Pillar (depth:', depth, ')');
         }
     } else if (spacer && !spacer.isConnected) {
-        // 検索窓がない場合のフォールバック
-        sidebar.appendChild(spacer);
+        // 検索窓がない場合のフォールバック（一番上）
+        const wrapper = sidebar.firstElementChild || sidebar;
+        if (wrapper.firstChild !== spacer) {
+            wrapper.insertBefore(spacer, wrapper.firstChild);
+        }
     }
 
     // Box(UI)の維持
@@ -149,14 +172,26 @@ function startSync() {
     function sync() {
         if (!isDashboardEnabled) return;
 
-        const spacer = document.getElementById('x-ops-dashboard-spacer');
+        // 除外URL/モーダルフィルター (syncループ内でもチェックし、表示を即座に消す)
+        const path = window.location.pathname;
+        const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+        const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
+
         const box = document.getElementById('x-ops-dashboard-box');
+        if (isLoginModal || isExcluded) {
+            if (box) box.style.display = 'none';
+            syncFrame = requestAnimationFrame(sync);
+            return;
+        }
+
+        const spacer = document.getElementById('x-ops-dashboard-spacer');
         const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
 
         if (spacer && box && sidebar && spacer.isConnected) {
             const isSidebarVisible = window.getComputedStyle(sidebar).display !== 'none';
             const spacerRect = spacer.getBoundingClientRect();
 
+            // Chromeの初回計算遅延（width: 0）を許容しつつ、表示を確定させる
             if (isSidebarVisible && spacerRect.width > 0) {
                 box.style.display = 'block';
                 const boxHeight = box.offsetHeight;
@@ -164,8 +199,19 @@ function startSync() {
                 spacer.style.height = (boxHeight + 10) + 'px';
                 box.style.width = spacerRect.width + 'px';
                 box.style.left = spacerRect.left + 'px';
-                box.style.top = Math.max(spacerRect.top, 53) + 'px';
-            } else {
+
+                // 究極の解決策: UIの縦位置は検索窓の物理座標(bottom)にロックする
+                const searchBar = sidebar.querySelector('[role="search"]');
+                if (searchBar) {
+                    const searchRect = searchBar.getBoundingClientRect();
+                    box.style.top = (searchRect.bottom + 12) + 'px';
+                } else {
+                    box.style.top = Math.max(spacerRect.top, 53) + 'px';
+                }
+            } else if (!isSidebarVisible) {
+                // サイドバー自体が非表示（display: none）の場合のみ box を隠す
+                // spacer.width が 0 なだけの時は、レイアウト計算待ちの可能性があるため
+                // box.style.display = 'none' を急がない（チラつき防止）
                 box.style.display = 'none';
             }
         } else if (box) {
