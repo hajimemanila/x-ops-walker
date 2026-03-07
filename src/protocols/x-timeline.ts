@@ -358,41 +358,52 @@ function getMyProfileUrl(): string {
 function createBookmarkItem(title: string, url: string): HTMLElement {
     const item = document.createElement('div');
     item.className = 'x-ops-bm-item';
-
     const star = document.createElement('span');
     star.className = 'x-ops-bm-star';
     star.textContent = '☆';
 
+    // プロトタイプのDOM読み取りロジックを活かすため、必ず絶対URLにする
+    const absoluteUrl = url.startsWith('http') ? url : 'https://' + url;
+
     item.onclick = (e) => {
         if (e.target === star) return;
-        window.location.href = url.startsWith('x.com') ? 'https://' + url : url;
+        window.location.href = absoluteUrl;
     };
 
     const link = document.createElement('a');
     link.className = 'x-ops-bm-link';
     link.textContent = title;
-    link.href = url;
+    link.href = absoluteUrl; // ここを絶対URLでセット
     link.onclick = (e) => e.preventDefault();
 
     const highlights = getHighlights();
-    if (highlights[url]) {
+    // プロトタイプと同じく、判定には raw url ではなく cleanUrl を使う
+    const cleanUrlStr = cleanUrl(url);
+    const isActive = highlights[cleanUrlStr];
+
+    if (isActive) {
         item.classList.add('active');
     }
 
     star.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const myProfileUrl = cleanUrl(getMyProfileUrl());
+        if (cleanUrlStr === myProfileUrl) return;
 
         const newState = item.classList.toggle('active');
-        saveHighlight(url, newState);
+        saveHighlight(cleanUrlStr, newState);
 
         star.classList.remove('popping');
-        void star.offsetWidth; // trigger reflow
+        void star.offsetWidth; // Trigger reflow
         star.classList.add('popping');
     };
 
     item.appendChild(link);
     item.appendChild(star);
+
     return item;
 }
 
@@ -413,6 +424,33 @@ function updateTargetHighlight() {
 }
 
 // ── ⌨️ Dashboard Hotkey Listeners ──
+function isInputActive(): boolean {
+    const activeEl = document.activeElement;
+    if (!activeEl) return false;
+    return ['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable;
+}
+
+window.addEventListener('keydown', (e) => {
+    if (!isDashboardEnabled) return;
+    if (isInputActive()) return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+
+    switch (e.code) {
+        case 'KeyN':
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('x-ops-toggle-star'));
+            break;
+        case 'KeyM':
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('x-ops-next-star'));
+            break;
+        case 'KeyY':
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('x-ops-go-profile'));
+            break;
+    }
+}, true);
+
 window.addEventListener('x-ops-toggle-star', () => {
     const currentUrl = window.location.href;
     const currentClean = cleanUrl(currentUrl);
@@ -428,32 +466,80 @@ window.addEventListener('x-ops-toggle-star', () => {
     }
 });
 
-window.addEventListener('x-ops-next-star', async () => {
-    const result = await chrome.storage.local.get(['xOpsBookmarks']);
-    const bookmarks = (result.xOpsBookmarks || []) as Bookmark[];
-    if (bookmarks.length === 0) return;
+window.addEventListener('x-ops-next-star', () => {
+    const box = document.getElementById('x-ops-dashboard-box');
+    if (!box) return;
 
-    const profileUrl = getMyProfileUrl();
-    const allUrls = [profileUrl, ...bookmarks.map(b => b.url)];
+    const links = Array.from(box.querySelectorAll('.x-ops-bm-link')) as HTMLAnchorElement[];
+    if (links.length === 0) return;
+
+    const targets = links.map(a => a.href);
     const highlights = getHighlights();
-    const currentClean = cleanUrl(window.location.href);
+    const currentPath = cleanUrl(window.location.href);
+    const myProfilePath = cleanUrl(getMyProfileUrl());
 
-    let currentIdx = allUrls.findIndex(u => cleanUrl(u) === currentClean);
+    let currentIdx = targets.findIndex(url => cleanUrl(url) === currentPath);
     let nextUrl: string | null = null;
 
-    // Logic: Look for next starred item, or next sequential if none
-    const starredUrls = allUrls.filter(u => highlights[u]);
-
-    if (starredUrls.length > 0) {
-        const nextStarred = starredUrls.find(u => allUrls.indexOf(u) > currentIdx) || starredUrls[0];
-        nextUrl = nextStarred;
-    } else {
-        const nextIdx = (currentIdx + 1) % allUrls.length;
-        nextUrl = allUrls[nextIdx];
+    // SCENARIO 1: Current page IS starred.
+    // Action: Move to the NEXT sequential bookmark in the list (skip own profile).
+    if (currentIdx !== -1 && highlights[cleanUrl(targets[currentIdx])]) {
+        let i = 1;
+        while (i < targets.length) {
+            let candidateIdx = (currentIdx + i) % targets.length;
+            let candidateUrl = targets[candidateIdx];
+            if (cleanUrl(candidateUrl) !== myProfilePath) {
+                nextUrl = candidateUrl;
+                break;
+            }
+            i++;
+        }
+    }
+    // SCENARIO 2: Current page is NOT starred.
+    // Action: Jump to the existing starred bookmark.
+    else {
+        let starredIdx = targets.findIndex(url => highlights[cleanUrl(url)]);
+        if (starredIdx !== -1) {
+            nextUrl = targets[starredIdx];
+        } else {
+            // SCENARIO 3: No stars exist at all. Fallback to just moving to the next item.
+            let i = 1;
+            while (i < targets.length) {
+                let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
+                let candidateUrl = targets[candidateIdx];
+                if (cleanUrl(candidateUrl) !== myProfilePath) {
+                    nextUrl = candidateUrl;
+                    break;
+                }
+                i++;
+            }
+        }
     }
 
-    if (nextUrl && cleanUrl(nextUrl) !== currentClean) {
-        window.location.href = nextUrl.startsWith('x.com') ? 'https://' + nextUrl : nextUrl;
+    if (nextUrl && cleanUrl(nextUrl) !== currentPath) {
+        // === SMART STAR PROCESS (Transfer Star) ===
+        let modified = false;
+
+        // 1. Unstar the origin
+        if (currentIdx !== -1) {
+            const originUrl = targets[currentIdx];
+            if (cleanUrl(originUrl) !== myProfilePath && highlights[cleanUrl(originUrl)]) {
+                delete highlights[cleanUrl(originUrl)];
+                modified = true;
+            }
+        }
+
+        // 2. Star the destination
+        if (cleanUrl(nextUrl) !== myProfilePath && !highlights[cleanUrl(nextUrl)]) {
+            highlights[cleanUrl(nextUrl)] = true;
+            modified = true;
+        }
+
+        // 3. Save synchronously and Execute Jump
+        if (modified) {
+            localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(highlights));
+        }
+        window.location.href = nextUrl;
     }
 });
 

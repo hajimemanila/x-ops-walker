@@ -1447,24 +1447,30 @@
     const star = document.createElement("span");
     star.className = "x-ops-bm-star";
     star.textContent = "\u2606";
+    const absoluteUrl = url.startsWith("http") ? url : "https://" + url;
     item.onclick = (e) => {
       if (e.target === star) return;
-      window.location.href = url.startsWith("x.com") ? "https://" + url : url;
+      window.location.href = absoluteUrl;
     };
     const link = document.createElement("a");
     link.className = "x-ops-bm-link";
     link.textContent = title;
-    link.href = url;
+    link.href = absoluteUrl;
     link.onclick = (e) => e.preventDefault();
     const highlights = getHighlights();
-    if (highlights[url]) {
+    const cleanUrlStr = cleanUrl(url);
+    const isActive = highlights[cleanUrlStr];
+    if (isActive) {
       item.classList.add("active");
     }
     star.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
+      const myProfileUrl = cleanUrl(getMyProfileUrl());
+      if (cleanUrlStr === myProfileUrl) return;
       const newState = item.classList.toggle("active");
-      saveHighlight(url, newState);
+      saveHighlight(cleanUrlStr, newState);
       star.classList.remove("popping");
       void star.offsetWidth;
       star.classList.add("popping");
@@ -1487,6 +1493,30 @@
       }
     });
   }
+  function isInputActive() {
+    const activeEl = document.activeElement;
+    if (!activeEl) return false;
+    return ["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable;
+  }
+  window.addEventListener("keydown", (e) => {
+    if (!isDashboardEnabled) return;
+    if (isInputActive()) return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    switch (e.code) {
+      case "KeyN":
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("x-ops-toggle-star"));
+        break;
+      case "KeyM":
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("x-ops-next-star"));
+        break;
+      case "KeyY":
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
+        break;
+    }
+  }, true);
   window.addEventListener("x-ops-toggle-star", () => {
     const currentUrl = window.location.href;
     const currentClean = cleanUrl(currentUrl);
@@ -1499,26 +1529,62 @@
       star?.click();
     }
   });
-  window.addEventListener("x-ops-next-star", async () => {
-    const result = await chrome.storage.local.get(["xOpsBookmarks"]);
-    const bookmarks = result.xOpsBookmarks || [];
-    if (bookmarks.length === 0) return;
-    const profileUrl = getMyProfileUrl();
-    const allUrls = [profileUrl, ...bookmarks.map((b) => b.url)];
+  window.addEventListener("x-ops-next-star", () => {
+    const box = document.getElementById("x-ops-dashboard-box");
+    if (!box) return;
+    const links = Array.from(box.querySelectorAll(".x-ops-bm-link"));
+    if (links.length === 0) return;
+    const targets = links.map((a) => a.href);
     const highlights = getHighlights();
-    const currentClean = cleanUrl(window.location.href);
-    let currentIdx = allUrls.findIndex((u) => cleanUrl(u) === currentClean);
+    const currentPath = cleanUrl(window.location.href);
+    const myProfilePath = cleanUrl(getMyProfileUrl());
+    let currentIdx = targets.findIndex((url) => cleanUrl(url) === currentPath);
     let nextUrl = null;
-    const starredUrls = allUrls.filter((u) => highlights[u]);
-    if (starredUrls.length > 0) {
-      const nextStarred = starredUrls.find((u) => allUrls.indexOf(u) > currentIdx) || starredUrls[0];
-      nextUrl = nextStarred;
+    if (currentIdx !== -1 && highlights[cleanUrl(targets[currentIdx])]) {
+      let i = 1;
+      while (i < targets.length) {
+        let candidateIdx = (currentIdx + i) % targets.length;
+        let candidateUrl = targets[candidateIdx];
+        if (cleanUrl(candidateUrl) !== myProfilePath) {
+          nextUrl = candidateUrl;
+          break;
+        }
+        i++;
+      }
     } else {
-      const nextIdx = (currentIdx + 1) % allUrls.length;
-      nextUrl = allUrls[nextIdx];
+      let starredIdx = targets.findIndex((url) => highlights[cleanUrl(url)]);
+      if (starredIdx !== -1) {
+        nextUrl = targets[starredIdx];
+      } else {
+        let i = 1;
+        while (i < targets.length) {
+          let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
+          let candidateUrl = targets[candidateIdx];
+          if (cleanUrl(candidateUrl) !== myProfilePath) {
+            nextUrl = candidateUrl;
+            break;
+          }
+          i++;
+        }
+      }
     }
-    if (nextUrl && cleanUrl(nextUrl) !== currentClean) {
-      window.location.href = nextUrl.startsWith("x.com") ? "https://" + nextUrl : nextUrl;
+    if (nextUrl && cleanUrl(nextUrl) !== currentPath) {
+      let modified = false;
+      if (currentIdx !== -1) {
+        const originUrl = targets[currentIdx];
+        if (cleanUrl(originUrl) !== myProfilePath && highlights[cleanUrl(originUrl)]) {
+          delete highlights[cleanUrl(originUrl)];
+          modified = true;
+        }
+      }
+      if (cleanUrl(nextUrl) !== myProfilePath && !highlights[cleanUrl(nextUrl)]) {
+        highlights[cleanUrl(nextUrl)] = true;
+        modified = true;
+      }
+      if (modified) {
+        localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(highlights));
+      }
+      window.location.href = nextUrl;
     }
   });
   window.addEventListener("x-ops-go-profile", () => {
@@ -1703,7 +1769,7 @@
     if (el.getAttribute("contentEditable") === "true") return true;
     return false;
   }
-  function isInputActive(event) {
+  function isInputActive2(event) {
     for (const node of event.composedPath()) {
       if (!node || node.nodeType !== 1) continue;
       const el = node;
@@ -1718,7 +1784,7 @@
     if (event.ctrlKey || event.metaKey || event.altKey) return true;
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return true;
     if (event.isComposing || event.key === "Process" || event.keyCode === 229) return true;
-    if (isInputActive(event)) return true;
+    if (isInputActive2(event)) return true;
     if (event.repeat) return true;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return true;
     return false;
