@@ -1173,6 +1173,29 @@
 
   // src/protocols/x-timeline.ts
   init_browser_polyfill_entry();
+  var STORAGE_KEY_HIGHLIGHTS = "x_bookmark_highlights";
+  function getHighlights() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY_HIGHLIGHTS) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveHighlight(url, active) {
+    const data = getHighlights();
+    if (active) data[url] = true;
+    else delete data[url];
+    localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(data));
+  }
+  function cleanUrl(url) {
+    if (!url) return "";
+    try {
+      let cleaned = url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+      return cleaned.toLowerCase().trim();
+    } catch {
+      return url.toLowerCase().trim();
+    }
+  }
   var isDashboardEnabled = false;
   var heartbeatId = null;
   var syncFrame = null;
@@ -1186,13 +1209,18 @@
     }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && "xWalker" in changes) {
-      const newConfig = changes.xWalker.newValue;
-      isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
-      if (isDashboardEnabled) {
-        installDashboard();
-      } else {
-        removeDashboard();
+    if (area === "local") {
+      if ("xWalker" in changes) {
+        const newConfig = changes.xWalker.newValue;
+        isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
+        if (isDashboardEnabled) {
+          installDashboard();
+        } else {
+          removeDashboard();
+        }
+      }
+      if ("xOpsBookmarks" in changes && isDashboardEnabled) {
+        renderBookmarkList();
       }
     }
   });
@@ -1285,15 +1313,33 @@
       const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
       const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
       box.innerHTML = `
+            <style>
+                #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
+                #x-ops-bookmark-container::-webkit-scrollbar-thumb { background: rgba(255, 140, 0, 0.3); border-radius: 10px; }
+                .x-ops-bm-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; transition: background-color 0.2s; border-bottom: 1px solid rgba(255, 140, 0, 0.05); position: relative; }
+                .x-ops-bm-item:hover { background-color: rgba(255, 255, 255, 0.03); }
+                .x-ops-bm-item.target-lock { border-left: 3px solid #00ba7c; background: rgba(0, 186, 124, 0.05); }
+                .x-ops-bm-item.active { background: rgba(255, 172, 48, 0.05); }
+                .x-ops-bm-link { flex-grow: 1; font-size: 13px; font-weight: 500; color: #eff3f4; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .x-ops-bm-star { font-size: 16px; color: #71767b; padding: 4px; border-radius: 50%; margin-left: 8px; transition: color 0.2s; cursor: pointer; }
+                .x-ops-bm-item.active .x-ops-bm-star { color: #ffac30; }
+                .x-ops-bm-star:hover { color: #ffac30; background: rgba(255, 172, 48, 0.1); }
+                .x-ops-bm-star.popping { animation: starPop 0.3s ease-out; }
+                @keyframes starPop { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }
+            </style>
             <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase;">${titleText}</span>
                 <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
             </div>
-            <div style="padding: 20px; text-align: center;">
+            <div id="x-ops-bookmark-container" style="max-height: 400px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
+                <!-- Bookmarks injected here -->
+            </div>
+            <div style="padding: 12px; text-align: center;">
                 <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
             </div>
         `;
       document.body.appendChild(box);
+      renderBookmarkList();
       const quickAddBtn = box.querySelector("#x-ops-quick-add");
       if (quickAddBtn) {
         quickAddBtn.addEventListener("mouseover", () => {
@@ -1330,6 +1376,7 @@
         });
       }
     }
+    updateTargetHighlight();
   }
   function startSync() {
     function sync() {
@@ -1377,6 +1424,106 @@
     }
     syncFrame = requestAnimationFrame(sync);
   }
+  async function renderBookmarkList() {
+    const container = document.getElementById("x-ops-bookmark-container");
+    if (!container) return;
+    const result = await chrome.storage.local.get(["xOpsBookmarks"]);
+    const bookmarks = result.xOpsBookmarks || [];
+    container.innerHTML = "";
+    const profileUrl = getMyProfileUrl();
+    container.appendChild(createBookmarkItem("My Profile (\u81EA\u5206\u306E\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB)", profileUrl));
+    bookmarks.forEach((bm) => {
+      container.appendChild(createBookmarkItem(bm.title, bm.url));
+    });
+    updateTargetHighlight();
+  }
+  function getMyProfileUrl() {
+    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    return profileLink ? profileLink.href : "https://x.com/home";
+  }
+  function createBookmarkItem(title, url) {
+    const item = document.createElement("div");
+    item.className = "x-ops-bm-item";
+    const star = document.createElement("span");
+    star.className = "x-ops-bm-star";
+    star.textContent = "\u2606";
+    item.onclick = (e) => {
+      if (e.target === star) return;
+      window.location.href = url.startsWith("x.com") ? "https://" + url : url;
+    };
+    const link = document.createElement("a");
+    link.className = "x-ops-bm-link";
+    link.textContent = title;
+    link.href = url;
+    link.onclick = (e) => e.preventDefault();
+    const highlights = getHighlights();
+    if (highlights[url]) {
+      item.classList.add("active");
+    }
+    star.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const newState = item.classList.toggle("active");
+      saveHighlight(url, newState);
+      star.classList.remove("popping");
+      void star.offsetWidth;
+      star.classList.add("popping");
+    };
+    item.appendChild(link);
+    item.appendChild(star);
+    return item;
+  }
+  function updateTargetHighlight() {
+    const container = document.getElementById("x-ops-bookmark-container");
+    if (!container) return;
+    const currentClean = cleanUrl(window.location.href);
+    const items = container.querySelectorAll(".x-ops-bm-item");
+    items.forEach((item) => {
+      const link = item.querySelector(".x-ops-bm-link");
+      if (link && cleanUrl(link.getAttribute("href") || "") === currentClean) {
+        item.classList.add("target-lock");
+      } else {
+        item.classList.remove("target-lock");
+      }
+    });
+  }
+  window.addEventListener("x-ops-toggle-star", () => {
+    const currentUrl = window.location.href;
+    const currentClean = cleanUrl(currentUrl);
+    const box = document.getElementById("x-ops-dashboard-box");
+    if (!box) return;
+    const items = Array.from(box.querySelectorAll(".x-ops-bm-item"));
+    const targetItem = items.find((item) => cleanUrl(item.querySelector(".x-ops-bm-link")?.getAttribute("href") || "") === currentClean);
+    if (targetItem) {
+      const star = targetItem.querySelector(".x-ops-bm-star");
+      star?.click();
+    }
+  });
+  window.addEventListener("x-ops-next-star", async () => {
+    const result = await chrome.storage.local.get(["xOpsBookmarks"]);
+    const bookmarks = result.xOpsBookmarks || [];
+    if (bookmarks.length === 0) return;
+    const profileUrl = getMyProfileUrl();
+    const allUrls = [profileUrl, ...bookmarks.map((b) => b.url)];
+    const highlights = getHighlights();
+    const currentClean = cleanUrl(window.location.href);
+    let currentIdx = allUrls.findIndex((u) => cleanUrl(u) === currentClean);
+    let nextUrl = null;
+    const starredUrls = allUrls.filter((u) => highlights[u]);
+    if (starredUrls.length > 0) {
+      const nextStarred = starredUrls.find((u) => allUrls.indexOf(u) > currentIdx) || starredUrls[0];
+      nextUrl = nextStarred;
+    } else {
+      const nextIdx = (currentIdx + 1) % allUrls.length;
+      nextUrl = allUrls[nextIdx];
+    }
+    if (nextUrl && cleanUrl(nextUrl) !== currentClean) {
+      window.location.href = nextUrl.startsWith("x.com") ? "https://" + nextUrl : nextUrl;
+    }
+  });
+  window.addEventListener("x-ops-go-profile", () => {
+    window.location.href = getMyProfileUrl();
+  });
 
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
