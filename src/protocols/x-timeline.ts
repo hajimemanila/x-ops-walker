@@ -156,14 +156,62 @@ function maintainDOM() {
         const statusText = chrome.i18n.getMessage('x_dashboard_status_ready') || 'SYSTEM READY';
 
         box.innerHTML = `
-            <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2);">
+            <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase;">${titleText}</span>
+                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
             </div>
             <div style="padding: 20px; text-align: center;">
                 <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
             </div>
         `;
         document.body.appendChild(box);
+
+        // --- Quick Add Logic ---
+        const quickAddBtn = box.querySelector('#x-ops-quick-add') as HTMLButtonElement;
+        if (quickAddBtn) {
+            quickAddBtn.addEventListener('mouseover', () => {
+                quickAddBtn.style.background = 'rgba(255, 140, 0, 0.3)';
+                quickAddBtn.style.boxShadow = '0 0 8px rgba(255, 140, 0, 0.4)';
+            });
+            quickAddBtn.addEventListener('mouseout', () => {
+                quickAddBtn.style.background = 'rgba(255, 140, 0, 0.15)';
+                quickAddBtn.style.boxShadow = 'none';
+            });
+
+            quickAddBtn.addEventListener('click', async () => {
+                const url = window.location.href;
+                const title = document.title.replace(/\s*\/ X$/i, '').trim(); // Remove "/ X" suffix
+
+                // cleanUrl implementation (compatible with options.ts)
+                const clean = (u: string) => {
+                    let c = u.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+                    return c.toLowerCase().trim();
+                };
+
+                const cleanedUrl = clean(url);
+
+                const result = await chrome.storage.local.get(['xOpsBookmarks']);
+                const bookmarks = (result.xOpsBookmarks || []) as { title: string, url: string }[];
+
+                // Duplicate check
+                if (!bookmarks.some(b => clean(b.url) === cleanedUrl)) {
+                    bookmarks.push({ title: title || url, url: cleanedUrl });
+                    await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
+                }
+
+                // Feedback
+                const originalText = quickAddBtn.innerText;
+                quickAddBtn.innerText = 'ADDED!';
+                quickAddBtn.style.color = '#00ba7c';
+                quickAddBtn.style.borderColor = '#00ba7c';
+
+                setTimeout(() => {
+                    quickAddBtn.innerText = originalText;
+                    quickAddBtn.style.color = '#ffac30';
+                    quickAddBtn.style.borderColor = 'rgba(255, 140, 0, 0.3)';
+                }, 1000);
+            });
+        }
     }
 }
 
