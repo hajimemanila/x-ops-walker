@@ -1138,23 +1138,9 @@
     });
   }
   async function initQuickAdd() {
-    const btnQuickAdd = document.getElementById("btn-quick-add");
     const inputTitle = document.getElementById("input-title");
     const inputUrl = document.getElementById("input-url");
     const msg = document.getElementById("quick-add-msg");
-    btnQuickAdd.addEventListener("click", async () => {
-      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      if (tab && tab.url && tab.title) {
-        inputTitle.value = tab.title;
-        inputUrl.value = cleanUrl(tab.url);
-        inputTitle.style.borderColor = "var(--accent-blue)";
-        inputUrl.style.borderColor = "var(--accent-blue)";
-        setTimeout(() => {
-          inputTitle.style.borderColor = "";
-          inputUrl.style.borderColor = "";
-        }, 1e3);
-      }
-    });
     document.getElementById("btn-save-bookmark").addEventListener("click", async () => {
       const title = inputTitle.value.trim();
       const url = cleanUrl(inputUrl.value.trim());

@@ -136,28 +136,11 @@ async function renderBookmarks() {
     });
 }
 
-// --- Quick Add Logic ---
+// --- Quick Add Logic (Manual Entry Only) ---
 async function initQuickAdd() {
-    const btnQuickAdd = document.getElementById('btn-quick-add')!;
     const inputTitle = document.getElementById('input-title') as HTMLInputElement;
     const inputUrl = document.getElementById('input-url') as HTMLInputElement;
     const msg = document.getElementById('quick-add-msg')!;
-
-    btnQuickAdd.addEventListener('click', async () => {
-        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-        if (tab && tab.url && tab.title) {
-            inputTitle.value = tab.title;
-            inputUrl.value = cleanUrl(tab.url);
-
-            // Immediate feedback: Highlight fields
-            inputTitle.style.borderColor = 'var(--accent-blue)';
-            inputUrl.style.borderColor = 'var(--accent-blue)';
-            setTimeout(() => {
-                inputTitle.style.borderColor = '';
-                inputUrl.style.borderColor = '';
-            }, 1000);
-        }
-    });
 
     document.getElementById('btn-save-bookmark')!.addEventListener('click', async () => {
         const title = inputTitle.value.trim();
