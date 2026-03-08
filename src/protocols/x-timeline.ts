@@ -149,6 +149,7 @@ function maintainDOM() {
         spacer.style.marginBottom = '12px';
         spacer.style.opacity = '0';
         spacer.style.pointerEvents = 'none';
+        spacer.style.transition = 'height 0.2s ease'; // スペーサーの高さ変化を滑らかに
     }
 
     const searchBar = sidebar.querySelector('[role="search"]');
@@ -217,17 +218,44 @@ function maintainDOM() {
                 @keyframes starPop { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }
             </style>
             <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase;">${titleText}</span>
-                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
+                <span style="font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase; user-select: none;">${titleText}</span>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
+                    <button id="x-ops-dashboard-toggle" title="最小化" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">−</button>
+                </div>
             </div>
-            <div id="x-ops-bookmark-container" style="max-height: 600px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
-            </div>
-            <div style="padding: 12px; text-align: center;">
-                <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
+            <div id="x-ops-dashboard-content">
+                <div id="x-ops-bookmark-container" style="max-height: 600px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
+                </div>
+                <div style="padding: 12px; text-align: center;">
+                    <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
+                </div>
             </div>
         `;
         document.body.appendChild(box);
         renderBookmarkList();
+
+        // ── 追加：トグルボタンの開閉ロジック ──
+        const toggleBtn = box.querySelector('#x-ops-dashboard-toggle') as HTMLButtonElement;
+        const contentContainer = box.querySelector('#x-ops-dashboard-content') as HTMLDivElement;
+
+        if (toggleBtn && contentContainer) {
+            toggleBtn.addEventListener('mouseover', () => toggleBtn.style.color = '#fff');
+            toggleBtn.addEventListener('mouseout', () => toggleBtn.style.color = 'rgba(255, 255, 255, 0.6)');
+
+            toggleBtn.addEventListener('click', () => {
+                const isHidden = contentContainer.style.display === 'none';
+                if (isHidden) {
+                    contentContainer.style.display = 'block';
+                    toggleBtn.textContent = '−';
+                    toggleBtn.title = '最小化';
+                } else {
+                    contentContainer.style.display = 'none';
+                    toggleBtn.textContent = '＋';
+                    toggleBtn.title = '展開';
+                }
+            });
+        }
 
         const quickAddBtn = box.querySelector('#x-ops-quick-add') as HTMLButtonElement;
         if (quickAddBtn) {
