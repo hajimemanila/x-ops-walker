@@ -96,7 +96,7 @@ async function shiftTab(direction: 1 | -1): Promise<number | undefined> {
 }
 
 // ── Background → Content Script メッセージ型定義 ─────────────────────────────
-type BackgroundCommand = 'FORCE_BLUR_ON_ARRIVAL' | 'MARK_SLEEPING' | 'ALM_REFOCUS';
+type BackgroundCommand = 'FORCE_BLUR_ON_ARRIVAL' | 'MARK_SLEEPING';
 
 interface BackgroundMessage {
     command: BackgroundCommand;

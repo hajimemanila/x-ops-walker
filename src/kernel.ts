@@ -957,29 +957,8 @@ chrome.runtime.onMessage.addListener((message: { command: string }) => {
             document.title = '💤 ' + document.title;
         }
     }
-
-    // ── ALM_REFOCUS: AHK 連携用「物理覚醒トリガー」スタブ ─────────────────────────
-    // Smart Tab Discard からの Pure Rebirth 後、AHK スクリプト（Physical Focus Infection）
-    // が検知できるように、document.title の先頭に [WAKE] 文字列を一時的に付与する。
-    // 0.5秒後に元のタイトルに復元する。
-    // AHK 側は WinTitle に "[WAKE]" をポーリングすることで「タブが者に过ぎた」を検知する。
-    if (message.command === 'ALM_REFOCUS') {
-        const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
-        document.title = '[WAKE] ' + originalTitle;
-        setTimeout(() => {
-            // 一定時間後に元に戻す（[WAKE] プレフィックスを隠ず)
-            if (document.title.startsWith('[WAKE] ')) {
-                document.title = originalTitle;
-            }
-        }, 500);
-        // 【代替手段スタブ】: F24 空撃ち（AHK 物理キーシミュレーション）
-        // 現在はタイトル方式を做用。将来、chrome.debugger 等で F24 実装時に活性化する。
-        // dispatchEvent(new KeyboardEvent('keydown', { key: 'F24', bubbles: true }));
-    }
 });
 
-// ALM AHK レクレーム設定
-let isAhkInfectionEnabled = true;
 
 // ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────
 // 問題: タブが非アクティブ（frozen/discarded）状態から復帰した直後、
@@ -1002,10 +981,6 @@ function pullStateFromStorage(): void {
         isWalkerMode = !!result[STORAGE_KEY];
         hud.setState(isWalkerMode);
         applyOneTapBlocker(!!result[BLOCKER_KEY]);
-
-        if (result.alm && result.alm.ahkInfection !== undefined) {
-            isAhkInfectionEnabled = result.alm.ahkInfection;
-        }
 
         // ── SPA オートフォーカス潰し ───────────────────────────────────────────
         // Gemini/Keep 等の SPA はタブ復帰後に遅延で入力欄にオートフォーカスする。
@@ -1115,23 +1090,6 @@ window.addEventListener('focus', onWindowFocus);
     document.addEventListener('focusin', onInputFocus, { capture: true });
     document.addEventListener('focusout', onInputBlur, { capture: true });
 })();
-
-// ── (3) Arrival Shock: visibilitychange 内の ALM シグナル ──────────────────────────
-// タブが表示された際（Arrival Shock）、ピン留めタブ等の Execution Dormancy 対策として
-// AHK連携用の物理シグナル（[WAKE] 一時付与）を発動する。
-window.addEventListener('visibilitychange', () => {
-    if (!document.hidden && isAhkInfectionEnabled) {
-        // 再表示時（Arrival Shock）: AHK 物理覚醒トリガー
-        const originalTitle = document.title.replace(/^\[WAKE\]\s*/, '');
-        document.title = '[WAKE] ' + originalTitle;
-        setTimeout(() => {
-            if (document.title.startsWith('[WAKE] ')) {
-                document.title = originalTitle;
-            }
-        }, 500);
-    }
-    // 注意: 状態のプル（pullStateFromStorage）などは既存の onVisibilityChange で完結
-});
 
 // Keep-Alive Port を開く: storage.onChanged リスナー登録後に1回だけ実行。
 // 機能ロジックには一切手を触れず、通信層のみの初期化。

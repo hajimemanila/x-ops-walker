@@ -5,7 +5,6 @@
   var BLOCKER_KEY = "blockGoogleOneTap";
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
-    ahkInfection: true,
     safetyEnter: false,
     heavyDomains: [
       "x.com",
@@ -115,7 +114,6 @@
     updateBlockerUI(!!result[BLOCKER_KEY]);
     const almConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
-    updateMiniToggle("alm-ahk-toggle", almConfig.ahkInfection);
     updateMiniToggle("alm-safety-toggle", !!almConfig.safetyEnter);
     const xWalkerConfig = result.xWalker ?? { enabled: true, rightColumnDashboard: true };
     if (document.getElementById("toggle-protocol-x")) {
@@ -169,13 +167,6 @@
       conf.enabled = !conf.enabled;
       await chrome.storage.local.set({ alm: conf });
       updateMiniToggle("alm-master-toggle", conf.enabled);
-    });
-    document.getElementById("alm-ahk-toggle").addEventListener("click", async () => {
-      const res = await chrome.storage.local.get("alm");
-      const conf = res.alm ?? DEFAULT_ALM_CONFIG;
-      conf.ahkInfection = !conf.ahkInfection;
-      await chrome.storage.local.set({ alm: conf });
-      updateMiniToggle("alm-ahk-toggle", conf.ahkInfection);
     });
     document.getElementById("alm-safety-toggle").addEventListener("click", async () => {
       const res = await chrome.storage.local.get("alm");

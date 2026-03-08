@@ -4,14 +4,12 @@ const BLOCKER_KEY = 'blockGoogleOneTap';
 // ── ALM Configuration ──
 interface AlmConfig {
     enabled: boolean;
-    ahkInfection: boolean;
     safetyEnter?: boolean;
     heavyDomains: string[];
 }
 
 const DEFAULT_ALM_CONFIG: AlmConfig = {
     enabled: true,
-    ahkInfection: true,
     safetyEnter: false,
     heavyDomains: [
         'x.com',
@@ -141,7 +139,6 @@ async function init(): Promise<void> {
     // ALM 初期状態の読み込み
     const almConfig: AlmConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle('alm-master-toggle', almConfig.enabled);
-    updateMiniToggle('alm-ahk-toggle', almConfig.ahkInfection);
     updateMiniToggle('alm-safety-toggle', !!almConfig.safetyEnter);
 
     // プロトコル xWalker の初期状態読み込み
@@ -212,15 +209,6 @@ async function init(): Promise<void> {
         conf.enabled = !conf.enabled;
         await chrome.storage.local.set({ alm: conf });
         updateMiniToggle('alm-master-toggle', conf.enabled);
-    });
-
-    // ALM AHK Reclaim トグル
-    document.getElementById('alm-ahk-toggle')!.addEventListener('click', async () => {
-        const res = await chrome.storage.local.get('alm');
-        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
-        conf.ahkInfection = !conf.ahkInfection;
-        await chrome.storage.local.set({ alm: conf });
-        updateMiniToggle('alm-ahk-toggle', conf.ahkInfection);
     });
 
     // Chat SafetyEnter トグル

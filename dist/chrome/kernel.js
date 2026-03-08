@@ -1568,17 +1568,7 @@
         document.title = "\u{1F4A4} " + document.title;
       }
     }
-    if (message.command === "ALM_REFOCUS") {
-      const originalTitle2 = document.title.replace(/^\[WAKE\]\s*/, "");
-      document.title = "[WAKE] " + originalTitle2;
-      setTimeout(() => {
-        if (document.title.startsWith("[WAKE] ")) {
-          document.title = originalTitle2;
-        }
-      }, 500);
-    }
   });
-  var isAhkInfectionEnabled = true;
   function pullStateFromStorage() {
     if (!window.__XOPS_WALKER_ALIVE__) return;
     if (document.title.startsWith("\u{1F4A4} ")) {
@@ -1589,9 +1579,6 @@
       isWalkerMode = !!result[STORAGE_KEY];
       hud.setState(isWalkerMode);
       applyOneTapBlocker(!!result[BLOCKER_KEY]);
-      if (result.alm && result.alm.ahkInfection !== void 0) {
-        isAhkInfectionEnabled = result.alm.ahkInfection;
-      }
       if (isWalkerMode) {
         setTimeout(() => {
           if (!isWalkerMode) return;
@@ -1663,17 +1650,6 @@
     document.addEventListener("focusin", onInputFocus, { capture: true });
     document.addEventListener("focusout", onInputBlur, { capture: true });
   })();
-  window.addEventListener("visibilitychange", () => {
-    if (!document.hidden && isAhkInfectionEnabled) {
-      const originalTitle2 = document.title.replace(/^\[WAKE\]\s*/, "");
-      document.title = "[WAKE] " + originalTitle2;
-      setTimeout(() => {
-        if (document.title.startsWith("[WAKE] ")) {
-          document.title = originalTitle2;
-        }
-      }, 500);
-    }
-  });
   connectKeepAlivePort();
   function suppressSiteShortcutsHandler(event) {
     if (isOrphan()) return;
