@@ -664,7 +664,21 @@ function updateTargets() {
     targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter(article => {
         if (!article.isConnected) return false;
         const text = (article as HTMLElement).innerText;
-        if (CONFIG.skipAds && (text.includes('プロモーション') || text.includes('Promoted'))) return false;
+
+        // ── 広告スキップロジックの改良 ──
+        if (CONFIG.skipAds) {
+            // 自身のツイートにある「プロモーションする (Promote)」ボタンの要素を探す
+            const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
+
+            // 従来の広告テキスト判定（'プロモーションする' の文字列もここに引っかかってしまう）
+            const hasAdText = text.includes('プロモーション') || text.includes('Promoted');
+
+            // クイックプロモートボタンが存在しない、かつ広告テキストがある場合のみスキップ（falseを返す）
+            if (hasAdText && !isOwnPromotable) {
+                return false;
+            }
+        }
+
         if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
         return true;
     }) as HTMLElement[];

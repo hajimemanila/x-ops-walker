@@ -32,6 +32,20 @@ if (window.__XOPS_WALKER_ALIVE__) {
     throw new Error('[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.');
 }
 
+// --- PWA検知ブロック（kernel.tsの先頭付近に追加） ---
+function isPWA(): boolean {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: window-controls-overlay)').matches;
+}
+
+// PWAとして開かれている場合は、Walkerの機能を一切起動せずに沈黙する
+if (isPWA()) {
+    console.log("[FoxPhantom] PWA mode detected. Shutting down Kernel.");
+    // これ以降の初期化ロジックを実行させないよう、適切なスコープで return する
+    // ※もし kernel.ts が全体を即時実行関数 (IIFE) や init() で囲んでいる場合は、そこで return してください。
+}
+// ----------------------------------------------------
+
 // このスクリプトが「生きている唯一の kernel」であることを宣言する
 window.__XOPS_WALKER_ALIVE__ = true;
 
@@ -439,7 +453,18 @@ const hud: HudController = (() => {
 
     let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
+    function isPWA(): boolean {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches;
+    }
     function setState(active: boolean): void {
+        // --- 最終防衛線: PWAなら描画処理を完全にキャンセル ---
+        if (isPWA()) {
+            host.style.display = 'none';
+            return;
+        }
+        // ----------------------------------------------------
         if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
         if (active) {
             host.style.display = 'block';

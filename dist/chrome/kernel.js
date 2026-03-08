@@ -700,7 +700,13 @@
     targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter((article) => {
       if (!article.isConnected) return false;
       const text = article.innerText;
-      if (CONFIG.skipAds && (text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted"))) return false;
+      if (CONFIG.skipAds) {
+        const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
+        const hasAdText = text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted");
+        if (hasAdText && !isOwnPromotable) {
+          return false;
+        }
+      }
       if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
       return true;
     });
@@ -895,6 +901,12 @@
   router.register(new AiChatProtocol());
   if (window.__XOPS_WALKER_ALIVE__) {
     throw new Error("[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.");
+  }
+  function isPWA() {
+    return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches;
+  }
+  if (isPWA()) {
+    console.log("[FoxPhantom] PWA mode detected. Shutting down Kernel.");
   }
   window.__XOPS_WALKER_ALIVE__ = true;
   var STORAGE_KEY = "isWalkerMode";
@@ -1158,7 +1170,14 @@
       pulseTimer = setTimeout(() => hudEl.classList.remove("pulse"), 600);
     }
     let hideTimer = null;
+    function isPWA2() {
+      return window.matchMedia("(display-mode: standalone)").matches || window.matchMedia("(display-mode: window-controls-overlay)").matches || window.matchMedia("(display-mode: minimal-ui)").matches;
+    }
     function setState(active) {
+      if (isPWA2()) {
+        host.style.display = "none";
+        return;
+      }
       if (hideTimer !== null) {
         clearTimeout(hideTimer);
         hideTimer = null;
