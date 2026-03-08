@@ -114,10 +114,10 @@
         "message": "AHKアクティブ化信号"
     },
     "popup_monitored_domains_label": {
-        "message": "監視対象ドメイン"
+        "message": "休眠保護対象ドメイン"
     },
     "popup_add_to_alm": {
-        "message": "＋ $1 を監視対象に追加",
+        "message": "＋ $1 を休眠から保護する",
         "placeholders": {
             "1": {
                 "content": "$1",
@@ -126,7 +126,7 @@
         }
     },
     "popup_already_monitored": {
-        "message": "✓ $1 は監視中です",
+        "message": "✓ $1 は休眠保護対象です",
         "placeholders": {
             "1": {
                 "content": "$1",

@@ -1190,7 +1190,7 @@
             if (state) {
               state.veto = true;
             } else {
-              almStates.set(tabId, { inactiveAt: null, isHeavyDomain: false, veto: true });
+              almStates.set(tabId, { inactiveAt: null, isExcluded: false, veto: true });
             }
             saveAlmStatesToStorage();
             break;
@@ -1219,7 +1219,7 @@
     port.onDisconnect.addListener(() => {
     });
   });
-  var ALM_HEAVY_DOMAINS = /* @__PURE__ */ new Set([
+  var ALM_EXCLUDE_DOMAINS = /* @__PURE__ */ new Set([
     "x.com",
     "twitter.com",
     "gemini.google.com",
@@ -1237,14 +1237,16 @@
   var currentAlmConfig = {
     enabled: true,
     ahkInfection: true,
-    heavyDomains: Array.from(ALM_HEAVY_DOMAINS)
+    excludeDomains: Array.from(ALM_EXCLUDE_DOMAINS)
   };
   var isAlmConfigLoaded = false;
   var configLoadPromise = new Promise((resolve) => {
     chrome.storage.local.get("alm", (res) => {
       if (res.alm) {
+        const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || [];
         currentAlmConfig = res.alm;
-        ALM_HEAVY_DOMAINS = new Set(res.alm.heavyDomains);
+        currentAlmConfig.excludeDomains = loadedDomains;
+        ALM_EXCLUDE_DOMAINS = new Set(loadedDomains);
         if (currentAlmConfig.enabled) {
           chrome.alarms.create("alm-master-timer", { periodInMinutes: 1 });
         } else {
@@ -1262,8 +1264,13 @@
       const newConf = changes.alm.newValue;
       if (!newConf) return;
       const wasEnabled = currentAlmConfig.enabled;
-      currentAlmConfig = newConf;
-      ALM_HEAVY_DOMAINS = new Set(newConf.heavyDomains);
+      const newDomains = newConf.excludeDomains || newConf.heavyDomains || [];
+      currentAlmConfig = {
+        enabled: Boolean(newConf.enabled),
+        ahkInfection: Boolean(newConf.ahkInfection),
+        excludeDomains: newDomains
+      };
+      ALM_EXCLUDE_DOMAINS = new Set(newDomains);
       if (wasEnabled && !newConf.enabled) {
         console.debug("[ALM] Master Timer Disabled via UI");
         chrome.alarms.clear("alm-master-timer");
@@ -1275,7 +1282,6 @@
   });
   var ALM_GRACE_STANDARD_MS = 8 * 60 * 1e3;
   var ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1e3;
-  var ALM_GRACE_HEAVY_MS = 1 * 60 * 1e3;
   var ALM_OVERLOAD_THRESHOLD = 30;
   var ALM_MASTER_INTERVAL_MS = 60 * 1e3;
   var almStates = /* @__PURE__ */ new Map();
@@ -1308,12 +1314,12 @@
     for (const tab of tabs) {
       if (tab.id === void 0) continue;
       if (!almStates.has(tab.id) && !tab.active) {
-        let isHeavy = false;
+        let isExcluded = false;
         try {
-          if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname);
+          if (tab.url) isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(tab.url).hostname);
         } catch {
         }
-        almStates.set(tab.id, { inactiveAt: now, isHeavyDomain: isHeavy, veto: false });
+        almStates.set(tab.id, { inactiveAt: now, isExcluded, veto: false });
       }
     }
     saveAlmStatesToStorage();
@@ -1325,12 +1331,12 @@
   });
   chrome.tabs.onCreated.addListener((tab) => {
     if (tab.id === void 0 || tab.active) return;
-    let isHeavy = false;
+    let isExcluded = false;
     try {
-      if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname);
+      if (tab.url) isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(tab.url).hostname);
     } catch {
     }
-    almStates.set(tab.id, { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false });
+    almStates.set(tab.id, { inactiveAt: Date.now(), isExcluded, veto: false });
     saveAlmStatesToStorage();
   });
   async function executeStrategicHibernation(tabId, state) {
@@ -1344,7 +1350,7 @@
       });
       await new Promise((r) => setTimeout(r, 30));
       await chrome.tabs.discard(tabId);
-      console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
+      console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} excluded=${state.isExcluded}`);
     } catch (e) {
       console.debug(`[ALM] Hibernation skipped (tab gone): tabId=${tabId}`, e);
     }
@@ -1363,10 +1369,9 @@
       const now = Date.now();
       for (const [tabId, state] of almStates) {
         if (state.inactiveAt === null) continue;
-        if (state.veto) continue;
-        const grace = state.isHeavyDomain ? ALM_GRACE_HEAVY_MS : standardGrace;
+        if (state.veto || state.isExcluded) continue;
         const elapsed = now - state.inactiveAt;
-        if (elapsed >= grace) {
+        if (elapsed >= standardGrace) {
           almStates.delete(tabId);
           saveAlmStatesToStorage();
           executeStrategicHibernation(tabId, state);
@@ -1380,16 +1385,16 @@
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const prevTabId = windowActiveTabs.get(activeInfo.windowId);
     windowActiveTabs.set(activeInfo.windowId, activeInfo.tabId);
-    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isHeavyDomain: false, veto: false };
+    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isExcluded: false, veto: false };
     newState.inactiveAt = null;
     almStates.set(activeInfo.tabId, newState);
     if (prevTabId !== void 0) {
       try {
         const prevTab = await chrome.tabs.get(prevTabId);
-        const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(prevTab.url ?? "").hostname);
-        const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false };
+        const isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(prevTab.url ?? "").hostname);
+        const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isExcluded, veto: false };
         prevState.inactiveAt = Date.now();
-        prevState.isHeavyDomain = isHeavy;
+        prevState.isExcluded = isExcluded;
         almStates.set(prevTabId, prevState);
       } catch {
       }
@@ -1399,10 +1404,10 @@
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url) {
       try {
-        const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
+        const isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(changeInfo.url).hostname);
         const state = almStates.get(tabId);
         if (state) {
-          state.isHeavyDomain = isHeavy;
+          state.isExcluded = isExcluded;
           saveAlmStatesToStorage();
         }
       } catch {

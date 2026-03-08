@@ -111,10 +111,10 @@
         "message": "AHK Physical Reclaim"
     },
     "popup_monitored_domains_label": {
-        "message": "Monitored Domains"
+        "message": "Protected Domains from sleep"
     },
     "popup_add_to_alm": {
-        "message": "＋ Add $1 to List",
+        "message": "＋ Protect $1 from sleep",
         "placeholders": {
             "1": {
                 "content": "$1",
@@ -123,7 +123,7 @@
         }
     },
     "popup_already_monitored": {
-        "message": "✓ $1 is Monitored",
+        "message": "✓ $1 is protected from sleep",
         "placeholders": {
             "1": {
                 "content": "$1",

@@ -259,7 +259,7 @@ chrome.runtime.onMessage.addListener((message: FoxWalkerMessage, sender) => {
                         state.veto = true;
                     } else {
                         // 状態が未登録（ページロード直後など）でも Veto だけは確実に記録する
-                        almStates.set(tabId, { inactiveAt: null, isHeavyDomain: false, veto: true });
+                        almStates.set(tabId, { inactiveAt: null, isExcluded: false, veto: true });
                     }
                     saveAlmStatesToStorage();
                     break;
@@ -325,14 +325,13 @@ chrome.runtime.onConnect.addListener((port) => {
 interface AlmConfig {
     enabled: boolean;
     ahkInfection: boolean;
-    heavyDomains: string[];
+    excludeDomains: string[];
 }
 
-// ── Heavy Domain 定義 (初期値) ────────────────────────────────────────────────────────
-// メモリ消費が激しい「重量ドメイン」。非アクティブになった瞬間に短縮 Grace Period を適用し、
-// よりアグレッシブに Smart Tab Discard を予約する。
+// ── Exclude Domain 定義 (初期値) ────────────────────────────────────────────────────────
+// 絶対に Discard させない「除外ドメイン」。非アクティブになってもタイマーによるメモリ解放を永続的に拒否する。
 // ※ v1.3.2 より初期値となり、実行時は chrome.storage.local で上書きされる。
-let ALM_HEAVY_DOMAINS = new Set([
+let ALM_EXCLUDE_DOMAINS = new Set([
     'x.com',
     'twitter.com',
     'gemini.google.com',
@@ -352,7 +351,7 @@ let ALM_HEAVY_DOMAINS = new Set([
 let currentAlmConfig: AlmConfig = {
     enabled: true,
     ahkInfection: true,
-    heavyDomains: Array.from(ALM_HEAVY_DOMAINS)
+    excludeDomains: Array.from(ALM_EXCLUDE_DOMAINS)
 };
 
 // コンフィグのロード完了を待機するプロミス
@@ -360,8 +359,12 @@ let isAlmConfigLoaded = false;
 const configLoadPromise = new Promise<void>((resolve) => {
     chrome.storage.local.get('alm', (res) => {
         if (res.alm) {
+            // マイグレーション対応: 古い heavyDomains がストレージに残っていた場合は excludeDomains として引き継ぐ
+            const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || [];
+
             currentAlmConfig = res.alm;
-            ALM_HEAVY_DOMAINS = new Set(res.alm.heavyDomains);
+            currentAlmConfig.excludeDomains = loadedDomains;
+            ALM_EXCLUDE_DOMAINS = new Set(loadedDomains);
 
             if (currentAlmConfig.enabled) {
                 chrome.alarms.create('alm-master-timer', { periodInMinutes: 1 });
@@ -379,13 +382,19 @@ const configLoadPromise = new Promise<void>((resolve) => {
 // UI（Options / Popup）からの設定変更を瞬時に同期する
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.alm) {
-        const newConf = changes.alm.newValue as AlmConfig;
+        // anyキャストで古い型からの移行エラーを回避
+        const newConf = changes.alm.newValue as any;
         if (!newConf) return;
 
         const wasEnabled = currentAlmConfig.enabled;
+        const newDomains = newConf.excludeDomains || newConf.heavyDomains || [];
 
-        currentAlmConfig = newConf;
-        ALM_HEAVY_DOMAINS = new Set(newConf.heavyDomains);
+        currentAlmConfig = {
+            enabled: Boolean(newConf.enabled),
+            ahkInfection: Boolean(newConf.ahkInfection),
+            excludeDomains: newDomains
+        };
+        ALM_EXCLUDE_DOMAINS = new Set(newDomains);
 
         // Timer 制御: 有効/無効の切り替え
         if (wasEnabled && !newConf.enabled) {
@@ -401,20 +410,18 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 // ── Grace Period 定数 (ミリ秒) ─────────────────────────────────────────────
 // Standard: タブ30枚以下のデフォルト。8分の余裕を与える。
 // Standard (Overloaded): タブ30枚超。動的に5分へ短縮し、よりアグレッシブにリソース回収。
-// Heavy: X.com / AI Chat 等の重量ドメイン。1分後に Smart Tab Discard を実行する。
-//        ただし Vital Heartbeat（入力中・再生中）が届いている間は Veto により絶対禁止。
-const ALM_GRACE_STANDARD_MS = 8 * 60 * 1000;        //   8分
-const ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1000; //   5分（30枚超タブ数で動的短縮）
-const ALM_GRACE_HEAVY_MS = 1 * 60 * 1000;           //   1分
+// ※ Heavy (1分短縮) は廃止され、Exclude (永久除外) リストへ移行。
+const ALM_GRACE_STANDARD_MS = 8 * 60 * 1000;        //  8分
+const ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1000; //  5分（30枚超タブ数で動的短縮）
 const ALM_OVERLOAD_THRESHOLD = 30;                   //  30枚超でオーバーロードモード
-const ALM_MASTER_INTERVAL_MS = 60 * 1000;            //   1分間隔のマスタータイマー
+const ALM_MASTER_INTERVAL_MS = 60 * 1000;            //  1分間隔のマスタータイマー
 
 // ── ALM タブ状態 ─────────────────────────────────────────────────────────────
 interface AlmTabState {
     /** タブが非アクティブになった UNIX タイムスタンプ（ms）。null = まだ非アクティブになっていない */
     inactiveAt: number | null;
-    /** Heavy Domain フラグ。TAB_INACTIVE 受信時に kernel から報告される */
-    isHeavyDomain: boolean;
+    /** Discard 除外フラグ。タブ遷移時に Background で判定・記録される */
+    isExcluded: boolean;
     /** Vital Heartbeat による Hibernation 絶対禁止フラグ。真の間はいかなるタイマーも無視する */
     veto: boolean;
 }
@@ -448,136 +455,90 @@ async function loadAlmStatesFromStorage(): Promise<boolean> {
 }
 
 // ── Service Worker の起動・再起動時の状態復元 ─────────────────────────────
-// MV3 では SW が休止すると almStates も消滅してしまうため、起動時に全タブの状況を捕捉する。
 async function initializeAlmStates(): Promise<void> {
-    // まずストレージから既存のステートを読み込む
     await loadAlmStatesFromStorage();
 
     const tabs = await chrome.tabs.query({});
     const now = Date.now();
     for (const tab of tabs) {
         if (tab.id === undefined) continue;
-        // 「記憶にない（Map に存在しない）非アクティブタブ」のみに現在時刻を付与する。
-        // （記憶にあるタブの inactiveAt は絶対に上書きせず維持する）
         if (!almStates.has(tab.id) && !tab.active) {
-            let isHeavy = false;
-            try { if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname); } catch { }
-            almStates.set(tab.id, { inactiveAt: now, isHeavyDomain: isHeavy, veto: false });
+            let isExcluded = false;
+            try { if (tab.url) isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(tab.url).hostname); } catch { }
+            almStates.set(tab.id, { inactiveAt: now, isExcluded: isExcluded, veto: false });
         }
     }
-    // 補完した最新状態を保存
     saveAlmStatesToStorage();
 }
-// 起動時に呼び出す
 initializeAlmStates();
 
 // ── タブ削除時のクリーンアップ ───────────────────────────────────────────────
-// タブが閉じられた際は almStates から即座に除去し、メモリリークを防ぐ。
 chrome.tabs.onRemoved.addListener((tabId) => {
     almStates.delete(tabId);
     saveAlmStatesToStorage();
 });
 
-// 新規タブがバックグラウンドで開かれた場合も初期化する
 chrome.tabs.onCreated.addListener((tab) => {
     if (tab.id === undefined || tab.active) return;
-    let isHeavy = false;
-    try { if (tab.url) isHeavy = ALM_HEAVY_DOMAINS.has(new URL(tab.url).hostname); } catch { }
-    almStates.set(tab.id, { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false });
+    let isExcluded = false;
+    try { if (tab.url) isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(tab.url).hostname); } catch { }
+    almStates.set(tab.id, { inactiveAt: Date.now(), isExcluded: isExcluded, veto: false });
     saveAlmStatesToStorage();
 });
 
 // ── Smart Tab Discard: 実行関数 ──────────────────────────────────────────
-/**
- * 指定タブに対して Smart Tab Discard (chrome.tabs.discard) を実行する。
- * discard 直前に「本当にそのタブが非アクティブか」を再確認するガード節を持ち、
- * 万が一タブが復帰していた場合には Hibernation を中止する（二重確認の絶対保証）。
- *
- * @param tabId  - Discard対象のタブID
- * @param state  - そのタブの現在の ALM 状態
- */
 async function executeStrategicHibernation(tabId: number, state: AlmTabState): Promise<void> {
     try {
-        // ── 二重確認ガード: discard 直前に実際のタブ状態を Chrome API で確認する ──
-        // Master Timer の走査から実際の discard 実行まで僅かな時間差が生じる。
-        // その間にユーザーがタブを切り替えた場合、active タブを殺してしまう最悪の事態を防ぐ。
         const liveTab = await chrome.tabs.get(tabId);
 
-        // ガード節 1: タブがアクティブに復帰している → Hibernation 中止
         if (liveTab.active) return;
-
-        // ガード節 2: タブが既に破棄済み → 二重実行を防ぐ
         if (liveTab.discarded) return;
-
-        // ガード節 3: タブがピン留めされている → System-Protect Veto
         if (liveTab.pinned) return;
-
-        // ガード節 4: 制限URLへの二重チェック
         if (isSkippableTab(liveTab.url)) return;
 
-        // 💤 プレフィックスを付与してからスリープ（DISCARD_TAB コマンドと同じ手順）
         chrome.tabs.sendMessage(tabId, { command: 'MARK_SLEEPING' }).catch(() => { });
         await new Promise<void>(r => setTimeout(r, 30));
         await chrome.tabs.discard(tabId);
 
-        console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} heavy=${state.isHeavyDomain}`);
+        console.debug(`[ALM] Smart Tab Discard executed: tabId=${tabId} excluded=${state.isExcluded}`);
     } catch (e) {
-        // タブが既に存在しない（ユーザーが手動で閉じた等）は正常系 — 静かに無視
         console.debug(`[ALM] Hibernation skipped (tab gone): tabId=${tabId}`, e);
     }
 }
 
 // ── Master Heartbeat Timer: 全タブを走査・一括処理 ───────────────────────────
-/**
- * Master Heartbeat Timer ループ関数。全タブを一括走査する。
- * alm.enabled が false の時は 発火しない。
- */
 async function scanAndHibernate(): Promise<void> {
-    // 確実な初期化のため、ストレージ読み込みが完了するまで待機する
     if (!isAlmConfigLoaded) await configLoadPromise;
-
     if (!currentAlmConfig.enabled) return;
 
-    // Map が空の場合は念のためストレージからロードを試行する
     if (almStates.size === 0) {
         await loadAlmStatesFromStorage();
     }
 
     try {
-        // 全タブを取得して総数を把握する
         const allTabs = await chrome.tabs.query({ currentWindow: true });
         const totalTabCount = allTabs.length;
 
-        // 30枚超なら Overloaded モード → Standard の猶予を5分に短縮
         const isOverloaded = totalTabCount > ALM_OVERLOAD_THRESHOLD;
         const standardGrace = isOverloaded
-            ? ALM_GRACE_STANDARD_OVERLOADED_MS  // 5分（動的短縮）
-            : ALM_GRACE_STANDARD_MS;            // 8分（デフォルト）
+            ? ALM_GRACE_STANDARD_OVERLOADED_MS
+            : ALM_GRACE_STANDARD_MS;
 
         const now = Date.now();
 
         for (const [tabId, state] of almStates) {
-            // 非アクティブ化タイムスタンプが未記録 → まだ猶予計算の対象外
             if (state.inactiveAt === null) continue;
 
-            // ── Veto チェック（Hibernation 絶対禁止）─────────────────────────
-            // 以下のいずれかに該当する場合、いかなるタイマーも無視して Hibernation を拒否する。
-            //   Form-Interference : isInputActive が真、または未送信テキストが存在する
-            //   Media-Capture     : 動画・音声が再生中（play イベント由来）
-            //   Navigation-Lock   : beforeunload リスナーが活性、またはファイル転送中
-            //   （System-Protect  : ピン留めは executeStrategicHibernation のガード節で捕捉）
-            if (state.veto) continue;
+            // ── Veto および Exclude チェック（Hibernation 絶対禁止）─────────────────────────
+            // Veto（入力中・再生中等）または Excludeドメイン の場合はタイマーを完全に無視する
+            if (state.veto || state.isExcluded) continue;
 
             // ── Grace Period 判定 ─────────────────────────────────────────────
-            const grace = state.isHeavyDomain ? ALM_GRACE_HEAVY_MS : standardGrace;
             const elapsed = now - state.inactiveAt;
 
-            if (elapsed >= grace) {
-                // 猶予期間満了 → Smart Tab Discard を実行
-                // almStates から先に削除することで、次のティックで二重実行されるのを防ぐ
+            if (elapsed >= standardGrace) {
                 almStates.delete(tabId);
                 saveAlmStatesToStorage();
-                // 非同期実行（await しない）— タブが複数あっても並列で処理する
                 executeStrategicHibernation(tabId, state);
             }
         }
@@ -587,52 +548,44 @@ async function scanAndHibernate(): Promise<void> {
 }
 
 // ── 堅牢な ALM 状態トラッキング (Background 完結型) ──────────────────────────
-// タブのアクティブ状態は kernel.ts の通信に頼らず、ブラウザネイティブの API で完璧に監視する。
 const windowActiveTabs = new Map<number, number>();
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const prevTabId = windowActiveTabs.get(activeInfo.windowId);
     windowActiveTabs.set(activeInfo.windowId, activeInfo.tabId);
 
-    // 1. 新しくアクティブになったタブのタイマーをリセット（inactiveAt = null）
-    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isHeavyDomain: false, veto: false };
+    const newState = almStates.get(activeInfo.tabId) ?? { inactiveAt: null, isExcluded: false, veto: false };
     newState.inactiveAt = null;
     almStates.set(activeInfo.tabId, newState);
 
-    // 2. 前までアクティブだったタブ（存在すれば）に非アクティブ時間を記録
     if (prevTabId !== undefined) {
         try {
             const prevTab = await chrome.tabs.get(prevTabId);
-            const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(prevTab.url ?? '').hostname);
-            const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isHeavyDomain: isHeavy, veto: false };
+            const isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(prevTab.url ?? '').hostname);
+            const prevState = almStates.get(prevTabId) ?? { inactiveAt: Date.now(), isExcluded: isExcluded, veto: false };
             prevState.inactiveAt = Date.now();
-            prevState.isHeavyDomain = isHeavy;
+            prevState.isExcluded = isExcluded;
             almStates.set(prevTabId, prevState);
         } catch {
-            // 前のタブがすでに閉じられている場合は無視
         }
     }
     saveAlmStatesToStorage();
 });
 
-// URL 変更時（ナビゲーション）に Heavy Domain 判定を更新
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url) {
         try {
-            const isHeavy = ALM_HEAVY_DOMAINS.has(new URL(changeInfo.url).hostname);
+            const isExcluded = ALM_EXCLUDE_DOMAINS.has(new URL(changeInfo.url).hostname);
             const state = almStates.get(tabId);
             if (state) {
-                state.isHeavyDomain = isHeavy;
+                state.isExcluded = isExcluded;
                 saveAlmStatesToStorage();
             }
         } catch { }
     }
 });
 
-// ── Master Heartbeat Timer の Alarm 化 (スロットリング対策) ─────────────────
-// setInterval を廃止し、OS レベルで発火が保証される chrome.alarms に変更。
-// 作成処理はストレージ初期化時および onChanged 時に制御される。
-
+// ── Master Heartbeat Timer の Alarm 化 ─────────────────
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'alm-master-timer') {
         scanAndHibernate();

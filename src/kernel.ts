@@ -53,29 +53,6 @@ window.__XOPS_WALKER_ALIVE__ = true;
 const STORAGE_KEY = 'isWalkerMode';
 const BLOCKER_KEY = 'blockGoogleOneTap';
 
-// ── ALM: Heavy Domain 判定 ──────────────────────────────────────────────
-// background.ts 内の ALM_HEAVY_DOMAINS と同じセット。定義値は必ず両ファイルで同期すること。
-// kernel がドメインをbackgroundに報告するため、両方で判定する必要はない（background側にも構築中）。
-const ALM_HEAVY_DOMAIN_SET = new Set([
-    'x.com',
-    'twitter.com',
-    'gemini.google.com',
-    'chatgpt.com',
-    'claude.ai',
-    'chat.deepseek.com',
-    'copilot.microsoft.com',
-    'perplexity.ai',
-    'grok.com',
-    'figma.com',
-    'canva.com',
-    'notion.so',
-    'www.youtube.com',
-]);
-
-function isHeavyDomain(): boolean {
-    return ALM_HEAVY_DOMAIN_SET.has(window.location.hostname);
-}
-
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const REGISTERED_ROUTER_KEYS = new Set([
     'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
