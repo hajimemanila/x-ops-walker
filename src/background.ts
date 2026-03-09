@@ -316,7 +316,7 @@ chrome.runtime.onConnect.addListener((port) => {
 // 【Master Heartbeat Timer の設計思想】
 //   タブごとに個別タイマーを回すと、50枚のタブで50本の setTimeout が Service Worker で
 //   走ることになる。これはリソースの無駄であり、タイマー精度も保証されない。
-//   → Background に「1分間隔のマスタータイマー」を1本だけ置き、全タブを走査・一括処理する。
+//   → Background に「3分間隔のマスタータイマー」を1本だけ置き、全タブを走査・一括処理する。
 //   → SW の休止は walker-keepalive Port（既存機構）が既に阻止しているため、1本で完結する。
 //
 // ============================================================================
@@ -324,7 +324,6 @@ chrome.runtime.onConnect.addListener((port) => {
 // ── ALM Configuration ──
 interface AlmConfig {
     enabled: boolean;
-    ahkInfection: boolean;
     excludeDomains: string[];
 }
 
@@ -350,7 +349,6 @@ let ALM_EXCLUDE_DOMAINS = new Set([
 // 実行中の ALM コンフィグ
 let currentAlmConfig: AlmConfig = {
     enabled: true,
-    ahkInfection: true,
     excludeDomains: Array.from(ALM_EXCLUDE_DOMAINS)
 };
 
@@ -391,7 +389,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
         currentAlmConfig = {
             enabled: Boolean(newConf.enabled),
-            ahkInfection: Boolean(newConf.ahkInfection),
             excludeDomains: newDomains
         };
         ALM_EXCLUDE_DOMAINS = new Set(newDomains);
@@ -414,7 +411,6 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 const ALM_GRACE_STANDARD_MS = 8 * 60 * 1000;        //  8分
 const ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1000; //  5分（30枚超タブ数で動的短縮）
 const ALM_OVERLOAD_THRESHOLD = 30;                   //  30枚超でオーバーロードモード
-const ALM_MASTER_INTERVAL_MS = 60 * 1000;            //  1分間隔のマスタータイマー
 
 // ── ALM タブ状態 ─────────────────────────────────────────────────────────────
 interface AlmTabState {

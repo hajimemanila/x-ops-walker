@@ -436,7 +436,7 @@ const hud: HudController = (() => {
             window.matchMedia('(display-mode: minimal-ui)').matches;
     }
     function setState(active: boolean): void {
-        // --- 最終防衛線: PWAなら描画処理を完全にキャンセル ---
+        // --- PWAなら描画処理を完全にキャンセル ---
         if (isPWA()) {
             host.style.display = 'none';
             return;
