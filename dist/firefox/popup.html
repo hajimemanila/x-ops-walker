@@ -436,21 +436,20 @@
                     SafetyEnter</span>
                 <div id="alm-safety-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
+
+            <div class="card-separator"></div>
+            <!-- ALM: Strategic Hibernation -->
+            <div class="setting-row">
+                <span class="setting-label" id="alm-master-label" data-i18n="popup_smart_discard_label">Smart Tab
+                    Discard</span>
+                <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
+            </div>
+
+            <!-- Dynamic Domain Button (Smart Tab Discard専用) -->
+            <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
+
+            <div class="card-separator"></div>
         </div>
-
-        <div class="card-separator"></div>
-        <!-- ALM: Strategic Hibernation -->
-        <div class="setting-row">
-            <span class="setting-label" id="alm-master-label" data-i18n="popup_smart_discard_label">Smart Tab
-                Discard</span>
-            <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
-        </div>
-
-        <!-- Dynamic Domain Button (Smart Tab Discard専用) -->
-        <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
-
-        <div class="card-separator"></div>
-
         <!-- Domain-Specific Protocols Section -->
         <div id="domain-protocol-container">
             <div class="section-title" id="section-domain-title" data-i18n="section_domain">📍 Domain Protocols</div>
@@ -470,18 +469,19 @@
                     </div>
                 </div>
             </div>
-            <div id="protocol-gemini" style="display: none;">
-                <div class="setting-row">
-                    <span class="setting-label" id="protocol-gemini-title" data-i18n="protocol_gemini_title">Gemini
-                        Walker</span>
-                    <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
-                </div>
-            </div>
-            <div id="protocol-none" style="display: none;">
-                <span class="setting-label" id="protocol-none-msg" data-i18n="protocol_none_msg"
-                    style="display: block; text-align: center; color: rgba(255, 255, 255, 0.4); padding: 5px 0;"></span>
+        </div>
+        <div id="protocol-gemini" style="display: none;">
+            <div class="setting-row">
+                <span class="setting-label" id="protocol-gemini-title" data-i18n="protocol_gemini_title">Gemini
+                    Walker</span>
+                <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
         </div>
+        <div id="protocol-none" style="display: none;">
+            <span class="setting-label" id="protocol-none-msg" data-i18n="protocol_none_msg"
+                style="display: block; text-align: center; color: rgba(255, 255, 255, 0.4); padding: 5px 0;"></span>
+        </div>
+    </div>
 
     </div>
 
