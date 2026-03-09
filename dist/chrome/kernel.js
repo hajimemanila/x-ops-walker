@@ -182,6 +182,8 @@
   var isBackspaceHeld = false;
   var originalTitle = "";
   var isCheatSheetVisible = false;
+  var dashboardHost = null;
+  var dashboardShadow = null;
   function injectWalkerCSS() {
     if (document.getElementById("x-walker-style")) return;
     const style = document.createElement("style");
@@ -222,6 +224,7 @@
   });
   function installDashboard() {
     removeDashboard();
+    initDashboardDOM();
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
   }
@@ -230,165 +233,175 @@
       clearInterval(heartbeatId);
       heartbeatId = null;
     }
-    const spacer = document.getElementById("x-ops-dashboard-spacer");
-    if (spacer) spacer.remove();
-    const box = document.getElementById("x-ops-dashboard-box");
-    if (box) box.remove();
+    const oldSpacer = document.getElementById("x-ops-dashboard-spacer");
+    if (oldSpacer) oldSpacer.remove();
+    if (dashboardHost) {
+      dashboardHost.remove();
+      dashboardHost = null;
+      dashboardShadow = null;
+    }
   }
   function maintainDOM() {
     if (!isDashboardEnabled) return;
+    if (!dashboardHost) {
+      initDashboardDOM();
+    } else if (!dashboardHost.isConnected) {
+      document.body.appendChild(dashboardHost);
+    }
+  }
+  function initDashboardDOM() {
+    if (dashboardHost) return;
+    dashboardHost = document.createElement("div");
+    dashboardHost.id = "x-ops-dashboard-host";
+    Object.assign(dashboardHost.style, {
+      position: "fixed",
+      zIndex: "9999",
+      pointerEvents: "none",
+      // 背景のクリックを阻害しない
+      display: "none"
+    });
+    dashboardShadow = dashboardHost.attachShadow({ mode: "closed" });
+    const box = document.createElement("div");
+    box.id = "box";
+    Object.assign(box.style, {
+      background: "rgba(10, 10, 22, 0.75)",
+      backdropFilter: "blur(16px) saturate(180%)",
+      WebkitBackdropFilter: "blur(16px) saturate(180%)",
+      border: "1px solid rgba(255, 140, 0, 0.2)",
+      borderRadius: "12px",
+      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
+      overflow: "hidden",
+      pointerEvents: "auto",
+      // パネル内はクリック可能
+      fontFamily: '"Segoe UI", system-ui, sans-serif',
+      color: "#eff3f4",
+      transition: "height 0.2s ease",
+      width: "100%"
+    });
+    const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
+    const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
+    box.innerHTML = `
+        <style>
+            #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
+            #x-ops-bookmark-container::-webkit-scrollbar-thumb { background: rgba(255, 140, 0, 0.3); border-radius: 10px; }
+            .x-ops-bm-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; transition: background-color 0.2s; border-bottom: 1px solid rgba(255, 140, 0, 0.05); position: relative; }
+            .x-ops-bm-item:hover { background-color: rgba(255, 255, 255, 0.03); }
+            .x-ops-bm-item.target-lock { border-left: 3px solid #00ba7c; background: rgba(0, 186, 124, 0.05); }
+            .x-ops-bm-item.active { background: rgba(255, 172, 48, 0.05); }
+            .x-ops-bm-link { flex-grow: 1; font-size: 13px; font-weight: 500; color: #eff3f4; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .x-ops-bm-star { font-size: 16px; color: #71767b; padding: 4px; border-radius: 50%; margin-left: 8px; transition: color 0.2s; cursor: pointer; }
+            .x-ops-bm-item.active .x-ops-bm-star { color: #ffac30; }
+            .x-ops-bm-star:hover { color: #ffac30; background: rgba(255, 172, 48, 0.1); }
+            .x-ops-bm-star.popping { animation: starPop 0.3s ease-out; }
+            @keyframes starPop { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }
+        </style>
+        <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase; user-select: none;">${titleText}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s;">[+] ADD</button>
+                <button id="x-ops-dashboard-toggle" title="\u6700\u5C0F\u5316" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">\u2212</button>
+            </div>
+        </div>
+        <div id="x-ops-dashboard-content">
+            <div id="x-ops-bookmark-container" style="max-height: 600px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);"></div>
+            <div style="padding: 12px; text-align: center;">
+                <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
+            </div>
+        </div>
+    `;
+    const toggleBtn = box.querySelector("#x-ops-dashboard-toggle");
+    const contentContainer = box.querySelector("#x-ops-dashboard-content");
+    if (toggleBtn && contentContainer) {
+      toggleBtn.addEventListener("mouseover", () => toggleBtn.style.color = "#fff");
+      toggleBtn.addEventListener("mouseout", () => toggleBtn.style.color = "rgba(255, 255, 255, 0.6)");
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = contentContainer.style.display === "none";
+        if (isHidden) {
+          contentContainer.style.display = "block";
+          toggleBtn.textContent = "\u2212";
+          toggleBtn.title = "\u6700\u5C0F\u5316";
+        } else {
+          contentContainer.style.display = "none";
+          toggleBtn.textContent = "\uFF0B";
+          toggleBtn.title = "\u5C55\u958B";
+        }
+      });
+    }
+    const quickAddBtn = box.querySelector("#x-ops-quick-add");
+    if (quickAddBtn) {
+      quickAddBtn.addEventListener("mouseover", () => {
+        quickAddBtn.style.background = "rgba(255, 140, 0, 0.3)";
+        quickAddBtn.style.boxShadow = "0 0 8px rgba(255, 140, 0, 0.4)";
+      });
+      quickAddBtn.addEventListener("mouseout", () => {
+        quickAddBtn.style.background = "rgba(255, 140, 0, 0.15)";
+        quickAddBtn.style.boxShadow = "none";
+      });
+      quickAddBtn.addEventListener("click", async () => {
+        const url = window.location.href;
+        const title = document.title.replace(/\s*\/ X$/i, "").trim();
+        const cleanedUrl = cleanUrl(url);
+        const result = await chrome.storage.local.get(["xOpsBookmarks"]);
+        const bookmarks = result.xOpsBookmarks || [];
+        if (!bookmarks.some((b) => cleanUrl(b.url) === cleanedUrl)) {
+          bookmarks.push({ title: title || url, url: cleanedUrl });
+          await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
+        }
+        const originalText = quickAddBtn.innerText;
+        quickAddBtn.innerText = "ADDED!";
+        quickAddBtn.style.color = "#00ba7c";
+        quickAddBtn.style.borderColor = "#00ba7c";
+        setTimeout(() => {
+          quickAddBtn.innerText = originalText;
+          quickAddBtn.style.color = "#ffac30";
+          quickAddBtn.style.borderColor = "rgba(255, 140, 0, 0.3)";
+        }, 1e3);
+      });
+    }
+    dashboardShadow.appendChild(box);
+    document.body.appendChild(dashboardHost);
+    renderBookmarkList();
+  }
+  function syncDashboardUI() {
+    if (!dashboardHost || !dashboardShadow) return;
+    const box = dashboardShadow.getElementById("box");
+    if (!box) return;
     const path = window.location.pathname;
     const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
     const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
     if (isLoginModal || isExcluded) {
-      const box2 = document.getElementById("x-ops-dashboard-box");
-      if (box2) box2.style.display = "none";
+      if (dashboardHost.style.display !== "none") dashboardHost.style.display = "none";
       return;
     }
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    if (!sidebar) return;
-    let spacer = document.getElementById("x-ops-dashboard-spacer");
-    if (!spacer) {
-      spacer = document.createElement("div");
-      spacer.id = "x-ops-dashboard-spacer";
-      spacer.style.width = "100%";
-      spacer.style.height = "150px";
-      spacer.style.marginTop = "12px";
-      spacer.style.marginBottom = "12px";
-      spacer.style.opacity = "0";
-      spacer.style.pointerEvents = "none";
-      spacer.style.transition = "height 0.2s ease";
+    if (!sidebar) {
+      if (dashboardHost.style.display !== "none") dashboardHost.style.display = "none";
+      return;
     }
+    if (dashboardHost.style.display !== "block") dashboardHost.style.display = "block";
+    const sidebarRect = sidebar.getBoundingClientRect();
+    if (dashboardHost.style.width !== sidebarRect.width + "px") dashboardHost.style.width = sidebarRect.width + "px";
+    if (dashboardHost.style.left !== sidebarRect.left + "px") dashboardHost.style.left = sidebarRect.left + "px";
+    let targetTop = 0;
+    let targetMarginDiv = null;
     const searchBar = sidebar.querySelector('[role="search"]');
-    if (spacer && searchBar) {
-      let target = searchBar;
-      let depth = 0;
-      const sidebarWrapper = sidebar.firstElementChild || sidebar;
-      while (target.parentElement && target.parentElement !== sidebarWrapper && depth < 10) {
-        const siblings = Array.from(target.parentElement.children).filter((el) => el.id !== "x-ops-dashboard-spacer");
-        if (siblings.length > 1) {
-          break;
-        }
-        target = target.parentElement;
-        depth++;
-      }
-      if (target && target.parentElement && target.nextSibling !== spacer) {
-        target.after(spacer);
-        console.log("[X-Ops Walker] Dashboard spacer secured via Smart Pillar (depth:", depth, ")");
-      }
-    } else if (spacer && !spacer.isConnected) {
-      const wrapper = sidebar.firstElementChild || sidebar;
-      if (wrapper.firstChild !== spacer) {
-        wrapper.insertBefore(spacer, wrapper.firstChild);
+    if (searchBar) {
+      const searchRect = searchBar.getBoundingClientRect();
+      targetTop = searchRect.bottom + 12;
+      targetMarginDiv = searchBar.parentElement?.nextElementSibling;
+    } else {
+      targetTop = Math.max(sidebarRect.top, 53);
+      targetMarginDiv = sidebar.firstElementChild;
+    }
+    if (dashboardHost.style.top !== targetTop + "px") dashboardHost.style.top = targetTop + "px";
+    if (targetMarginDiv) {
+      const currentBoxHeight = box.offsetHeight;
+      const targetMargin = currentBoxHeight + 10 + "px";
+      if (targetMarginDiv.style.marginTop !== targetMargin) {
+        targetMarginDiv.style.marginTop = targetMargin;
+        targetMarginDiv.style.transition = "margin-top 0.2s ease";
       }
     }
-    let box = document.getElementById("x-ops-dashboard-box");
-    if (!box) {
-      box = document.createElement("div");
-      box.id = "x-ops-dashboard-box";
-      Object.assign(box.style, {
-        position: "fixed",
-        zIndex: "9999",
-        background: "rgba(10, 10, 22, 0.75)",
-        backdropFilter: "blur(16px) saturate(180%)",
-        webkitBackdropFilter: "blur(16px) saturate(180%)",
-        border: "1px solid rgba(255, 140, 0, 0.2)",
-        borderRadius: "12px",
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
-        overflow: "hidden",
-        pointerEvents: "auto",
-        display: "none",
-        opacity: "1"
-      });
-      const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
-      const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
-      box.innerHTML = `
-            <style>
-                #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
-                #x-ops-bookmark-container::-webkit-scrollbar-thumb { background: rgba(255, 140, 0, 0.3); border-radius: 10px; }
-                .x-ops-bm-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; transition: background-color 0.2s; border-bottom: 1px solid rgba(255, 140, 0, 0.05); position: relative; }
-                .x-ops-bm-item:hover { background-color: rgba(255, 255, 255, 0.03); }
-                .x-ops-bm-item.target-lock { border-left: 3px solid #00ba7c; background: rgba(0, 186, 124, 0.05); }
-                .x-ops-bm-item.active { background: rgba(255, 172, 48, 0.05); }
-                .x-ops-bm-link { flex-grow: 1; font-size: 13px; font-weight: 500; color: #eff3f4; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                .x-ops-bm-star { font-size: 16px; color: #71767b; padding: 4px; border-radius: 50%; margin-left: 8px; transition: color 0.2s; cursor: pointer; }
-                .x-ops-bm-item.active .x-ops-bm-star { color: #ffac30; }
-                .x-ops-bm-star:hover { color: #ffac30; background: rgba(255, 172, 48, 0.1); }
-                .x-ops-bm-star.popping { animation: starPop 0.3s ease-out; }
-                @keyframes starPop { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }
-            </style>
-            <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase; user-select: none;">${titleText}</span>
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s; font-family: 'Segoe UI', sans-serif;">[+] ADD</button>
-                    <button id="x-ops-dashboard-toggle" title="\u6700\u5C0F\u5316" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">\u2212</button>
-                </div>
-            </div>
-            <div id="x-ops-dashboard-content">
-                <div id="x-ops-bookmark-container" style="max-height: 600px; overflow-y: auto; border-bottom: 1px solid rgba(255, 140, 0, 0.1);">
-                </div>
-                <div style="padding: 12px; text-align: center;">
-                    <div style="font-family: 'Cascadia Code', monospace; font-size: 10px; color: rgba(255, 255, 255, 0.5); letter-spacing: 0.2em;">${statusText}</div>
-                </div>
-            </div>
-        `;
-      document.body.appendChild(box);
-      renderBookmarkList();
-      const toggleBtn = box.querySelector("#x-ops-dashboard-toggle");
-      const contentContainer = box.querySelector("#x-ops-dashboard-content");
-      if (toggleBtn && contentContainer) {
-        toggleBtn.addEventListener("mouseover", () => toggleBtn.style.color = "#fff");
-        toggleBtn.addEventListener("mouseout", () => toggleBtn.style.color = "rgba(255, 255, 255, 0.6)");
-        toggleBtn.addEventListener("click", () => {
-          const isHidden = contentContainer.style.display === "none";
-          if (isHidden) {
-            contentContainer.style.display = "block";
-            toggleBtn.textContent = "\u2212";
-            toggleBtn.title = "\u6700\u5C0F\u5316";
-          } else {
-            contentContainer.style.display = "none";
-            toggleBtn.textContent = "\uFF0B";
-            toggleBtn.title = "\u5C55\u958B";
-          }
-        });
-      }
-      const quickAddBtn = box.querySelector("#x-ops-quick-add");
-      if (quickAddBtn) {
-        quickAddBtn.addEventListener("mouseover", () => {
-          quickAddBtn.style.background = "rgba(255, 140, 0, 0.3)";
-          quickAddBtn.style.boxShadow = "0 0 8px rgba(255, 140, 0, 0.4)";
-        });
-        quickAddBtn.addEventListener("mouseout", () => {
-          quickAddBtn.style.background = "rgba(255, 140, 0, 0.15)";
-          quickAddBtn.style.boxShadow = "none";
-        });
-        quickAddBtn.addEventListener("click", async () => {
-          const url = window.location.href;
-          const title = document.title.replace(/\s*\/ X$/i, "").trim();
-          const clean = (u) => {
-            let c = u.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-            return c.toLowerCase().trim();
-          };
-          const cleanedUrl = clean(url);
-          const result = await chrome.storage.local.get(["xOpsBookmarks"]);
-          const bookmarks = result.xOpsBookmarks || [];
-          if (!bookmarks.some((b) => clean(b.url) === cleanedUrl)) {
-            bookmarks.push({ title: title || url, url: cleanedUrl });
-            await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
-          }
-          const originalText = quickAddBtn.innerText;
-          quickAddBtn.innerText = "ADDED!";
-          quickAddBtn.style.color = "#00ba7c";
-          quickAddBtn.style.borderColor = "#00ba7c";
-          setTimeout(() => {
-            quickAddBtn.innerText = originalText;
-            quickAddBtn.style.color = "#ffac30";
-            quickAddBtn.style.borderColor = "rgba(255, 140, 0, 0.3)";
-          }, 1e3);
-        });
-      }
-    }
-    updateTargetHighlight();
   }
   function startWalkerLoop() {
     if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
@@ -406,65 +419,6 @@
       walkerSyncFrame = requestAnimationFrame(loop);
     }
     walkerSyncFrame = requestAnimationFrame(loop);
-  }
-  function getArticleColor(article) {
-    const t2 = article.querySelector("time");
-    if (!t2) return CONFIG.colors.recent;
-    const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
-    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
-  }
-  function maintainFocusVisuals() {
-    if (currentIndex === -1 || targetArticles.length === 0) return;
-    const target = targetArticles[currentIndex];
-    if (!target || !target.isConnected) return;
-    if (!target.classList.contains("x-walker-focused")) {
-      target.classList.add("x-walker-focused");
-    }
-    const color = getArticleColor(target);
-    const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
-    if (target.style.boxShadow !== expectedShadow) {
-      target.style.boxShadow = expectedShadow;
-    }
-  }
-  function syncDashboardUI() {
-    const path = window.location.pathname;
-    const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
-    const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
-    const box = document.getElementById("x-ops-dashboard-box");
-    if (isLoginModal || isExcluded) {
-      if (box && box.style.display !== "none") box.style.display = "none";
-      return;
-    }
-    const spacer = document.getElementById("x-ops-dashboard-spacer");
-    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    if (spacer && box && sidebar && spacer.isConnected) {
-      if (box.style.display !== "block") box.style.display = "block";
-      const spacerRect = spacer.getBoundingClientRect();
-      const boxHeight = box.offsetHeight;
-      const newSpacerHeight = boxHeight + 10 + "px";
-      if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
-      if (spacerRect.width > 0) {
-        const newWidth = spacerRect.width + "px";
-        if (box.style.width !== newWidth) box.style.width = newWidth;
-        const newLeft = spacerRect.left + "px";
-        if (box.style.left !== newLeft) box.style.left = newLeft;
-      } else if (!box.style.left) {
-        const sidebarRect = sidebar.getBoundingClientRect();
-        box.style.left = sidebarRect.left + "px";
-        box.style.width = sidebarRect.width + "px";
-      }
-      let newTop = "";
-      const searchBar = sidebar.querySelector('[role="search"]');
-      if (searchBar) {
-        const searchRect = searchBar.getBoundingClientRect();
-        newTop = searchRect.bottom + 12 + "px";
-      } else {
-        newTop = Math.max(spacerRect.top, 53) + "px";
-      }
-      if (box.style.top !== newTop) box.style.top = newTop;
-    } else if (box) {
-      if (box.style.display !== "none") box.style.display = "none";
-    }
   }
   function triggerAutoTargeting() {
     let attempts = 0;
@@ -487,8 +441,28 @@
       }
     }, 50);
   }
+  function getArticleColor(article) {
+    const t2 = article.querySelector("time");
+    if (!t2) return CONFIG.colors.recent;
+    const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
+    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+  }
+  function maintainFocusVisuals() {
+    if (currentIndex === -1 || targetArticles.length === 0) return;
+    const target = targetArticles[currentIndex];
+    if (!target || !target.isConnected) return;
+    if (!target.classList.contains("x-walker-focused")) {
+      target.classList.add("x-walker-focused");
+    }
+    const color = getArticleColor(target);
+    const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
+    if (target.style.boxShadow !== expectedShadow) {
+      target.style.boxShadow = expectedShadow;
+    }
+  }
   async function renderBookmarkList() {
-    const container = document.getElementById("x-ops-bookmark-container");
+    if (!dashboardShadow) return;
+    const container = dashboardShadow.getElementById("x-ops-bookmark-container");
     if (!container) return;
     const result = await chrome.storage.local.get(["xOpsBookmarks"]);
     const bookmarks = result.xOpsBookmarks || [];
@@ -543,7 +517,8 @@
     return item;
   }
   function updateTargetHighlight() {
-    const container = document.getElementById("x-ops-bookmark-container");
+    if (!dashboardShadow) return;
+    const container = dashboardShadow.getElementById("x-ops-bookmark-container");
     if (!container) return;
     const currentClean = cleanUrl(window.location.href);
     const items = container.querySelectorAll(".x-ops-bm-item");
@@ -679,11 +654,10 @@
     }
   }, true);
   window.addEventListener("x-ops-toggle-star", () => {
+    if (!dashboardShadow) return;
     const currentUrl = window.location.href;
     const currentClean = cleanUrl(currentUrl);
-    const box = document.getElementById("x-ops-dashboard-box");
-    if (!box) return;
-    const items = Array.from(box.querySelectorAll(".x-ops-bm-item"));
+    const items = Array.from(dashboardShadow.querySelectorAll(".x-ops-bm-item"));
     const targetItem = items.find((item) => cleanUrl(item.querySelector(".x-ops-bm-link")?.getAttribute("href") || "") === currentClean);
     if (targetItem) {
       const star = targetItem.querySelector(".x-ops-bm-star");
@@ -691,9 +665,8 @@
     }
   });
   window.addEventListener("x-ops-next-star", () => {
-    const box = document.getElementById("x-ops-dashboard-box");
-    if (!box) return;
-    const links = Array.from(box.querySelectorAll(".x-ops-bm-link"));
+    if (!dashboardShadow) return;
+    const links = Array.from(dashboardShadow.querySelectorAll(".x-ops-bm-link"));
     if (links.length === 0) return;
     const targets = links.map((a) => a.href);
     const highlights = getHighlights();
