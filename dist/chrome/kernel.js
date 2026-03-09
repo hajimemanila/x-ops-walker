@@ -660,9 +660,21 @@
     if (isActive) {
       injectWalkerCSS();
       document.body.classList.add("x-walker-active");
-      updateTargets();
-      if (window.scrollY < 200) currentIndex = -1;
-      else findClosestIndex();
+      let attempts = 0;
+      const initFocusInterval = setInterval(() => {
+        updateTargets();
+        if (targetArticles.length > 0) {
+          clearInterval(initFocusInterval);
+          if (window.scrollY < 200) {
+            focusArticle(0);
+          } else {
+            findClosestIndex();
+            if (currentIndex !== -1) focusArticle(currentIndex);
+          }
+        } else if (++attempts > 40) {
+          clearInterval(initFocusInterval);
+        }
+      }, 50);
     } else {
       document.body.classList.remove("x-walker-active");
       forceClearFocus();

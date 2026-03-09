@@ -629,8 +629,29 @@ function setWalkerState(enabled: boolean) {
     if (isActive) {
         injectWalkerCSS();
         document.body.classList.add('x-walker-active');
-        updateTargets();
-        if (window.scrollY < 200) currentIndex = -1; else findClosestIndex();
+
+        // ── 変更点：ツイートの非同期読み込みを待ってから初期フォーカスを当てる ──
+        let attempts = 0;
+        const initFocusInterval = setInterval(() => {
+            updateTargets();
+            if (targetArticles.length > 0) {
+                clearInterval(initFocusInterval);
+
+                if (window.scrollY < 200) {
+                    // 最上部にいる場合は最初のポスト（index: 0）に自動フォーカス
+                    focusArticle(0);
+                } else {
+                    // 途中までスクロールしてONにした場合は、一番近いポストにフォーカス
+                    findClosestIndex();
+                    if (currentIndex !== -1) focusArticle(currentIndex);
+                }
+            } else if (++attempts > 40) {
+                // 2秒（50ms × 40回）待機してツイートが見つからなければタイムアウト
+                clearInterval(initFocusInterval);
+            }
+        }, 50);
+        // ────────────────────────────────────────────────────────
+
     } else {
         document.body.classList.remove('x-walker-active');
         forceClearFocus();
