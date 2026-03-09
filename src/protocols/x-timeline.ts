@@ -60,8 +60,8 @@ function injectWalkerCSS() {
     const style = document.createElement('style');
     style.id = 'x-walker-style';
     style.textContent = `
-        body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
-        body.x-walker-active article[data-testid="tweet"].x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
+        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
     if (document.head) document.head.appendChild(style);
     else document.addEventListener('DOMContentLoaded', () => document.head && document.head.appendChild(style));
@@ -793,9 +793,11 @@ function findClosestIndex() {
 
 function updateTargets() {
     if (document.hidden) { targetArticles = []; return; }
-    targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter(article => {
+
+    // 🌟修正: [data-testid="tweet"] の縛りをなくし、単なる article をすべて取得する
+    targetArticles = Array.from(document.querySelectorAll('article')).filter(article => {
         if (!article.isConnected) return false;
-        const text = (article as HTMLElement).innerText;
+        const text = (article as HTMLElement).innerText || "";
 
         // ── 広告スキップロジックの改良 ──
         if (CONFIG.skipAds) {

@@ -1223,8 +1223,8 @@
     const style = document.createElement("style");
     style.id = "x-walker-style";
     style.textContent = `
-        body.x-walker-active article[data-testid="tweet"] { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
-        body.x-walker-active article[data-testid="tweet"].x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
+        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
     if (document.head) document.head.appendChild(style);
     else document.addEventListener("DOMContentLoaded", () => document.head && document.head.appendChild(style));
@@ -1837,9 +1837,9 @@
       targetArticles = [];
       return;
     }
-    targetArticles = Array.from(document.querySelectorAll('article[data-testid="tweet"]')).filter((article) => {
+    targetArticles = Array.from(document.querySelectorAll("article")).filter((article) => {
       if (!article.isConnected) return false;
-      const text = article.innerText;
+      const text = article.innerText || "";
       if (CONFIG.skipAds) {
         const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
         const hasAdText = text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted");
