@@ -192,8 +192,7 @@
         body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
-    if (document.head) document.head.appendChild(style);
-    else document.addEventListener("DOMContentLoaded", () => document.head && document.head.appendChild(style));
+    document.documentElement.appendChild(style);
   }
   function initXWalker(config) {
     isDashboardEnabled = config.enabled && config.rightColumnDashboard;
@@ -410,6 +409,10 @@
         walkerSyncFrame = null;
         return;
       }
+      if (!document.body.classList.contains("x-walker-active")) {
+        document.body.classList.add("x-walker-active");
+      }
+      injectWalkerCSS();
       if (currentUrlPath !== window.location.pathname) {
         currentUrlPath = window.location.pathname;
         triggerAutoTargeting();

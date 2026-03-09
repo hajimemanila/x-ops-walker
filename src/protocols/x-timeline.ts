@@ -58,7 +58,7 @@ let isCheatSheetVisible = false;
 let dashboardHost: HTMLElement | null = null;
 let dashboardShadow: ShadowRoot | null = null;
 
-// 安全なCSS注入（クラッシュ防止）
+// 安全なCSS注入（Reactの管轄外である <html> 直下に配置して消滅を防ぐ）
 function injectWalkerCSS() {
     if (document.getElementById('x-walker-style')) return;
     const style = document.createElement('style');
@@ -67,8 +67,7 @@ function injectWalkerCSS() {
         body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
-    if (document.head) document.head.appendChild(style);
-    else document.addEventListener('DOMContentLoaded', () => document.head && document.head.appendChild(style));
+    document.documentElement.appendChild(style);
 }
 
 export function initXWalker(config: XWalkerConfig) {
@@ -320,6 +319,13 @@ function startWalkerLoop() {
             walkerSyncFrame = null;
             return;
         }
+
+        // 🌟 蘇生防壁: ReactによるSPA遷移時の body クラス剥奪を監視・復元
+        if (!document.body.classList.contains('x-walker-active')) {
+            document.body.classList.add('x-walker-active');
+        }
+        // CSSタグ自体の生存確認
+        injectWalkerCSS();
 
         // 1. SPAナビゲーション検知（通知や別ページへの遷移をフック）
         if (currentUrlPath !== window.location.pathname) {
