@@ -23,9 +23,6 @@
     "cs_nav_ad": {
         "message": "前 / 次のタブへ移動"
     },
-    "cs_nav_space": {
-        "message": "次のタブ（Shift+Space で前）"
-    },
     "cs_nav_ws": {
         "message": "ページを上 / 下スクロール"
     },
@@ -62,8 +59,11 @@
     "cs_tab_cc": {
         "message": "タブを複製"
     },
-    "cs_sys_esc": {
-        "message": "Walker Mode 切替"
+    "cs_sys_shift_p": {
+        "message": "Walkerモード ON / OFF"
+    },
+    "cs_sys_esc_close": {
+        "message": "チートシートを閉じる"
     },
     "cs_sys_f": {
         "message": "チートシートを開閉"

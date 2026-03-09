@@ -55,7 +55,7 @@ const BLOCKER_KEY = 'blockGoogleOneTap';
 
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const REGISTERED_ROUTER_KEYS = new Set([
-    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', ' ', 'q', 'e', 'c',
+    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c',
 ]);
 
 // ── スクロールユーティリティ（Center Raycast + Shadow Piercing）────────────────────────────
@@ -321,8 +321,12 @@ function isInputActive(event: KeyboardEvent): boolean {
 
 // ── 絶対的パススルー共通判定 ──────────────────────────────────────────────────
 function shouldPassThrough(event: KeyboardEvent): boolean {
-    // Walker が OFF の時は何もしない（Escape だけは後段で処理するため除外）
-    if (!isWalkerMode && event.key !== 'Escape') return true;
+    // ── Walker トグルの検知 (Shift + P) ──
+    // 修飾キーの誤爆を防ぐため、Shiftのみが押されていることを厳密に判定します
+    const isWalkerToggle = event.code === 'KeyP' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+
+    // Walker が OFF の時は何もしない（Escape と Shift+P だけは後段で処理するため除外）
+    if (!isWalkerMode && event.key !== 'Escape' && !isWalkerToggle) return true;
 
     // 修飾キー（Ctrl / Meta / Alt）が押されている場合はブラウザに委ねる
     // 例: Ctrl+C (コピー), Ctrl+V (ペースト), Alt+← (戻る) 等を保護
@@ -344,7 +348,8 @@ function shouldPassThrough(event: KeyboardEvent): boolean {
     if (event.repeat) return true;
 
     // 修飾キー単独のキーダウンはスキップ
-    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta') return true;
+    // ※ Shift単押しもここでついでに弾いておくとより安全です
+    if (event.key === 'Alt' || event.key === 'Control' || event.key === 'Meta' || event.key === 'Shift') return true;
 
     return false;
 }
@@ -599,7 +604,6 @@ const cheatsheet: CheatsheetController = (() => {
 
     addSection('cs_section_nav');
     addRow(['A', 'D'], 'cs_nav_ad');
-    addRow(['Space'], 'cs_nav_space');
     addRow(['W', 'S'], 'cs_nav_ws');
     addRow(['Q', 'E'], 'cs_nav_qe');
 
@@ -615,7 +619,7 @@ const cheatsheet: CheatsheetController = (() => {
     addRow(['Shift', 'C'], 'cs_tab_cc');
 
     addSection('cs_section_sys');
-    addRow(['Esc'], 'cs_sys_esc');
+    addRow(['Shift', 'P'], 'cs_sys_shift_p');
     addRow(['F'], 'cs_sys_f');
     addRow(['Z'], 'cs_sys_z');
     addRow(['Alt', 'Z'], 'cs_sys_altz');
@@ -856,19 +860,28 @@ function keydownHandler(event: KeyboardEvent): void {
     // ここから下は「Walker が使うキーと確定した瞬間に初めて」ブロックする。
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ── Escape: チートシート閉じる or Walker トグル ──────────────────────────
-    // Walker OFF/ON どちらでも Escape だけは捕捉してチートシートを閉じる。
+    // ── Escape: チートシートを閉じる ──────────────────────────
     if (event.key === 'Escape') {
+        if (cheatsheet.isVisible()) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            cheatsheet.hide();
+        }
+        // チートシートが開いていない時の Esc はブラウザ本来の挙動（ダイアログ閉じ等）に委ねるため return のみ
+        return;
+    }
+
+    // ── Shift + P: Walker トグル ──────────────────────────
+    if (event.code === 'KeyP' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
 
         if (cheatsheet.isVisible()) {
             cheatsheet.hide();
-            return;
         }
 
-        // P2: ローカル変数のみで状態を管理し、storage に Push するだけ
         isWalkerMode = !isWalkerMode;
         safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
         hud.setState(isWalkerMode);

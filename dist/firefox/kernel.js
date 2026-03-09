@@ -1960,7 +1960,6 @@
     "g",
     "t",
     "9",
-    " ",
     "q",
     "e",
     "c"
@@ -2127,13 +2126,14 @@
     return false;
   }
   function shouldPassThrough(event) {
-    if (!isWalkerMode && event.key !== "Escape") return true;
+    const isWalkerToggle = event.code === "KeyP" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    if (!isWalkerMode && event.key !== "Escape" && !isWalkerToggle) return true;
     if (event.ctrlKey || event.metaKey || event.altKey) return true;
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return true;
     if (event.isComposing || event.key === "Process" || event.keyCode === 229) return true;
     if (isInputActive2(event)) return true;
     if (event.repeat) return true;
-    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta") return true;
+    if (event.key === "Alt" || event.key === "Control" || event.key === "Meta" || event.key === "Shift") return true;
     return false;
   }
   var hud = (() => {
@@ -2355,7 +2355,6 @@
     }
     addSection("cs_section_nav");
     addRow(["A", "D"], "cs_nav_ad");
-    addRow(["Space"], "cs_nav_space");
     addRow(["W", "S"], "cs_nav_ws");
     addRow(["Q", "E"], "cs_nav_qe");
     addSection("cs_section_tab");
@@ -2369,7 +2368,7 @@
     addRow(["Shift", "S"], "cs_tab_ss");
     addRow(["Shift", "C"], "cs_tab_cc");
     addSection("cs_section_sys");
-    addRow(["Esc"], "cs_sys_esc");
+    addRow(["Shift", "P"], "cs_sys_shift_p");
     addRow(["F"], "cs_sys_f");
     addRow(["Z"], "cs_sys_z");
     addRow(["Alt", "Z"], "cs_sys_altz");
@@ -2542,12 +2541,20 @@
     if (document.fullscreenElement !== null && event.key === "Escape") return;
     const key = normalizeKey(event);
     if (event.key === "Escape") {
+      if (cheatsheet.isVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        cheatsheet.hide();
+      }
+      return;
+    }
+    if (event.code === "KeyP" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
       if (cheatsheet.isVisible()) {
         cheatsheet.hide();
-        return;
       }
       isWalkerMode = !isWalkerMode;
       safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
