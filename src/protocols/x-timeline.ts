@@ -33,7 +33,8 @@ function cleanUrl(url: string) {
 
 let isDashboardEnabled = false;
 let heartbeatId: ReturnType<typeof setInterval> | null = null;
-let syncFrame: number | null = null;
+let walkerSyncFrame: number | null = null;  // 名前を変更
+let currentUrlPath = window.location.pathname; // 追加: SPA遷移検知用
 
 // ── 🐺 Walker States & Config ──
 const CONFIG = {
@@ -104,17 +105,13 @@ function installDashboard() {
     removeDashboard();
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
-    startSync();
+    // ※ startWalkerLoop() は setWalkerState 側で統合して起動するためここは削除
 }
 
 function removeDashboard() {
     if (heartbeatId) {
         clearInterval(heartbeatId);
         heartbeatId = null;
-    }
-    if (syncFrame) {
-        cancelAnimationFrame(syncFrame);
-        syncFrame = null;
     }
     const spacer = document.getElementById('x-ops-dashboard-spacer');
     if (spacer) spacer.remove();
@@ -303,63 +300,126 @@ function maintainDOM() {
     updateTargetHighlight();
 }
 
-function startSync() {
-    function sync() {
-        if (!isDashboardEnabled) return;
+// ── 🛡️ Unified Walker Loop (SPA Router & React Defense) ──
+function startWalkerLoop() {
+    if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
 
-        const path = window.location.pathname;
-        const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
-        const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
-
-        const box = document.getElementById('x-ops-dashboard-box');
-        if (isLoginModal || isExcluded) {
-            if (box && box.style.display !== 'none') box.style.display = 'none';
-            syncFrame = requestAnimationFrame(sync);
+    function loop() {
+        if (!isActive) {
+            walkerSyncFrame = null;
             return;
         }
 
-        const spacer = document.getElementById('x-ops-dashboard-spacer');
-        const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-
-        if (spacer && box && sidebar && spacer.isConnected) {
-            if (box.style.display !== 'block') box.style.display = 'block';
-
-            const spacerRect = spacer.getBoundingClientRect();
-            const boxHeight = box.offsetHeight;
-
-            const newSpacerHeight = (boxHeight + 10) + 'px';
-            if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
-
-            if (spacerRect.width > 0) {
-                const newWidth = spacerRect.width + 'px';
-                if (box.style.width !== newWidth) box.style.width = newWidth;
-
-                const newLeft = spacerRect.left + 'px';
-                if (box.style.left !== newLeft) box.style.left = newLeft;
-            } else if (!box.style.left) {
-                const sidebarRect = sidebar.getBoundingClientRect();
-                box.style.left = sidebarRect.left + 'px';
-                box.style.width = sidebarRect.width + 'px';
-            }
-
-            let newTop = '';
-            const searchBar = sidebar.querySelector('[role="search"]');
-            if (searchBar) {
-                const searchRect = searchBar.getBoundingClientRect();
-                newTop = (searchRect.bottom + 12) + 'px';
-            } else {
-                newTop = Math.max(spacerRect.top, 53) + 'px';
-            }
-
-            if (box.style.top !== newTop) box.style.top = newTop;
-
-        } else if (box) {
-            if (box.style.display !== 'none') box.style.display = 'none';
+        // 1. SPAナビゲーション検知（通知や別ページへの遷移をフック）
+        if (currentUrlPath !== window.location.pathname) {
+            currentUrlPath = window.location.pathname;
+            triggerAutoTargeting();
         }
 
-        syncFrame = requestAnimationFrame(sync);
+        // 2. React 再レンダリング防壁（ホバー時のスタイル消失を即座に修復）
+        maintainFocusVisuals();
+
+        // 3. ダッシュボードの追従同期
+        if (isDashboardEnabled) syncDashboardUI();
+
+        walkerSyncFrame = requestAnimationFrame(loop);
     }
-    syncFrame = requestAnimationFrame(sync);
+    walkerSyncFrame = requestAnimationFrame(loop);
+}
+
+function getArticleColor(article: HTMLElement): string {
+    const t = article.querySelector('time');
+    if (!t) return CONFIG.colors.recent;
+    const d = (new Date().getTime() - new Date(t.getAttribute('datetime') || '').getTime()) / (86400000);
+    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+}
+
+function maintainFocusVisuals() {
+    if (currentIndex === -1 || targetArticles.length === 0) return;
+    const target = targetArticles[currentIndex];
+    if (!target || !target.isConnected) return;
+
+    if (!target.classList.contains('x-walker-focused')) {
+        target.classList.add('x-walker-focused');
+    }
+
+    // Reactがインラインスタイルを吹き飛ばしても、16ms以内に即座に再適用する（マウス操作の邪魔はしない）
+    const color = getArticleColor(target);
+    const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
+    if (target.style.boxShadow !== expectedShadow) {
+        target.style.boxShadow = expectedShadow;
+    }
+}
+
+function syncDashboardUI() {
+    const path = window.location.pathname;
+    const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+    const isExcluded = path.startsWith('/settings') || path.includes('/i/flow/login') || path === '/login' || path === '/logout' || path.startsWith('/i/display');
+
+    const box = document.getElementById('x-ops-dashboard-box');
+    if (isLoginModal || isExcluded) {
+        if (box && box.style.display !== 'none') box.style.display = 'none';
+        return;
+    }
+
+    const spacer = document.getElementById('x-ops-dashboard-spacer');
+    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
+
+    if (spacer && box && sidebar && spacer.isConnected) {
+        if (box.style.display !== 'block') box.style.display = 'block';
+
+        const spacerRect = spacer.getBoundingClientRect();
+        const boxHeight = box.offsetHeight;
+
+        const newSpacerHeight = (boxHeight + 10) + 'px';
+        if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
+
+        if (spacerRect.width > 0) {
+            const newWidth = spacerRect.width + 'px';
+            if (box.style.width !== newWidth) box.style.width = newWidth;
+            const newLeft = spacerRect.left + 'px';
+            if (box.style.left !== newLeft) box.style.left = newLeft;
+        } else if (!box.style.left) {
+            const sidebarRect = sidebar.getBoundingClientRect();
+            box.style.left = sidebarRect.left + 'px';
+            box.style.width = sidebarRect.width + 'px';
+        }
+
+        let newTop = '';
+        const searchBar = sidebar.querySelector('[role="search"]');
+        if (searchBar) {
+            const searchRect = searchBar.getBoundingClientRect();
+            newTop = (searchRect.bottom + 12) + 'px';
+        } else {
+            newTop = Math.max(spacerRect.top, 53) + 'px';
+        }
+        if (box.style.top !== newTop) box.style.top = newTop;
+    } else if (box) {
+        if (box.style.display !== 'none') box.style.display = 'none';
+    }
+}
+
+function triggerAutoTargeting() {
+    let attempts = 0;
+    const initFocusInterval = setInterval(() => {
+        updateTargets();
+        if (targetArticles.length > 0) {
+            clearInterval(initFocusInterval);
+            // 💡 魔法の遅延: Xがネイティブ機能で「通知元のコメント」へ自動スクロールするのを300ms待つ
+            setTimeout(() => {
+                if (!isActive) return;
+                updateTargets();
+                if (window.scrollY < 200) {
+                    focusArticle(0);
+                } else {
+                    findClosestIndex();
+                    if (currentIndex !== -1) focusArticle(currentIndex);
+                }
+            }, 300);
+        } else if (++attempts > 40) {
+            clearInterval(initFocusInterval);
+        }
+    }, 50);
 }
 
 async function renderBookmarkList() {
@@ -630,28 +690,8 @@ function setWalkerState(enabled: boolean) {
         injectWalkerCSS();
         document.body.classList.add('x-walker-active');
 
-        // ── 変更点：ツイートの非同期読み込みを待ってから初期フォーカスを当てる ──
-        let attempts = 0;
-        const initFocusInterval = setInterval(() => {
-            updateTargets();
-            if (targetArticles.length > 0) {
-                clearInterval(initFocusInterval);
-
-                if (window.scrollY < 200) {
-                    // 最上部にいる場合は最初のポスト（index: 0）に自動フォーカス
-                    focusArticle(0);
-                } else {
-                    // 途中までスクロールしてONにした場合は、一番近いポストにフォーカス
-                    findClosestIndex();
-                    if (currentIndex !== -1) focusArticle(currentIndex);
-                }
-            } else if (++attempts > 40) {
-                // 2秒（50ms × 40回）待機してツイートが見つからなければタイムアウト
-                clearInterval(initFocusInterval);
-            }
-        }, 50);
-        // ────────────────────────────────────────────────────────
-
+        startWalkerLoop();       // SPA検知・React防壁・UI同期のループを開始
+        triggerAutoTargeting();  // 初期ロードのフォーカスを実行
     } else {
         document.body.classList.remove('x-walker-active');
         forceClearFocus();
@@ -734,19 +774,15 @@ function focusArticle(index: number) {
     }
 
     forceClearFocus();
+    currentIndex = index; // ループ処理が即座にスタイルを当ててくれます
     const target = targetArticles[index];
+
     if (target?.isConnected) {
-        target.classList.add('x-walker-focused');
-        const color = (function (a) {
-            const t = a.querySelector('time'); if (!t) return CONFIG.colors.recent;
-            const d = (new Date().getTime() - new Date(t.getAttribute('datetime') || '').getTime()) / (86400000);
-            return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
-        })(target);
-        target.style.boxShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
         const rect = target.getBoundingClientRect();
         window.scrollTo({ top: window.pageYOffset + rect.top - (window.innerHeight / 2) + (rect.height / 2) - CONFIG.scrollOffset, behavior: 'smooth' });
-        currentIndex = index;
-    } else findClosestIndex();
+    } else {
+        findClosestIndex();
+    }
 }
 
 function flashFeedback(article: HTMLElement, color: string) {

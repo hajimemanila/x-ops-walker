@@ -1198,7 +1198,8 @@
   }
   var isDashboardEnabled = false;
   var heartbeatId = null;
-  var syncFrame = null;
+  var walkerSyncFrame = null;
+  var currentUrlPath = window.location.pathname;
   var CONFIG = {
     skipReposts: true,
     skipAds: true,
@@ -1256,16 +1257,11 @@
     removeDashboard();
     maintainDOM();
     heartbeatId = setInterval(() => maintainDOM(), 500);
-    startSync();
   }
   function removeDashboard() {
     if (heartbeatId) {
       clearInterval(heartbeatId);
       heartbeatId = null;
-    }
-    if (syncFrame) {
-      cancelAnimationFrame(syncFrame);
-      syncFrame = null;
     }
     const spacer = document.getElementById("x-ops-dashboard-spacer");
     if (spacer) spacer.remove();
@@ -1427,51 +1423,102 @@
     }
     updateTargetHighlight();
   }
-  function startSync() {
-    function sync() {
-      if (!isDashboardEnabled) return;
-      const path = window.location.pathname;
-      const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
-      const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
-      const box = document.getElementById("x-ops-dashboard-box");
-      if (isLoginModal || isExcluded) {
-        if (box && box.style.display !== "none") box.style.display = "none";
-        syncFrame = requestAnimationFrame(sync);
+  function startWalkerLoop() {
+    if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
+    function loop() {
+      if (!isActive) {
+        walkerSyncFrame = null;
         return;
       }
-      const spacer = document.getElementById("x-ops-dashboard-spacer");
-      const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-      if (spacer && box && sidebar && spacer.isConnected) {
-        if (box.style.display !== "block") box.style.display = "block";
-        const spacerRect = spacer.getBoundingClientRect();
-        const boxHeight = box.offsetHeight;
-        const newSpacerHeight = boxHeight + 10 + "px";
-        if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
-        if (spacerRect.width > 0) {
-          const newWidth = spacerRect.width + "px";
-          if (box.style.width !== newWidth) box.style.width = newWidth;
-          const newLeft = spacerRect.left + "px";
-          if (box.style.left !== newLeft) box.style.left = newLeft;
-        } else if (!box.style.left) {
-          const sidebarRect = sidebar.getBoundingClientRect();
-          box.style.left = sidebarRect.left + "px";
-          box.style.width = sidebarRect.width + "px";
-        }
-        let newTop = "";
-        const searchBar = sidebar.querySelector('[role="search"]');
-        if (searchBar) {
-          const searchRect = searchBar.getBoundingClientRect();
-          newTop = searchRect.bottom + 12 + "px";
-        } else {
-          newTop = Math.max(spacerRect.top, 53) + "px";
-        }
-        if (box.style.top !== newTop) box.style.top = newTop;
-      } else if (box) {
-        if (box.style.display !== "none") box.style.display = "none";
+      if (currentUrlPath !== window.location.pathname) {
+        currentUrlPath = window.location.pathname;
+        triggerAutoTargeting();
       }
-      syncFrame = requestAnimationFrame(sync);
+      maintainFocusVisuals();
+      if (isDashboardEnabled) syncDashboardUI();
+      walkerSyncFrame = requestAnimationFrame(loop);
     }
-    syncFrame = requestAnimationFrame(sync);
+    walkerSyncFrame = requestAnimationFrame(loop);
+  }
+  function getArticleColor(article) {
+    const t2 = article.querySelector("time");
+    if (!t2) return CONFIG.colors.recent;
+    const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
+    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+  }
+  function maintainFocusVisuals() {
+    if (currentIndex === -1 || targetArticles.length === 0) return;
+    const target = targetArticles[currentIndex];
+    if (!target || !target.isConnected) return;
+    if (!target.classList.contains("x-walker-focused")) {
+      target.classList.add("x-walker-focused");
+    }
+    const color = getArticleColor(target);
+    const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
+    if (target.style.boxShadow !== expectedShadow) {
+      target.style.boxShadow = expectedShadow;
+    }
+  }
+  function syncDashboardUI() {
+    const path = window.location.pathname;
+    const isLoginModal = !!document.querySelector('[data-testid="sheetDialog"]') || !!document.querySelector('[data-testid="login"]');
+    const isExcluded = path.startsWith("/settings") || path.includes("/i/flow/login") || path === "/login" || path === "/logout" || path.startsWith("/i/display");
+    const box = document.getElementById("x-ops-dashboard-box");
+    if (isLoginModal || isExcluded) {
+      if (box && box.style.display !== "none") box.style.display = "none";
+      return;
+    }
+    const spacer = document.getElementById("x-ops-dashboard-spacer");
+    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
+    if (spacer && box && sidebar && spacer.isConnected) {
+      if (box.style.display !== "block") box.style.display = "block";
+      const spacerRect = spacer.getBoundingClientRect();
+      const boxHeight = box.offsetHeight;
+      const newSpacerHeight = boxHeight + 10 + "px";
+      if (spacer.style.height !== newSpacerHeight) spacer.style.height = newSpacerHeight;
+      if (spacerRect.width > 0) {
+        const newWidth = spacerRect.width + "px";
+        if (box.style.width !== newWidth) box.style.width = newWidth;
+        const newLeft = spacerRect.left + "px";
+        if (box.style.left !== newLeft) box.style.left = newLeft;
+      } else if (!box.style.left) {
+        const sidebarRect = sidebar.getBoundingClientRect();
+        box.style.left = sidebarRect.left + "px";
+        box.style.width = sidebarRect.width + "px";
+      }
+      let newTop = "";
+      const searchBar = sidebar.querySelector('[role="search"]');
+      if (searchBar) {
+        const searchRect = searchBar.getBoundingClientRect();
+        newTop = searchRect.bottom + 12 + "px";
+      } else {
+        newTop = Math.max(spacerRect.top, 53) + "px";
+      }
+      if (box.style.top !== newTop) box.style.top = newTop;
+    } else if (box) {
+      if (box.style.display !== "none") box.style.display = "none";
+    }
+  }
+  function triggerAutoTargeting() {
+    let attempts = 0;
+    const initFocusInterval = setInterval(() => {
+      updateTargets();
+      if (targetArticles.length > 0) {
+        clearInterval(initFocusInterval);
+        setTimeout(() => {
+          if (!isActive) return;
+          updateTargets();
+          if (window.scrollY < 200) {
+            focusArticle(0);
+          } else {
+            findClosestIndex();
+            if (currentIndex !== -1) focusArticle(currentIndex);
+          }
+        }, 300);
+      } else if (++attempts > 40) {
+        clearInterval(initFocusInterval);
+      }
+    }, 50);
   }
   async function renderBookmarkList() {
     const container = document.getElementById("x-ops-bookmark-container");
@@ -1696,21 +1743,8 @@
     if (isActive) {
       injectWalkerCSS();
       document.body.classList.add("x-walker-active");
-      let attempts = 0;
-      const initFocusInterval = setInterval(() => {
-        updateTargets();
-        if (targetArticles.length > 0) {
-          clearInterval(initFocusInterval);
-          if (window.scrollY < 200) {
-            focusArticle(0);
-          } else {
-            findClosestIndex();
-            if (currentIndex !== -1) focusArticle(currentIndex);
-          }
-        } else if (++attempts > 40) {
-          clearInterval(initFocusInterval);
-        }
-      }, 50);
+      startWalkerLoop();
+      triggerAutoTargeting();
     } else {
       document.body.classList.remove("x-walker-active");
       forceClearFocus();
@@ -1789,20 +1823,14 @@
       return;
     }
     forceClearFocus();
+    currentIndex = index;
     const target = targetArticles[index];
     if (target?.isConnected) {
-      target.classList.add("x-walker-focused");
-      const color = (function(a) {
-        const t2 = a.querySelector("time");
-        if (!t2) return CONFIG.colors.recent;
-        const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
-        return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
-      })(target);
-      target.style.boxShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
       const rect = target.getBoundingClientRect();
       window.scrollTo({ top: window.pageYOffset + rect.top - window.innerHeight / 2 + rect.height / 2 - CONFIG.scrollOffset, behavior: "smooth" });
-      currentIndex = index;
-    } else findClosestIndex();
+    } else {
+      findClosestIndex();
+    }
   }
   function flashFeedback(article, color) {
     if (!article?.isConnected) return;
