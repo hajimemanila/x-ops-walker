@@ -957,3 +957,25 @@ function toggleCheatSheet() {
     const closer = () => { sheet?.remove(); isCheatSheetVisible = false; document.removeEventListener('click', closer); };
     setTimeout(() => document.addEventListener('click', closer), 10);
 }
+
+// ── 🔄 Tab Wake-up Resync (React Re-render Defense) ──
+function onTabWakeUp() {
+    if (document.hidden) return;
+
+    setTimeout(() => {
+        if (isDashboardEnabled) {
+            // 🌟 修正: 位置合わせの「前」に、DOMの構築・接続状態を強制確認する
+            maintainDOM();
+            // その後で位置を合わせる
+            syncDashboardUI();
+        }
+
+        if (isActive) {
+            updateTargets();
+            maintainFocusVisuals();
+        }
+    }, 50);
+}
+
+document.addEventListener('visibilitychange', onTabWakeUp);
+window.addEventListener('focus', onTabWakeUp);

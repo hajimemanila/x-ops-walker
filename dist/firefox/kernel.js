@@ -2033,6 +2033,21 @@
     };
     setTimeout(() => document.addEventListener("click", closer), 10);
   }
+  function onTabWakeUp() {
+    if (document.hidden) return;
+    setTimeout(() => {
+      if (isDashboardEnabled) {
+        maintainDOM();
+        syncDashboardUI();
+      }
+      if (isActive) {
+        updateTargets();
+        maintainFocusVisuals();
+      }
+    }, 50);
+  }
+  document.addEventListener("visibilitychange", onTabWakeUp);
+  window.addEventListener("focus", onTabWakeUp);
 
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
