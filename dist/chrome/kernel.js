@@ -60,6 +60,7 @@
             return true;
           // スクロール操作 (ページ先頭・末尾へ直行)
           case "w":
+            window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
             container.scrollTo({ top: 0, behavior: "smooth" });
             return true;
           case "s":
@@ -107,6 +108,7 @@
             document.activeElement.blur();
           }
           window.focus();
+          window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
           container.scrollTo({ top: 0, behavior: "smooth" });
           return true;
       }
@@ -115,6 +117,7 @@
           document.activeElement.blur();
         }
         window.focus();
+        window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
         container.scrollTo({ top: 0, behavior: "smooth" });
         return true;
       }
@@ -1537,6 +1540,7 @@
       deepBlur(document.activeElement);
       document.body.focus();
       window.focus();
+      window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
       const container = getBestScrollContainer(event);
       router.dispatch(event, "z", event.shiftKey, container);
       return;

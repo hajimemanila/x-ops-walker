@@ -838,6 +838,9 @@ function keydownHandler(event: KeyboardEvent): void {
         document.body.focus();
         // Stage 3: ウィンドウフォーカスも Walker へ
         window.focus();
+
+        window.dispatchEvent(new CustomEvent('x-ops-global-reset'));
+
         // Stage 4: 単押し Z と同等のスクロールリセット
         const container = getBestScrollContainer(event);
         router.dispatch(event, 'z', event.shiftKey, container);

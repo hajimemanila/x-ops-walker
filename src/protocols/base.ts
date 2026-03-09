@@ -38,6 +38,7 @@ export class BaseProtocol implements DomainProtocol {
 
                 // スクロール操作 (ページ先頭・末尾へ直行)
                 case 'w':
+                    window.dispatchEvent(new CustomEvent('x-ops-global-reset'));
                     container.scrollTo({ top: 0, behavior: 'smooth' });
                     return true;
                 case 's':
@@ -93,6 +94,7 @@ export class BaseProtocol implements DomainProtocol {
                     document.activeElement.blur();
                 }
                 window.focus();
+                window.dispatchEvent(new CustomEvent('x-ops-global-reset')); // 🌟追加：状態リセット
                 container.scrollTo({ top: 0, behavior: 'smooth' });
                 return true;
         }
@@ -104,6 +106,7 @@ export class BaseProtocol implements DomainProtocol {
                 document.activeElement.blur();
             }
             window.focus();
+            window.dispatchEvent(new CustomEvent('x-ops-global-reset')); // 🌟追加：状態リセット
             container.scrollTo({ top: 0, behavior: 'smooth' });
             return true;
         }
