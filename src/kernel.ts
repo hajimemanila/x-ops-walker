@@ -616,7 +616,8 @@ const cheatsheet: CheatsheetController = (() => {
     addRow(['Shift', 'T'], 'cs_tab_tt');
     addRow(['Shift', 'W'], 'cs_tab_ww');
     addRow(['Shift', 'S'], 'cs_tab_ss');
-    addRow(['Shift', 'C'], 'cs_tab_cc');
+    addRow(['Shift', 'A'], 'cs_tab_aa');
+    addRow(['Shift', 'D'], 'cs_tab_dd');
 
     addSection('cs_section_sys');
     addRow(['Shift', 'P'], 'cs_sys_shift_p');

@@ -29,6 +29,9 @@
     "cs_nav_qe": {
         "message": "履歴を戻る / 進む"
     },
+    "cs_tab_aa": {
+        "message": "最初のタブへ移動"
+    },
     "cs_tab_tt": {
         "message": "他のタブを全て閉じる"
     },
@@ -56,7 +59,7 @@
     "cs_tab_ss": {
         "message": "ページ最下部へスクロール"
     },
-    "cs_tab_cc": {
+    "cs_tab_dd": {
         "message": "タブを複製"
     },
     "cs_sys_shift_p": {

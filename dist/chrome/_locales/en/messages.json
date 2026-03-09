@@ -56,7 +56,10 @@
     "cs_tab_ss": {
         "message": "Scroll to Bottom"
     },
-    "cs_tab_cc": {
+    "cs_tab_aa": {
+        "message": "Go to First Tab"
+    },
+    "cs_tab_dd": {
         "message": "Duplicate Tab"
     },
     "cs_sys_esc": {

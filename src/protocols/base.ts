@@ -29,10 +29,10 @@ export class BaseProtocol implements DomainProtocol {
                 case 't':
                     chrome.runtime.sendMessage({ command: 'CLEAN_UP' });
                     return true;
-                case '9':
+                case 'a':
                     chrome.runtime.sendMessage({ command: 'GO_FIRST_TAB' });
                     return true;
-                case 'c':
+                case 'd':
                     chrome.runtime.sendMessage({ command: 'DUPLICATE_TAB' });
                     return true;
 
