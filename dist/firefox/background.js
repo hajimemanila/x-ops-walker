@@ -1236,7 +1236,6 @@
   ]);
   var currentAlmConfig = {
     enabled: true,
-    ahkInfection: true,
     excludeDomains: Array.from(ALM_EXCLUDE_DOMAINS)
   };
   var isAlmConfigLoaded = false;
@@ -1267,7 +1266,6 @@
       const newDomains = newConf.excludeDomains || newConf.heavyDomains || [];
       currentAlmConfig = {
         enabled: Boolean(newConf.enabled),
-        ahkInfection: Boolean(newConf.ahkInfection),
         excludeDomains: newDomains
       };
       ALM_EXCLUDE_DOMAINS = new Set(newDomains);
@@ -1283,7 +1281,6 @@
   var ALM_GRACE_STANDARD_MS = 8 * 60 * 1e3;
   var ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1e3;
   var ALM_OVERLOAD_THRESHOLD = 30;
-  var ALM_MASTER_INTERVAL_MS = 60 * 1e3;
   var almStates = /* @__PURE__ */ new Map();
   async function saveAlmStatesToStorage() {
     try {

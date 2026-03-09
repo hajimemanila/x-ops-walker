@@ -975,12 +975,11 @@ function pullStateFromStorage(): void {
         document.title = document.title.slice('💤 '.length);
     }
 
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY, 'alm'], (res) => {
-        // any キャストで TS エラー回避
-        const result = res as any;
-        isWalkerMode = !!result[STORAGE_KEY];
+    // 'alm' の取得を削除し、型キャストも不要化
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (res) => {
+        isWalkerMode = !!res[STORAGE_KEY];
         hud.setState(isWalkerMode);
-        applyOneTapBlocker(!!result[BLOCKER_KEY]);
+        applyOneTapBlocker(!!res[BLOCKER_KEY]);
 
         // ── SPA オートフォーカス潰し ───────────────────────────────────────────
         // Gemini/Keep 等の SPA はタブ復帰後に遅延で入力欄にオートフォーカスする。
@@ -1012,11 +1011,12 @@ window.addEventListener('focus', onWindowFocus);
 
 // ── ALM: Vital Heartbeat の発信源群 ─────────────────────────────────────
 // このブロックは kernel の Gatekeeper
-// (1) メディア再生 Veto (2) 入力フォーカス Veto (3) 非アクティブ化 TAB_INACTIVE の3つが主要なエントリポイント。
+// (1) メディア再生 Veto (2) 入力フォーカス Veto の2つが主要なエントリポイント。
+// ※タブの非アクティブ状態は background.ts 側でネイティブ監視するため、ここでは Veto のみを発信する。
 
 // ── (1) Media-Capture Veto ───────────────────────────────────────────────────
-// audio/video が再生中の間は ALM_VETO を発火し、Smart Tab Discard を終久禁止する。
-// 停止した時点で ALM_VETO_CLEAR を送り、1分・8分タイマーを再開始させる。
+// audio/video が再生中の間は ALM_VETO を発火し、Smart Tab Discard を絶対禁止する。
+// 停止した時点で ALM_VETO_CLEAR を送り、猶予タイマーのカウントを再開させる。
 // 【設計】capture: true を使うことで Shadow DOM 内の media 要素からのバブリングも捕捉。
 (function installMediaVeto() {
     // メディア Veto の Throttle: 同一イベントの連続発火を押さえるため、短時間に何度か発火してはいけない

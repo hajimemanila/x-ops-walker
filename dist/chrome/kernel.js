@@ -1574,11 +1574,10 @@
     if (document.title.startsWith("\u{1F4A4} ")) {
       document.title = document.title.slice("\u{1F4A4} ".length);
     }
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY, "alm"], (res) => {
-      const result = res;
-      isWalkerMode = !!result[STORAGE_KEY];
+    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (res) => {
+      isWalkerMode = !!res[STORAGE_KEY];
       hud.setState(isWalkerMode);
-      applyOneTapBlocker(!!result[BLOCKER_KEY]);
+      applyOneTapBlocker(!!res[BLOCKER_KEY]);
       if (isWalkerMode) {
         setTimeout(() => {
           if (!isWalkerMode) return;
