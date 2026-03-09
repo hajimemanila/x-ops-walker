@@ -194,6 +194,9 @@
     "x_cheat_sheet_action": {
         "message": "いいね / リポスト"
     },
+    "x_cheat_sheet_bookmark": {
+        "message": "ブックマーク"
+    },
     "x_cheat_sheet_delete": {
         "message": "DRS 削除 (長押し)"
     },

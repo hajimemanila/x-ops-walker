@@ -191,6 +191,9 @@
     "x_cheat_sheet_action": {
         "message": "Like / Repost"
     },
+    "x_cheat_sheet_bookmark": {
+        "message": "Bookmark"
+    },
     "x_cheat_sheet_delete": {
         "message": "DRS Delete"
     },

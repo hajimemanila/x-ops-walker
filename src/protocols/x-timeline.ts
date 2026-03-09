@@ -521,7 +521,11 @@ function isInputActive(): boolean {
 
 window.addEventListener('keydown', (e) => {
     if (isInputActive()) return;
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (e.shiftKey && e.code !== 'Semicolon') return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+
+
 
     // Cheat sheet closure highest priority
     if (isCheatSheetVisible && e.code !== 'KeyH') {
@@ -547,8 +551,8 @@ window.addEventListener('keydown', (e) => {
         return;
     }
 
-    // Walker keys (J, K, L, O, Backspace)
-    if (isActive && ['KeyJ', 'KeyK', 'KeyL', 'KeyO', 'Backspace'].includes(e.code)) {
+    // Walker keys (J, K, L, O, B, Backspace, I, U, Semicolon, Enter, Slash, C)
+    if (isActive && ['KeyJ', 'KeyK', 'KeyL', 'KeyO', 'KeyB', 'Backspace', 'KeyI', 'KeyU', 'Semicolon', 'Enter', 'Slash', 'KeyC'].includes(e.code)) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -556,6 +560,73 @@ window.addEventListener('keydown', (e) => {
         if (e.code === 'KeyJ') { resyncCurrentIndex(); focusArticle(currentIndex + 1); }
         if (e.code === 'KeyL') { executeAction('like'); }
         if (e.code === 'KeyO') { executeAction('repost'); }
+        if (e.code === 'KeyB') { executeAction('bookmark'); } // 🌟 B: ブックマーク追加
+
+        // ── ページ遷移 (I: 通知, U: ブックマーク) ──
+        if (e.code === 'KeyI') {
+            window.location.href = 'https://x.com/notifications';
+        }
+        if (e.code === 'KeyU') {
+            window.location.href = 'https://x.com/i/bookmarks';
+        }
+
+        // ── 検索フォーカス (/) ──
+        if (e.code === 'Slash') {
+            const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]') as HTMLElement;
+            if (searchInput) searchInput.focus();
+        }
+
+        // ── セミコロン (リプライ / 新規投稿) ──
+        if (e.code === 'Semicolon') {
+            if (e.shiftKey) {
+                // 🌟修正: 余計な親要素条件を外し、href属性だけで直接狙撃する
+                const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') as HTMLElement
+                    || document.querySelector('[data-testid="SideNav_NewTweet_Button"]') as HTMLElement;
+
+                if (composeBtn) {
+                    composeBtn.click();
+                } else {
+                    console.warn('[X-Ops Walker] Compose button not found.');
+                }
+            } else {
+                // ; 単押し = フォーカス中ポストへのリプライ
+                resyncCurrentIndex();
+                const target = targetArticles[currentIndex];
+                if (target && target.isConnected) {
+                    const replyBtn = target.querySelector('[data-testid="reply"]') as HTMLElement;
+                    if (replyBtn) replyBtn.click();
+                }
+            }
+        }
+
+        // ── Enter (詳細展開・ツリー画面へ潜る) ──
+        if (e.code === 'Enter') {
+            resyncCurrentIndex();
+            const target = targetArticles[currentIndex];
+            if (target && target.isConnected) {
+                const timeEl = target.querySelector('time');
+                const link = timeEl ? timeEl.closest('a') : null;
+                if (link) {
+                    link.click();
+                }
+            }
+        }
+
+        // ── C (テキスト抽出コピー) ──
+        if (e.code === 'KeyC') {
+            resyncCurrentIndex();
+            const target = targetArticles[currentIndex];
+            if (target && target.isConnected) {
+                const textNode = target.querySelector('[data-testid="tweetText"]') as HTMLElement;
+                if (textNode) {
+                    const textToCopy = textNode.innerText;
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        flashFeedback(target, 'rgba(0, 255, 255, 0.2)');
+                    }).catch(err => console.error('[X Walker] Copy failed:', err));
+                }
+            }
+        }
+
         if (e.code === 'Backspace') {
             if (e.repeat) return;
             startDRSDelete();
@@ -815,6 +886,14 @@ function executeAction(actionType: string) {
             btn.click();
             waitAndClick(btn.getAttribute('data-testid') === 'retweet' ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, 'rgba(0, 186, 124, 0.1)'));
         }
+    } else if (actionType === 'bookmark') {
+        // ── 追加: ブックマーク ──
+        const btn = article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]') as HTMLElement;
+        if (btn) {
+            btn.click();
+            // Xのブックマークは青系なので、青色のフラッシュでフィードバック
+            flashFeedback(article, 'rgba(29, 155, 240, 0.2)');
+        }
     }
 }
 
@@ -873,11 +952,16 @@ function toggleCheatSheet() {
     Object.assign(sheet.style, {
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: '10000',
         background: 'rgba(15, 15, 20, 0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)',
-        borderRadius: '12px', padding: '24px', color: '#e7e9ea', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', minWidth: '340px',
+        borderRadius: '12px', padding: '24px', color: '#e7e9ea', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', minWidth: '360px',
         fontFamily: '"Segoe UI", system-ui, sans-serif'
     });
 
     const getMsg = (key: string, fallback: string) => chrome.i18n.getMessage(key) || fallback;
+
+    // kbdタグの共通スタイル
+    const kbdStyle = `background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;`;
+    const kbdAlertStyle = `background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;`;
+
     sheet.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; margin-bottom: 16px;">
             <div style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
@@ -887,22 +971,45 @@ function toggleCheatSheet() {
                 ${getMsg('x_cheat_sheet_badge', 'CHEAT SHEET')}
             </div>
         </div>
+
         <div style="font-size: 11px; color: #ff8c00; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg('x_cheat_sheet_sec_nav', 'TACTICAL NAVIGATION')}</div>
-        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px; margin-bottom: 16px;">
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">J</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">K</kbd></div>
+        <div style="display: grid; grid-template-columns: 105px 1fr; gap: 10px; font-size: 13px; margin-bottom: 16px;">
+            <div style="text-align: right;"><kbd style="${kbdStyle}">J</kbd> / <kbd style="${kbdStyle}">K</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_nav', 'Navigate Timeline')}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">N</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">M</kbd></div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">Enter</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_detail', 'Open Detail')}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">/</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_search', 'Search')}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">I</kbd> / <kbd style="${kbdStyle}">U</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_jump', 'Notifs / Bookmarks')}</div>
+
+            <div style="text-align: right;"><kbd style="${kbdStyle}">N</kbd> / <kbd style="${kbdStyle}">M</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_patrol', 'Star Patrol')}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">Y</kbd></div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">Y</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_profile', 'Go Profile')}</div>
         </div>
+
         <div style="font-size: 11px; color: #f4212e; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg('x_cheat_sheet_sec_action', 'COMBAT ACTIONS')}</div>
-        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px;">
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">L</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">O</kbd></div>
+        <div style="display: grid; grid-template-columns: 105px 1fr; gap: 10px; font-size: 13px;">
+            <div style="text-align: right;"><kbd style="${kbdStyle}">L</kbd> / <kbd style="${kbdStyle}">O</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_action', 'Like / Repost')}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;">BS Hold</kbd></div>
+
+            <div style="text-align: right;"><kbd style="${kbdStyle}">B</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_bookmark', 'Bookmark')}</div>
+            <div style="text-align: right;"><kbd style="${kbdStyle}">;</kbd> / <kbd style="${kbdStyle}">⇧+;</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_reply', 'Reply / Compose')}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">C</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_copy', 'Copy Text')}</div>
+
+            <div style="text-align: right;"><kbd style="${kbdAlertStyle}">BS Hold</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg('x_cheat_sheet_delete', 'DRS Delete')}</div>
         </div>
+
         <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #71767b;">
             ${getMsg('x_cheat_sheet_close', 'Press H or click anywhere to close')}
         </div>

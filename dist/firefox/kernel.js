@@ -1599,7 +1599,8 @@
   }
   window.addEventListener("keydown", (e) => {
     if (isInputActive()) return;
-    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (e.shiftKey && e.code !== "Semicolon") return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
     if (isCheatSheetVisible && e.code !== "KeyH") {
       e.preventDefault();
       toggleCheatSheet();
@@ -1619,7 +1620,7 @@
       if (e.code === "KeyY") window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
       return;
     }
-    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "Backspace"].includes(e.code)) {
+    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "KeyB", "Backspace", "KeyI", "KeyU", "Semicolon", "Enter", "Slash", "KeyC"].includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
       if (e.code === "KeyK") {
@@ -1635,6 +1636,60 @@
       }
       if (e.code === "KeyO") {
         executeAction("repost");
+      }
+      if (e.code === "KeyB") {
+        executeAction("bookmark");
+      }
+      if (e.code === "KeyI") {
+        window.location.href = "https://x.com/notifications";
+      }
+      if (e.code === "KeyU") {
+        window.location.href = "https://x.com/i/bookmarks";
+      }
+      if (e.code === "Slash") {
+        const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]');
+        if (searchInput) searchInput.focus();
+      }
+      if (e.code === "Semicolon") {
+        if (e.shiftKey) {
+          const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') || document.querySelector('[data-testid="SideNav_NewTweet_Button"]');
+          if (composeBtn) {
+            composeBtn.click();
+          } else {
+            console.warn("[X-Ops Walker] Compose button not found.");
+          }
+        } else {
+          resyncCurrentIndex();
+          const target = targetArticles[currentIndex];
+          if (target && target.isConnected) {
+            const replyBtn = target.querySelector('[data-testid="reply"]');
+            if (replyBtn) replyBtn.click();
+          }
+        }
+      }
+      if (e.code === "Enter") {
+        resyncCurrentIndex();
+        const target = targetArticles[currentIndex];
+        if (target && target.isConnected) {
+          const timeEl = target.querySelector("time");
+          const link = timeEl ? timeEl.closest("a") : null;
+          if (link) {
+            link.click();
+          }
+        }
+      }
+      if (e.code === "KeyC") {
+        resyncCurrentIndex();
+        const target = targetArticles[currentIndex];
+        if (target && target.isConnected) {
+          const textNode = target.querySelector('[data-testid="tweetText"]');
+          if (textNode) {
+            const textToCopy = textNode.innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+              flashFeedback(target, "rgba(0, 255, 255, 0.2)");
+            }).catch((err) => console.error("[X Walker] Copy failed:", err));
+          }
+        }
       }
       if (e.code === "Backspace") {
         if (e.repeat) return;
@@ -1869,6 +1924,12 @@
         btn.click();
         waitAndClick(btn.getAttribute("data-testid") === "retweet" ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, "rgba(0, 186, 124, 0.1)"));
       }
+    } else if (actionType === "bookmark") {
+      const btn = article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+      if (btn) {
+        btn.click();
+        flashFeedback(article, "rgba(29, 155, 240, 0.2)");
+      }
     }
   }
   function startDRSDelete() {
@@ -1933,10 +1994,12 @@
       padding: "24px",
       color: "#e7e9ea",
       boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-      minWidth: "340px",
+      minWidth: "360px",
       fontFamily: '"Segoe UI", system-ui, sans-serif'
     });
     const getMsg = (key, fallback) => chrome.i18n.getMessage(key) || fallback;
+    const kbdStyle = `background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;`;
+    const kbdAlertStyle = `background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;`;
     sheet.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 12px; margin-bottom: 16px;">
             <div style="font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
@@ -1946,22 +2009,45 @@
                 ${getMsg("x_cheat_sheet_badge", "CHEAT SHEET")}
             </div>
         </div>
+
         <div style="font-size: 11px; color: #ff8c00; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg("x_cheat_sheet_sec_nav", "TACTICAL NAVIGATION")}</div>
-        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px; margin-bottom: 16px;">
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">J</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">K</kbd></div>
+        <div style="display: grid; grid-template-columns: 105px 1fr; gap: 10px; font-size: 13px; margin-bottom: 16px;">
+            <div style="text-align: right;"><kbd style="${kbdStyle}">J</kbd> / <kbd style="${kbdStyle}">K</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_nav", "Navigate Timeline")}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">N</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">M</kbd></div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">Enter</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_detail", "Open Detail")}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">/</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_search", "Search")}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">I</kbd> / <kbd style="${kbdStyle}">U</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_jump", "Notifs / Bookmarks")}</div>
+
+            <div style="text-align: right;"><kbd style="${kbdStyle}">N</kbd> / <kbd style="${kbdStyle}">M</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_patrol", "Star Patrol")}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">Y</kbd></div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">Y</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_profile", "Go Profile")}</div>
         </div>
+
         <div style="font-size: 11px; color: #f4212e; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.05em;">${getMsg("x_cheat_sheet_sec_action", "COMBAT ACTIONS")}</div>
-        <div style="display: grid; grid-template-columns: 90px 1fr; gap: 10px; font-size: 13px;">
-            <div style="text-align: right;"><kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">L</kbd> / <kbd style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;">O</kbd></div>
+        <div style="display: grid; grid-template-columns: 105px 1fr; gap: 10px; font-size: 13px;">
+            <div style="text-align: right;"><kbd style="${kbdStyle}">L</kbd> / <kbd style="${kbdStyle}">O</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_action", "Like / Repost")}</div>
-            <div style="text-align: right;"><kbd style="background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;">BS Hold</kbd></div>
+
+            <div style="text-align: right;"><kbd style="${kbdStyle}">B</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_bookmark", "Bookmark")}</div>
+            <div style="text-align: right;"><kbd style="${kbdStyle}">;</kbd> / <kbd style="${kbdStyle}">\u21E7+;</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_reply", "Reply / Compose")}</div>
+            
+            <div style="text-align: right;"><kbd style="${kbdStyle}">C</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_copy", "Copy Text")}</div>
+
+            <div style="text-align: right;"><kbd style="${kbdAlertStyle}">BS Hold</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_delete", "DRS Delete")}</div>
         </div>
+
         <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #71767b;">
             ${getMsg("x_cheat_sheet_close", "Press H or click anywhere to close")}
         </div>
