@@ -1706,6 +1706,42 @@
       }
     }
   });
+  var FocusShield = /* @__PURE__ */ (() => {
+    let shieldTimer = null;
+    let isActive2 = false;
+    function dropShield() {
+      if (!isActive2) return;
+      isActive2 = false;
+      if (shieldTimer) {
+        clearTimeout(shieldTimer);
+        shieldTimer = null;
+      }
+      window.removeEventListener("focusin", interceptFocus, true);
+      window.removeEventListener("mousedown", dropShield, true);
+      window.removeEventListener("keydown", dropShield, true);
+    }
+    function interceptFocus(e) {
+      if (!isWalkerMode) return;
+      const target = e.target;
+      if (!target) return;
+      if (isEditableElement(target) || isSensitiveElement(target)) {
+        e.preventDefault();
+        target.blur();
+        document.body.focus();
+      }
+    }
+    function activate() {
+      if (!isWalkerMode) return;
+      dropShield();
+      blurActiveInput();
+      isActive2 = true;
+      window.addEventListener("focusin", interceptFocus, true);
+      window.addEventListener("mousedown", dropShield, true);
+      window.addEventListener("keydown", dropShield, true);
+      shieldTimer = setTimeout(dropShield, 1500);
+    }
+    return { activate, dropShield };
+  })();
   function pullStateFromStorage() {
     if (!window.__XOPS_WALKER_ALIVE__) return;
     if (document.title.startsWith("\u{1F4A4} ")) {
@@ -1716,11 +1752,7 @@
       hud.setState(isWalkerMode);
       applyOneTapBlocker(!!res[BLOCKER_KEY]);
       if (isWalkerMode) {
-        setTimeout(() => {
-          if (!isWalkerMode) return;
-          if (!window.__XOPS_WALKER_ALIVE__) return;
-          blurActiveInput();
-        }, 150);
+        FocusShield.activate();
       }
     });
   }

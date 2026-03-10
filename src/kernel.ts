@@ -976,6 +976,60 @@ chrome.runtime.onMessage.addListener((message: { command: string }) => {
     }
 });
 
+// ── 🛡️ Active Focus Shield (SPA遅延オートフォーカス撃墜機構) ─────────────────
+const FocusShield = (() => {
+    let shieldTimer: ReturnType<typeof setTimeout> | null = null;
+    let isActive = false;
+
+    // 防壁の解除（タイムアウト、またはユーザーの明示的操作による自壊）
+    function dropShield(): void {
+        if (!isActive) return;
+        isActive = false;
+        if (shieldTimer) {
+            clearTimeout(shieldTimer);
+            shieldTimer = null;
+        }
+        window.removeEventListener('focusin', interceptFocus, true);
+        window.removeEventListener('mousedown', dropShield, true);
+        window.removeEventListener('keydown', dropShield, true);
+    }
+
+    // 不法フォーカスの迎撃
+    function interceptFocus(e: FocusEvent): void {
+        if (!isWalkerMode) return;
+        const target = e.target as Element;
+        if (!target) return;
+
+        // 入力欄へのフォーカス移動を検知した場合、即座にblurしてbodyへ追い返す
+        if (isEditableElement(target) || isSensitiveElement(target)) {
+            e.preventDefault();
+            (target as HTMLElement).blur();
+            document.body.focus();
+        }
+    }
+
+    // 防壁の起動
+    function activate(): void {
+        if (!isWalkerMode) return;
+        dropShield(); // 既存の防壁があればリセット
+
+        // まず現在の不法フォーカスをクリア
+        blurActiveInput();
+
+        isActive = true;
+        // キャプチャフェーズ最上流でフォーカス移動を監視
+        window.addEventListener('focusin', interceptFocus, true);
+
+        // 【最重要】ユーザーの物理操作（クリック・キー入力）を検知した瞬間に防壁を解除
+        window.addEventListener('mousedown', dropShield, true);
+        window.addEventListener('keydown', dropShield, true);
+
+        // 1.5秒経過でSPAのHydrationは完了したとみなし、防壁を自動解除
+        shieldTimer = setTimeout(dropShield, 1500);
+    }
+
+    return { activate, dropShield };
+})();
 
 // ── P2+P1: タブ「寝起き」状態の Pull 型同期 ──────────────────────────────────
 // 問題: タブが非アクティブ（frozen/discarded）状態から復帰した直後、
@@ -986,29 +1040,20 @@ function pullStateFromStorage(): void {
     // 亡霊チェック: Orphan になっていたら同期も不要
     if (!window.__XOPS_WALKER_ALIVE__) return;
 
-    // 💤 自動浄化 — 目覚めたタブのタイトルから "💤 " プレフィックを剥ぎ取る
-    // background.ts の DISCARD_TAB で discard 前に付与された識別子をクリーンアップする
+    // 💤 自動浄化
     if (document.title.startsWith('💤 ')) {
         document.title = document.title.slice('💤 '.length);
     }
 
-    // 'alm' の取得を削除し、型キャストも不要化
     safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (res) => {
         isWalkerMode = !!res[STORAGE_KEY];
         hud.setState(isWalkerMode);
         applyOneTapBlocker(!!res[BLOCKER_KEY]);
 
-        // ── SPA オートフォーカス潰し ───────────────────────────────────────────
-        // Gemini/Keep 等の SPA はタブ復帰後に遅延で入力欄にオートフォーカスする。
-        // Walker ON なら 150ms 待ってから deepBlur で上書きし、キーバインドを即座に届かせる。
-        // 注意: この遅延 setTimeout は User Gesture がないため window.focus() が
-        //        Chrome にブロックされる場合があるが、deepBlur 自体は実行される。
+        // ── SPA オートフォーカス潰し (Focus Shield起動) ──
+        // 単発のsetTimeoutを廃止し、最長1.5秒間SPAの反撃を監視する防壁を展開
         if (isWalkerMode) {
-            setTimeout(() => {
-                if (!isWalkerMode) return;  // 遅延中に OFF に切り替わった場合はキャンセル
-                if (!window.__XOPS_WALKER_ALIVE__) return;  // 亡霊化チェック
-                blurActiveInput();
-            }, 150);
+            FocusShield.activate();
         }
     });
 }
