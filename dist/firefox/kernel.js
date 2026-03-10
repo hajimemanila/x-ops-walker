@@ -1179,8 +1179,15 @@
 
   // src/protocols/utils/spatial-navigation.ts
   init_browser_polyfill_entry();
+  function getValidTargets(selector) {
+    return Array.from(document.querySelectorAll(selector)).filter((el) => {
+      if (!el.isConnected) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.height > 0 && rect.width > 0;
+    });
+  }
   function getCurrentTarget(selector, focusClass = "x-walker-focused") {
-    const targets = Array.from(document.querySelectorAll(selector)).filter((el) => el.isConnected);
+    const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
     if (window.scrollY < 50 && targets.length > 0) {
       return targets[0];
@@ -1207,7 +1214,7 @@
     return closestTarget;
   }
   function focusNextTarget(selector, direction, offset = 0, focusClass = "x-walker-focused") {
-    const targets = Array.from(document.querySelectorAll(selector)).filter((el) => el.isConnected);
+    const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
     const currentTarget = getCurrentTarget(selector, focusClass);
     let currentIndex = currentTarget ? targets.indexOf(currentTarget) : -1;
@@ -1279,9 +1286,10 @@
     const style = document.createElement("style");
     style.id = "x-walker-style";
     style.textContent = `
-        /* \u5909\u66F4: box-shadow\u306Etransition\u3092\u524A\u9664\u3057\u3001JIT\u306E\u52D5\u7684\u66F4\u65B0\u30E9\u30B0\uFF08\u3082\u3063\u3055\u308A\u611F\uFF09\u3092\u30BC\u30ED\u306B\u3059\u308B */
-        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease; }
-        body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
+        /* \u5909\u66F4: opacity\u306B !important \u3092\u4ED8\u4E0E\u3057\u3001\u30D6\u30C3\u30AF\u30DE\u30FC\u30AF\u30DA\u30FC\u30B8\u3067\u3082\u78BA\u5B9F\u306B\u6697\u8EE2\uFF08Zen\uFF09\u3055\u305B\u308B */
+        body.x-walker-active article { opacity: ${CONFIG.zenOpacity} !important; transition: opacity 0.2s ease; }
+        body.x-walker-active article:hover { background-color: transparent !important; }
+        body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03) !important; }
     `;
     document.documentElement.appendChild(style);
   }

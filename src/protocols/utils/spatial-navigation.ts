@@ -1,16 +1,23 @@
 // src/protocols/utils/spatial-navigation.ts
 
+// 共通のターゲット取得関数（ゴースト要素を排除する）
+function getValidTargets(selector: string): Element[] {
+    return Array.from(document.querySelectorAll(selector)).filter(el => {
+        if (!el.isConnected) return false;
+        const rect = el.getBoundingClientRect();
+        // 【追加】高さや幅が0の要素（Reactの仮想スクロールのゴースト）を完全にレーダーから除外する
+        return rect.height > 0 && rect.width > 0;
+    });
+}
+
 export function getCurrentTarget(selector: string, focusClass = 'x-walker-focused'): Element | null {
-    const targets = Array.from(document.querySelectorAll(selector)).filter(el => el.isConnected);
+    const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
 
-    // 【復元】ページ最上部付近では無条件で先頭要素をロックオン（通知ページ等でのズレ防止）
     if (window.scrollY < 50 && targets.length > 0) {
         return targets[0];
     }
 
-    // 【復元】現在のフォーカス維持判定（ブックマークページ等での消失防止）
-    // マジックナンバーを使わず、純粋な交差判定（画面に少しでも入っていれば維持）で解決
     const currentFocused = document.querySelector(`.${focusClass}`);
     if (currentFocused && targets.includes(currentFocused)) {
         const rect = currentFocused.getBoundingClientRect();
@@ -42,7 +49,7 @@ export function focusNextTarget(
     offset: number = 0,
     focusClass = 'x-walker-focused'
 ): Element | null {
-    const targets = Array.from(document.querySelectorAll(selector)).filter(el => el.isConnected);
+    const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
 
     const currentTarget = getCurrentTarget(selector, focusClass);
@@ -55,7 +62,6 @@ export function focusNextTarget(
     const nextIndex = Math.max(0, Math.min(currentIndex + direction, targets.length - 1));
     const nextTarget = targets[nextIndex];
 
-    // 【復元】フォーカス剥奪時にインラインスタイルの boxShadow を確実にクリアする
     if (currentTarget && currentTarget !== nextTarget) {
         currentTarget.classList.remove(focusClass);
         (currentTarget as HTMLElement).style.boxShadow = '';
