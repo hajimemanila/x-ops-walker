@@ -197,6 +197,24 @@
     "x_cheat_sheet_bookmark": {
         "message": "ブックマーク"
     },
+    "x_cheat_sheet_detail": {
+        "message": "詳細を開く"
+    },
+    "x_cheat_sheet_search": {
+        "message": "検索"
+    },
+    "x_cheat_sheet_jump": {
+        "message": "通知 / ブックマーク"
+    },
+    "x_cheat_sheet_reply": {
+        "message": "返信 / 新規ポスト"
+    },
+    "x_cheat_sheet_copy": {
+        "message": "テキストをコピー"
+    },
+    "x_cheat_sheet_home": {
+        "message": "ホーム"
+    },
     "x_cheat_sheet_delete": {
         "message": "DRS 削除 (長押し)"
     },

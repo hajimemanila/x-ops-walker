@@ -55,7 +55,7 @@ const BLOCKER_KEY = 'blockGoogleOneTap';
 
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const REGISTERED_ROUTER_KEYS = new Set([
-    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c',
+    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c', ','
 ]);
 
 // ── スクロールユーティリティ（Center Raycast + Shadow Piercing）────────────────────────────

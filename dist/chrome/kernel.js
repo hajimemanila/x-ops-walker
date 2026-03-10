@@ -656,7 +656,7 @@
       if (e.code === "KeyY") window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
       return;
     }
-    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "KeyB", "Backspace", "KeyI", "KeyU", "Semicolon", "Enter", "Slash", "KeyC"].includes(e.code)) {
+    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "KeyB", "Backspace", "KeyI", "KeyU", "Semicolon", "Enter", "Slash", "KeyC", "Comma"].includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
       if (e.code === "KeyK" || e.code === "KeyJ") {
@@ -723,6 +723,10 @@
             }).catch((err) => console.error("[X Walker] Copy failed:", err));
           }
         }
+      }
+      if (e.code === "Comma") {
+        window.location.href = "https://x.com/home";
+        return;
       }
       if (e.code === "Backspace") {
         if (e.repeat) return;
@@ -974,6 +978,9 @@
             <div style="text-align: right;"><kbd style="${kbdStyle}">I</kbd> / <kbd style="${kbdStyle}">U</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_jump", "Notifs / Bookmarks")}</div>
 
+            <div style="text-align: right;"><kbd style="${kbdStyle}">,</kbd></div>
+            <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_home", "Go Home")}</div>
+
             <div style="text-align: right;"><kbd style="${kbdStyle}">N</kbd> / <kbd style="${kbdStyle}">M</kbd></div>
             <div style="display: flex; align-items: center;">${getMsg("x_cheat_sheet_patrol", "Star Patrol")}</div>
             
@@ -1062,7 +1069,8 @@
     "9",
     "q",
     "e",
-    "c"
+    "c",
+    ","
   ]);
   function getDeepElementFromPoint(x, y) {
     let el = document.elementFromPoint(x, y);

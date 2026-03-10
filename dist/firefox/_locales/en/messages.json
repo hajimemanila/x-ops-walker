@@ -194,6 +194,9 @@
     "x_cheat_sheet_bookmark": {
         "message": "Bookmark"
     },
+    "x_cheat_sheet_home": {
+        "message": "Go Home"
+    },
     "x_cheat_sheet_delete": {
         "message": "DRS Delete"
     },
