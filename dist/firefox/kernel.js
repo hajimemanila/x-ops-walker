@@ -1176,6 +1176,60 @@
 
   // src/protocols/x-timeline.ts
   init_browser_polyfill_entry();
+
+  // src/protocols/utils/spatial-navigation.ts
+  init_browser_polyfill_entry();
+  function getCurrentTarget(selector, focusClass = "x-walker-focused") {
+    const targets = Array.from(document.querySelectorAll(selector)).filter((el) => el.isConnected);
+    if (targets.length === 0) return null;
+    if (window.scrollY < 50 && targets.length > 0) {
+      return targets[0];
+    }
+    const currentFocused = document.querySelector(`.${focusClass}`);
+    if (currentFocused && targets.includes(currentFocused)) {
+      const rect = currentFocused.getBoundingClientRect();
+      if (rect.bottom > 0 && rect.top < window.innerHeight) {
+        return currentFocused;
+      }
+    }
+    const centerY = window.scrollY + window.innerHeight * 0.3;
+    let minDiff = Infinity;
+    let closestTarget = null;
+    for (const target of targets) {
+      const rect = target.getBoundingClientRect();
+      const targetCenter = window.scrollY + rect.top + rect.height / 2;
+      const diff = Math.abs(centerY - targetCenter);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestTarget = target;
+      }
+    }
+    return closestTarget;
+  }
+  function focusNextTarget(selector, direction, offset = 0, focusClass = "x-walker-focused") {
+    const targets = Array.from(document.querySelectorAll(selector)).filter((el) => el.isConnected);
+    if (targets.length === 0) return null;
+    const currentTarget = getCurrentTarget(selector, focusClass);
+    let currentIndex = currentTarget ? targets.indexOf(currentTarget) : -1;
+    if (currentIndex === -1) {
+      currentIndex = direction === 1 ? -1 : targets.length;
+    }
+    const nextIndex = Math.max(0, Math.min(currentIndex + direction, targets.length - 1));
+    const nextTarget = targets[nextIndex];
+    if (currentTarget && currentTarget !== nextTarget) {
+      currentTarget.classList.remove(focusClass);
+      currentTarget.style.boxShadow = "";
+    }
+    nextTarget.classList.add(focusClass);
+    const nextRect = nextTarget.getBoundingClientRect();
+    window.scrollTo({
+      top: window.scrollY + nextRect.top - window.innerHeight * 0.3 - offset,
+      behavior: "smooth"
+    });
+    return nextTarget;
+  }
+
+  // src/protocols/x-timeline.ts
   var STORAGE_KEY_HIGHLIGHTS = "x_bookmark_highlights";
   function getHighlights() {
     try {
@@ -1211,9 +1265,8 @@
     zenOpacity: 0.5,
     longPressDelay: 400
   };
+  var TARGET_SELECTOR = "article:not([data-x-walker-ignore])";
   var isActive = false;
-  var currentIndex = -1;
-  var targetArticles = [];
   var backspaceTimer = null;
   var isBackspaceHeld = false;
   var originalTitle = "";
@@ -1438,6 +1491,28 @@
       }
     }
   }
+  function tagIgnoredArticles() {
+    document.querySelectorAll("article:not([data-x-walker-inspected])").forEach((article) => {
+      article.setAttribute("data-x-walker-inspected", "true");
+      const text = article.innerText || "";
+      let shouldIgnore = false;
+      if (CONFIG.skipAds) {
+        const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
+        const hasAdText = text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted");
+        if (hasAdText && !isOwnPromotable) {
+          shouldIgnore = true;
+        }
+      }
+      if (!shouldIgnore && CONFIG.skipReposts) {
+        if (article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) {
+          shouldIgnore = true;
+        }
+      }
+      if (shouldIgnore) {
+        article.setAttribute("data-x-walker-ignore", "true");
+      }
+    });
+  }
   function startWalkerLoop() {
     if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
     function loop() {
@@ -1453,6 +1528,7 @@
         currentUrlPath = window.location.pathname;
         triggerAutoTargeting();
       }
+      tagIgnoredArticles();
       maintainFocusVisuals();
       if (isDashboardEnabled) syncDashboardUI();
       walkerSyncFrame = requestAnimationFrame(loop);
@@ -1462,17 +1538,18 @@
   function triggerAutoTargeting() {
     let attempts = 0;
     const initFocusInterval = setInterval(() => {
-      updateTargets();
-      if (targetArticles.length > 0) {
+      const targets = Array.from(document.querySelectorAll(TARGET_SELECTOR));
+      if (targets.length > 0) {
         clearInterval(initFocusInterval);
         setTimeout(() => {
           if (!isActive) return;
-          updateTargets();
-          if (window.scrollY < 200) {
-            focusArticle(0);
-          } else {
-            findClosestIndex();
-            if (currentIndex !== -1) focusArticle(currentIndex);
+          const target = getCurrentTarget(TARGET_SELECTOR);
+          if (target && window.scrollY < 200) {
+            const rect = target.getBoundingClientRect();
+            window.scrollTo({
+              top: window.scrollY + rect.top - window.innerHeight * 0.3 - CONFIG.scrollOffset,
+              behavior: "smooth"
+            });
           }
         }, 300);
       } else if (++attempts > 40) {
@@ -1487,16 +1564,21 @@
     return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
   }
   function maintainFocusVisuals() {
-    if (currentIndex === -1 || targetArticles.length === 0) return;
-    const target = targetArticles[currentIndex];
-    if (!target || !target.isConnected) return;
-    if (!target.classList.contains("x-walker-focused")) {
-      target.classList.add("x-walker-focused");
+    const currentTarget = getCurrentTarget(TARGET_SELECTOR);
+    if (!currentTarget) return;
+    document.querySelectorAll(".x-walker-focused").forEach((el) => {
+      if (el !== currentTarget) {
+        el.classList.remove("x-walker-focused");
+        el.style.boxShadow = "";
+      }
+    });
+    if (!currentTarget.classList.contains("x-walker-focused")) {
+      currentTarget.classList.add("x-walker-focused");
     }
-    const color = getArticleColor(target);
+    const color = getArticleColor(currentTarget);
     const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
-    if (target.style.boxShadow !== expectedShadow) {
-      target.style.boxShadow = expectedShadow;
+    if (currentTarget.style.boxShadow !== expectedShadow) {
+      currentTarget.style.boxShadow = expectedShadow;
     }
   }
   async function renderBookmarkList() {
@@ -1602,12 +1684,10 @@
       e.preventDefault();
       e.stopPropagation();
       if (e.code === "KeyK") {
-        resyncCurrentIndex();
-        focusArticle(currentIndex - 1);
+        focusNextTarget(TARGET_SELECTOR, -1, CONFIG.scrollOffset);
       }
       if (e.code === "KeyJ") {
-        resyncCurrentIndex();
-        focusArticle(currentIndex + 1);
+        focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
       }
       if (e.code === "KeyL") {
         executeAction("like");
@@ -1637,8 +1717,7 @@
             console.warn("[X-Ops Walker] Compose button not found.");
           }
         } else {
-          resyncCurrentIndex();
-          const target = targetArticles[currentIndex];
+          const target = getCurrentTarget(TARGET_SELECTOR);
           if (target && target.isConnected) {
             const replyBtn = target.querySelector('[data-testid="reply"]');
             if (replyBtn) replyBtn.click();
@@ -1646,8 +1725,7 @@
         }
       }
       if (e.code === "Enter") {
-        resyncCurrentIndex();
-        const target = targetArticles[currentIndex];
+        const target = getCurrentTarget(TARGET_SELECTOR);
         if (target && target.isConnected) {
           const timeEl = target.querySelector("time");
           const link = timeEl ? timeEl.closest("a") : null;
@@ -1657,8 +1735,7 @@
         }
       }
       if (e.code === "KeyC") {
-        resyncCurrentIndex();
-        const target = targetArticles[currentIndex];
+        const target = getCurrentTarget(TARGET_SELECTOR);
         if (target && target.isConnected) {
           const textNode = target.querySelector('[data-testid="tweetText"]');
           if (textNode) {
@@ -1766,7 +1843,6 @@
   window.addEventListener("x-ops-global-reset", () => {
     if (!isActive) return;
     forceClearFocus();
-    currentIndex = -1;
   });
   function setWalkerState(enabled) {
     if (isActive === enabled) return;
@@ -1782,8 +1858,6 @@
     } else {
       document.body.classList.remove("x-walker-active");
       forceClearFocus();
-      currentIndex = -1;
-      targetArticles = [];
     }
   }
   function forceClearFocus() {
@@ -1791,80 +1865,6 @@
       el.classList.remove("x-walker-focused");
       el.style.boxShadow = "";
     });
-  }
-  function findClosestIndex() {
-    if (targetArticles.length === 0) return;
-    let minDiff = Infinity;
-    let bestIdx = 0;
-    const center = window.scrollY + window.innerHeight * 0.2;
-    targetArticles.forEach((article, i) => {
-      if (!article.isConnected) return;
-      const rect = article.getBoundingClientRect();
-      const diff = Math.abs(center - (window.scrollY + rect.top + rect.height / 2));
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestIdx = i;
-      }
-    });
-    currentIndex = bestIdx;
-  }
-  function updateTargets() {
-    if (document.hidden) {
-      targetArticles = [];
-      return;
-    }
-    targetArticles = Array.from(document.querySelectorAll("article")).filter((article) => {
-      if (!article.isConnected) return false;
-      const text = article.innerText || "";
-      if (CONFIG.skipAds) {
-        const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
-        const hasAdText = text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted");
-        if (hasAdText && !isOwnPromotable) {
-          return false;
-        }
-      }
-      if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
-      return true;
-    });
-  }
-  function resyncCurrentIndex() {
-    const focused = document.querySelector(".x-walker-focused");
-    if (focused?.isConnected) {
-      updateTargets();
-      const newIdx = targetArticles.indexOf(focused);
-      if (newIdx !== -1) {
-        if (currentIndex !== newIdx) currentIndex = newIdx;
-      } else findClosestIndex();
-    } else if (isActive && currentIndex !== -1) findClosestIndex();
-  }
-  function focusArticle(index) {
-    if (!isActive || document.hidden) return;
-    updateTargets();
-    if (index < 0) {
-      window.scrollBy(0, -window.innerHeight * 1.5);
-      setTimeout(() => {
-        updateTargets();
-        findClosestIndex();
-      }, 300);
-      return;
-    }
-    if (targetArticles.length === 0 || index >= targetArticles.length) {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      setTimeout(() => {
-        updateTargets();
-        if (index < targetArticles.length) focusArticle(index);
-      }, 1500);
-      return;
-    }
-    forceClearFocus();
-    currentIndex = index;
-    const target = targetArticles[index];
-    if (target?.isConnected) {
-      const rect = target.getBoundingClientRect();
-      window.scrollTo({ top: window.pageYOffset + rect.top - window.innerHeight / 2 + rect.height / 2 - CONFIG.scrollOffset, behavior: "smooth" });
-    } else {
-      findClosestIndex();
-    }
   }
   function flashFeedback(article, color) {
     if (!article?.isConnected) return;
@@ -1887,8 +1887,7 @@
   }
   function executeAction(actionType) {
     if (!isActive) return;
-    resyncCurrentIndex();
-    const article = targetArticles[currentIndex];
+    const article = getCurrentTarget(TARGET_SELECTOR);
     if (!article?.isConnected) return;
     if (actionType === "like") {
       const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]');
@@ -1910,8 +1909,7 @@
   }
   function startDRSDelete() {
     isBackspaceHeld = true;
-    resyncCurrentIndex();
-    const article = targetArticles[currentIndex];
+    const article = getCurrentTarget(TARGET_SELECTOR);
     if (!article) return;
     originalTitle = document.title;
     document.title = "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
@@ -1934,9 +1932,7 @@
             confirmBtn.click();
             flashFeedback(article, "rgba(244, 33, 46, 0.3)");
             setTimeout(() => {
-              updateTargets();
-              if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
-              focusArticle(currentIndex);
+              focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
             }, 500);
           } else if (++attempts > 40) {
             clearInterval(interval);
@@ -2044,7 +2040,6 @@
         syncDashboardUI();
       }
       if (isActive) {
-        updateTargets();
         maintainFocusVisuals();
       }
     }, 50);

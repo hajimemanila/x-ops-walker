@@ -1,6 +1,7 @@
 /**
  * X Timeline Walker Protocol (v2.2.0 - Phantom HUD Edition)
  * Hybrid Architecture: setInterval (Heartbeat) + requestAnimationFrame (Smooth Sync)
+ * [JIT Spatial Navigation Port]
  */
 
 export interface XWalkerConfig {
@@ -46,9 +47,11 @@ const CONFIG = {
     longPressDelay: 400
 };
 
+// 【追加】JITナビゲーションモジュールのインポート
+import { getCurrentTarget, focusNextTarget } from './utils/spatial-navigation';
+const TARGET_SELECTOR = 'article:not([data-x-walker-ignore])';
+
 let isActive = false;
-let currentIndex = -1;
-let targetArticles: HTMLElement[] = [];
 let backspaceTimer: number | null = null;
 let isBackspaceHeld = false;
 let originalTitle = "";
@@ -311,6 +314,32 @@ function syncDashboardUI() {
 }
 
 // ── 🛡️ Unified Walker Loop (SPA Router & React Defense) ──
+
+// 【追加】レーダー捕捉前にノイズ（広告/リポスト）をマーキングする関数
+function tagIgnoredArticles() {
+    document.querySelectorAll('article:not([data-x-walker-inspected])').forEach(article => {
+        article.setAttribute('data-x-walker-inspected', 'true');
+        const text = (article as HTMLElement).innerText || "";
+        let shouldIgnore = false;
+
+        if (CONFIG.skipAds) {
+            const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
+            const hasAdText = text.includes('プロモーション') || text.includes('Promoted');
+            if (hasAdText && !isOwnPromotable) {
+                shouldIgnore = true;
+            }
+        }
+        if (!shouldIgnore && CONFIG.skipReposts) {
+            if (article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) {
+                shouldIgnore = true;
+            }
+        }
+        if (shouldIgnore) {
+            article.setAttribute('data-x-walker-ignore', 'true');
+        }
+    });
+}
+
 function startWalkerLoop() {
     if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
 
@@ -333,6 +362,9 @@ function startWalkerLoop() {
             triggerAutoTargeting();
         }
 
+        // 【追加】ノイズのマーキング
+        tagIgnoredArticles();
+
         // 2. React 再レンダリング防壁（ホバー時のスタイル消失を即座に修復）
         maintainFocusVisuals();
 
@@ -344,20 +376,22 @@ function startWalkerLoop() {
     walkerSyncFrame = requestAnimationFrame(loop);
 }
 
+// 【変更】JIT用の初期フォーカス発火ロジックに換装
 function triggerAutoTargeting() {
     let attempts = 0;
     const initFocusInterval = setInterval(() => {
-        updateTargets();
-        if (targetArticles.length > 0) {
+        const targets = Array.from(document.querySelectorAll(TARGET_SELECTOR));
+        if (targets.length > 0) {
             clearInterval(initFocusInterval);
             setTimeout(() => {
                 if (!isActive) return;
-                updateTargets();
-                if (window.scrollY < 200) {
-                    focusArticle(0);
-                } else {
-                    findClosestIndex();
-                    if (currentIndex !== -1) focusArticle(currentIndex);
+                const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+                if (target && window.scrollY < 200) {
+                    const rect = target.getBoundingClientRect();
+                    window.scrollTo({
+                        top: window.scrollY + rect.top - (window.innerHeight * 0.3) - CONFIG.scrollOffset,
+                        behavior: 'smooth'
+                    });
                 }
             }, 300);
         } else if (++attempts > 40) {
@@ -373,19 +407,28 @@ function getArticleColor(article: HTMLElement): string {
     return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
 }
 
+// 【変更】ステートレスなビジュアル維持ロジックに換装
 function maintainFocusVisuals() {
-    if (currentIndex === -1 || targetArticles.length === 0) return;
-    const target = targetArticles[currentIndex];
-    if (!target || !target.isConnected) return;
+    const currentTarget = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+    if (!currentTarget) return;
 
-    if (!target.classList.contains('x-walker-focused')) {
-        target.classList.add('x-walker-focused');
+    // 既存のフォーカスを剥がす
+    document.querySelectorAll('.x-walker-focused').forEach(el => {
+        if (el !== currentTarget) {
+            el.classList.remove('x-walker-focused');
+            (el as HTMLElement).style.boxShadow = '';
+        }
+    });
+
+    // 新たなターゲットにフォーカスを付与
+    if (!currentTarget.classList.contains('x-walker-focused')) {
+        currentTarget.classList.add('x-walker-focused');
     }
 
-    const color = getArticleColor(target);
+    const color = getArticleColor(currentTarget);
     const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
-    if (target.style.boxShadow !== expectedShadow) {
-        target.style.boxShadow = expectedShadow;
+    if (currentTarget.style.boxShadow !== expectedShadow) {
+        currentTarget.style.boxShadow = expectedShadow;
     }
 }
 
@@ -519,8 +562,10 @@ window.addEventListener('keydown', (e) => {
         e.preventDefault();
         e.stopPropagation();
 
-        if (e.code === 'KeyK') { resyncCurrentIndex(); focusArticle(currentIndex - 1); }
-        if (e.code === 'KeyJ') { resyncCurrentIndex(); focusArticle(currentIndex + 1); }
+        // 【変更】J/K を focusNextTarget に委譲
+        if (e.code === 'KeyK') { focusNextTarget(TARGET_SELECTOR, -1, CONFIG.scrollOffset); }
+        if (e.code === 'KeyJ') { focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset); }
+        // 【変更】アクション系を executeAction(JIT版) へ委譲
         if (e.code === 'KeyL') { executeAction('like'); }
         if (e.code === 'KeyO') { executeAction('repost'); }
         if (e.code === 'KeyB') { executeAction('bookmark'); }
@@ -548,8 +593,8 @@ window.addEventListener('keydown', (e) => {
                     console.warn('[X-Ops Walker] Compose button not found.');
                 }
             } else {
-                resyncCurrentIndex();
-                const target = targetArticles[currentIndex];
+                // 【変更】JIT版ターゲット取得
+                const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
                 if (target && target.isConnected) {
                     const replyBtn = target.querySelector('[data-testid="reply"]') as HTMLElement;
                     if (replyBtn) replyBtn.click();
@@ -558,8 +603,8 @@ window.addEventListener('keydown', (e) => {
         }
 
         if (e.code === 'Enter') {
-            resyncCurrentIndex();
-            const target = targetArticles[currentIndex];
+            // 【変更】JIT版ターゲット取得
+            const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
             if (target && target.isConnected) {
                 const timeEl = target.querySelector('time');
                 const link = timeEl ? timeEl.closest('a') : null;
@@ -570,8 +615,8 @@ window.addEventListener('keydown', (e) => {
         }
 
         if (e.code === 'KeyC') {
-            resyncCurrentIndex();
-            const target = targetArticles[currentIndex];
+            // 【変更】JIT版ターゲット取得
+            const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
             if (target && target.isConnected) {
                 const textNode = target.querySelector('[data-testid="tweetText"]') as HTMLElement;
                 if (textNode) {
@@ -697,7 +742,7 @@ window.addEventListener('x-ops-go-profile', () => {
 window.addEventListener('x-ops-global-reset', () => {
     if (!isActive) return;
     forceClearFocus();
-    currentIndex = -1;
+    // currentIndex = -1; // 削除
 });
 
 // ── 🐺 Timeline Walker Core Logic ──
@@ -718,90 +763,17 @@ function setWalkerState(enabled: boolean) {
     } else {
         document.body.classList.remove('x-walker-active');
         forceClearFocus();
-        currentIndex = -1;
-        targetArticles = [];
+        // currentIndex = -1; // 削除
+        // targetArticles = []; // 削除
     }
 }
 
+// 【変更】フォーカスクリア時のインラインスタイル初期化
 function forceClearFocus() {
     document.querySelectorAll('.x-walker-focused').forEach(el => {
         el.classList.remove('x-walker-focused');
-        (el as HTMLElement).style.boxShadow = '';
+        (el as HTMLElement).style.boxShadow = ''; // クラスだけでなくスタイルもパージ
     });
-}
-
-function findClosestIndex() {
-    if (targetArticles.length === 0) return;
-    let minDiff = Infinity; let bestIdx = 0;
-    const center = window.scrollY + (window.innerHeight * 0.20);
-    targetArticles.forEach((article, i) => {
-        if (!article.isConnected) return;
-        const rect = article.getBoundingClientRect();
-        const diff = Math.abs(center - (window.scrollY + rect.top + rect.height / 2));
-        if (diff < minDiff) { minDiff = diff; bestIdx = i; }
-    });
-    currentIndex = bestIdx;
-}
-
-function updateTargets() {
-    if (document.hidden) { targetArticles = []; return; }
-
-    // [data-testid="tweet"] の縛りをなくし、単なる article をすべて取得する
-    targetArticles = Array.from(document.querySelectorAll('article')).filter(article => {
-        if (!article.isConnected) return false;
-        const text = (article as HTMLElement).innerText || "";
-
-        if (CONFIG.skipAds) {
-            const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
-            const hasAdText = text.includes('プロモーション') || text.includes('Promoted');
-            if (hasAdText && !isOwnPromotable) {
-                return false;
-            }
-        }
-
-        if (CONFIG.skipReposts && article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) return false;
-        return true;
-    }) as HTMLElement[];
-}
-
-function resyncCurrentIndex() {
-    const focused = document.querySelector('.x-walker-focused');
-    if (focused?.isConnected) {
-        updateTargets();
-        const newIdx = targetArticles.indexOf(focused as HTMLElement);
-        if (newIdx !== -1) { if (currentIndex !== newIdx) currentIndex = newIdx; } else findClosestIndex();
-    } else if (isActive && currentIndex !== -1) findClosestIndex();
-}
-
-function focusArticle(index: number) {
-    if (!isActive || document.hidden) return;
-    updateTargets();
-
-    if (index < 0) {
-        window.scrollBy(0, -window.innerHeight * 1.5);
-        setTimeout(() => { updateTargets(); findClosestIndex(); }, 300);
-        return;
-    }
-
-    if (targetArticles.length === 0 || index >= targetArticles.length) {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        setTimeout(() => {
-            updateTargets();
-            if (index < targetArticles.length) focusArticle(index);
-        }, 1500);
-        return;
-    }
-
-    forceClearFocus();
-    currentIndex = index;
-    const target = targetArticles[index];
-
-    if (target?.isConnected) {
-        const rect = target.getBoundingClientRect();
-        window.scrollTo({ top: window.pageYOffset + rect.top - (window.innerHeight / 2) + (rect.height / 2) - CONFIG.scrollOffset, behavior: 'smooth' });
-    } else {
-        findClosestIndex();
-    }
 }
 
 function flashFeedback(article: HTMLElement, color: string) {
@@ -818,10 +790,10 @@ function waitAndClick(selector: string | (() => HTMLElement | null), callback?: 
     }, 50);
 }
 
+// 【変更】アクション実行時のステートレス化
 function executeAction(actionType: string) {
     if (!isActive) return;
-    resyncCurrentIndex();
-    const article = targetArticles[currentIndex];
+    const article = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
     if (!article?.isConnected) return;
 
     if (actionType === 'like') {
@@ -843,10 +815,10 @@ function executeAction(actionType: string) {
     }
 }
 
+// 【変更】DRS削除のステートレス化
 function startDRSDelete() {
     isBackspaceHeld = true;
-    resyncCurrentIndex();
-    const article = targetArticles[currentIndex];
+    const article = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
     if (!article) return;
 
     originalTitle = document.title;
@@ -873,9 +845,7 @@ function startDRSDelete() {
                     confirmBtn.click();
                     flashFeedback(article, 'rgba(244, 33, 46, 0.3)');
                     setTimeout(() => {
-                        updateTargets();
-                        if (currentIndex >= targetArticles.length) currentIndex = Math.max(0, targetArticles.length - 1);
-                        focusArticle(currentIndex);
+                        focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
                     }, 500);
                 } else if (++attempts > 40) {
                     clearInterval(interval);
@@ -965,19 +935,18 @@ function toggleCheatSheet() {
 }
 
 // ── 🔄 Tab Wake-up Resync (React Re-render Defense) ──
+// 【維持】v2.1.14の元のまま（全く手を入れない）
 function onTabWakeUp() {
     if (document.hidden) return;
 
     setTimeout(() => {
         if (isDashboardEnabled) {
-            // 🌟 修正: 位置合わせの「前」に、DOMの構築・接続状態を強制確認する
             maintainDOM();
-            // その後で位置を合わせる
             syncDashboardUI();
         }
 
         if (isActive) {
-            updateTargets();
+            // 【変更】JIT換装に伴い、内部処理をJIT側に委譲
             maintainFocusVisuals();
         }
     }, 50);
