@@ -3,7 +3,7 @@
  * Hybrid Architecture: setInterval (Heartbeat) + requestAnimationFrame (Smooth Sync)
  * [JIT Spatial Navigation Port]
  */
-
+import { DomainProtocol } from '../router';
 export interface XWalkerConfig {
     enabled: boolean;
     rightColumnDashboard: boolean;
@@ -538,151 +538,9 @@ function updateTargetHighlight() {
     });
 }
 
-// ── ⌨️ Global Event Listeners & Hotkeys ──
-function isInputActive(): boolean {
-    const activeEl = document.activeElement;
-    if (!activeEl) return false;
-    return ['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable;
-}
+// ── 🌟 Domain Protocol Implementation (Router Integration) ──
 
-window.addEventListener('keydown', (e) => {
-    if (isInputActive()) return;
-    if (e.shiftKey && e.code !== 'Semicolon') return;
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-
-    if (isCheatSheetVisible && e.code !== 'KeyH') {
-        e.preventDefault();
-        toggleCheatSheet();
-        return;
-    }
-
-    if (e.code === 'KeyH') {
-        if (!isActive && !isDashboardEnabled) return;
-        e.preventDefault();
-        toggleCheatSheet();
-        return;
-    }
-
-    if (isDashboardEnabled && ['KeyN', 'KeyM', 'KeyY'].includes(e.code)) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.code === 'KeyN') window.dispatchEvent(new CustomEvent('x-ops-toggle-star'));
-        if (e.code === 'KeyM') window.dispatchEvent(new CustomEvent('x-ops-next-star'));
-        if (e.code === 'KeyY') window.dispatchEvent(new CustomEvent('x-ops-go-profile'));
-        return;
-    }
-
-    if (isActive && ['KeyJ', 'KeyK', 'KeyL', 'KeyO', 'KeyB', 'Backspace', 'KeyI', 'KeyU', 'Semicolon', 'Enter', 'Slash', 'KeyC', 'Comma'].includes(e.code)) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // 【変更】J/K を focusNextTarget に委譲
-        if (e.code === 'KeyK' || e.code === 'KeyJ') {
-            const direction = e.code === 'KeyJ' ? 1 : -1;
-            focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
-
-            // スムーススクロール完了まで自動再計算をブロック（Race Condition防止）
-            if (navLockTimer) clearTimeout(navLockTimer);
-            navLockTimer = window.setTimeout(() => { navLockTimer = null; }, 400);
-        }
-        // 【変更】アクション系を executeAction(JIT版) へ委譲
-        if (e.code === 'KeyL') { executeAction('like'); }
-        if (e.code === 'KeyO') { executeAction('repost'); }
-        if (e.code === 'KeyB') { executeAction('bookmark'); }
-
-        if (e.code === 'KeyI') {
-            window.location.href = 'https://x.com/notifications';
-        }
-        if (e.code === 'KeyU') {
-            window.location.href = 'https://x.com/i/bookmarks';
-        }
-
-        if (e.code === 'Slash') {
-            const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]') as HTMLElement;
-            if (searchInput) searchInput.focus();
-        }
-
-        if (e.code === 'Semicolon') {
-            if (e.shiftKey) {
-                const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') as HTMLElement
-                    || document.querySelector('[data-testid="SideNav_NewTweet_Button"]') as HTMLElement;
-
-                if (composeBtn) {
-                    composeBtn.click();
-                } else {
-                    console.warn('[X-Ops Walker] Compose button not found.');
-                }
-            } else {
-                // 【変更】JIT版ターゲット取得
-                const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
-                if (target && target.isConnected) {
-                    const replyBtn = target.querySelector('[data-testid="reply"]') as HTMLElement;
-                    if (replyBtn) replyBtn.click();
-                }
-            }
-        }
-
-        if (e.code === 'Enter') {
-            // 【変更】JIT版ターゲット取得
-            const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
-            if (target && target.isConnected) {
-                const timeEl = target.querySelector('time');
-                const link = timeEl ? timeEl.closest('a') : null;
-                if (link) {
-                    link.click();
-                }
-            }
-        }
-
-        if (e.code === 'KeyC') {
-            // 【変更】JIT版ターゲット取得
-            const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
-            if (target && target.isConnected) {
-                const textNode = target.querySelector('[data-testid="tweetText"]') as HTMLElement;
-                if (textNode) {
-                    const textToCopy = textNode.innerText;
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        flashFeedback(target, 'rgba(0, 255, 255, 0.2)');
-                    }).catch(err => console.error('[X Walker] Copy failed:', err));
-                }
-            }
-        }
-
-        // 【追加】Homeへの遷移ロジック
-        if (e.code === 'Comma') {
-            window.location.href = 'https://x.com/home';
-            return;
-        }
-
-        if (e.code === 'Backspace') {
-            if (e.repeat) return;
-            startDRSDelete();
-        }
-        return;
-    }
-}, true);
-
-window.addEventListener('keyup', (e) => {
-    if (!isActive) return;
-    if (isInputActive()) return;
-
-    if (e.code === 'Backspace') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        isBackspaceHeld = false;
-        if (backspaceTimer !== null) {
-            clearTimeout(backspaceTimer);
-            backspaceTimer = null;
-        }
-
-        if (document.title === "⚠️ DRS ACTIVE ⚠️") {
-            document.title = originalTitle;
-        }
-    }
-}, true);
-
-window.addEventListener('x-ops-toggle-star', () => {
+function toggleStar() {
     if (!dashboardShadow) return;
     const currentUrl = window.location.href;
     const currentClean = cleanUrl(currentUrl);
@@ -694,9 +552,9 @@ window.addEventListener('x-ops-toggle-star', () => {
         const star = targetItem.querySelector('.x-ops-bm-star') as HTMLElement;
         star?.click();
     }
-});
+}
 
-window.addEventListener('x-ops-next-star', () => {
+function nextStar() {
     if (!dashboardShadow) return;
     const links = Array.from(dashboardShadow.querySelectorAll('.x-ops-bm-link')) as HTMLAnchorElement[];
     if (links.length === 0) return;
@@ -759,16 +617,132 @@ window.addEventListener('x-ops-next-star', () => {
         }
         window.location.href = nextUrl;
     }
-});
+}
 
-window.addEventListener('x-ops-go-profile', () => {
+function goProfile() {
     window.location.href = getMyProfileUrl();
-});
+}
+
+export class XTimelineProtocol implements DomainProtocol {
+    matches(url: string): boolean {
+        return url.includes('x.com') || url.includes('twitter.com');
+    }
+
+    handleKey(event: KeyboardEvent, key: string, shift: boolean, container: Element): boolean {
+        // チートシートの開閉 (Dashboard または Timeline が有効な場合)
+        if (key === 'h') {
+            if (!isActive && !isDashboardEnabled) return false;
+            toggleCheatSheet();
+            return true;
+        }
+
+        // チートシート表示中は、H と Esc 以外は無視（Escはkernel側で処理される）
+        if (isCheatSheetVisible) return true;
+
+        // ダッシュボード専用キー (N, M, Y)
+        if (isDashboardEnabled && ['n', 'm', 'y'].includes(key)) {
+            if (key === 'n') toggleStar();
+            if (key === 'm') nextStar();
+            if (key === 'y') goProfile();
+            return true;
+        }
+
+        if (!isActive) return false;
+
+        // タイムライン専用キー（kernel.tsの正規化に合わせて小文字ベースで判定）
+        const timelineKeys = ['j', 'k', 'l', 'o', 'b', 'backspace', 'i', 'u', ';', 'enter', '/', 'c', ','];
+        if (timelineKeys.includes(key)) {
+            if (key === 'k' || key === 'j') {
+                const direction = key === 'j' ? 1 : -1;
+                focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+                if (navLockTimer) clearTimeout(navLockTimer);
+                navLockTimer = window.setTimeout(() => { navLockTimer = null; }, 400);
+            }
+            if (key === 'l') executeAction('like');
+            if (key === 'o') executeAction('repost');
+            if (key === 'b') executeAction('bookmark');
+
+            if (key === 'i') window.location.href = 'https://x.com/notifications';
+            if (key === 'u') window.location.href = 'https://x.com/i/bookmarks';
+            if (key === ',') window.location.href = 'https://x.com/home';
+
+            if (key === '/') {
+                const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]') as HTMLElement;
+                if (searchInput) searchInput.focus();
+            }
+            if (key === ';') {
+                if (shift) {
+                    const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') as HTMLElement
+                        || document.querySelector('[data-testid="SideNav_NewTweet_Button"]') as HTMLElement;
+                    if (composeBtn) composeBtn.click();
+                } else {
+                    const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+                    if (target && target.isConnected) {
+                        const replyBtn = target.querySelector('[data-testid="reply"]') as HTMLElement;
+                        if (replyBtn) replyBtn.click();
+                    }
+                }
+            }
+            if (key === 'enter') {
+                const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+                if (target && target.isConnected) {
+                    const timeEl = target.querySelector('time');
+                    const link = timeEl ? timeEl.closest('a') : null;
+                    if (link) link.click();
+                }
+            }
+            if (key === 'c') {
+                const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+                if (target && target.isConnected) {
+                    const textNode = target.querySelector('[data-testid="tweetText"]') as HTMLElement;
+                    if (textNode) {
+                        navigator.clipboard.writeText(textNode.innerText).then(() => {
+                            flashFeedback(target, 'rgba(0, 255, 255, 0.2)');
+                        }).catch(err => console.error('[X Walker] Copy failed:', err));
+                    }
+                }
+            }
+            if (key === 'backspace') {
+                if (event.repeat) return true;
+                startDRSDelete();
+            }
+
+            return true; // ルーターに「処理完了」を報告し、伝播を止める
+        }
+
+        return false; // 関知しないキーは base.ts へフォールバック
+    }
+}
+
+// ── DRS Delete 用の残存機能（keyupとreset） ──
+
+window.addEventListener('keyup', (e) => {
+    if (!isActive) return;
+
+    // isInputActive関数を削除したため、ここでインラインで安全に弾く
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable);
+    if (isInput) return;
+
+    if (e.code === 'Backspace') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        isBackspaceHeld = false;
+        if (backspaceTimer !== null) {
+            clearTimeout(backspaceTimer);
+            backspaceTimer = null;
+        }
+
+        if (document.title === "⚠️ DRS ACTIVE ⚠️") {
+            document.title = originalTitle;
+        }
+    }
+}, true);
 
 window.addEventListener('x-ops-global-reset', () => {
     if (!isActive) return;
     forceClearFocus();
-    // currentIndex = -1; // 削除
 });
 
 // ── 🐺 Timeline Walker Core Logic ──

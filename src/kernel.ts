@@ -10,10 +10,11 @@
 import { WalkerRouter } from './router';
 import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
-import { initXWalker } from './protocols/x-timeline';
+import { initXWalker, XTimelineProtocol } from './protocols/x-timeline';
 
 const router = new WalkerRouter(new BaseProtocol());
 router.register(new AiChatProtocol());
+router.register(new XTimelineProtocol());
 
 // ── P1: 多重注入ガード ────────────────────────────────────────────────────────
 // 拡張機能のリロード時、onInstalled による再注入で「古い kernel」と「新しい
@@ -55,7 +56,10 @@ const BLOCKER_KEY = 'blockGoogleOneTap';
 
 // Walkerキー全体セット（押下時に stopImmediate を発動するトリガー）
 const REGISTERED_ROUTER_KEYS = new Set([
-    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c', ','
+    // Base & Universal Keys
+    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c',
+    // X Timeline & Domain Specific Keys
+    'j', 'k', 'l', 'o', 'b', 'i', 'u', 'h', 'n', 'y', ';', '/', ',', 'enter', 'backspace'
 ]);
 
 // ── スクロールユーティリティ（Center Raycast + Shadow Piercing）────────────────────────────

@@ -628,130 +628,7 @@
       }
     });
   }
-  function isInputActive() {
-    const activeEl = document.activeElement;
-    if (!activeEl) return false;
-    return ["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable;
-  }
-  window.addEventListener("keydown", (e) => {
-    if (isInputActive()) return;
-    if (e.shiftKey && e.code !== "Semicolon") return;
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-    if (isCheatSheetVisible && e.code !== "KeyH") {
-      e.preventDefault();
-      toggleCheatSheet();
-      return;
-    }
-    if (e.code === "KeyH") {
-      if (!isActive && !isDashboardEnabled) return;
-      e.preventDefault();
-      toggleCheatSheet();
-      return;
-    }
-    if (isDashboardEnabled && ["KeyN", "KeyM", "KeyY"].includes(e.code)) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.code === "KeyN") window.dispatchEvent(new CustomEvent("x-ops-toggle-star"));
-      if (e.code === "KeyM") window.dispatchEvent(new CustomEvent("x-ops-next-star"));
-      if (e.code === "KeyY") window.dispatchEvent(new CustomEvent("x-ops-go-profile"));
-      return;
-    }
-    if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "KeyB", "Backspace", "KeyI", "KeyU", "Semicolon", "Enter", "Slash", "KeyC", "Comma"].includes(e.code)) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.code === "KeyK" || e.code === "KeyJ") {
-        const direction = e.code === "KeyJ" ? 1 : -1;
-        focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
-        if (navLockTimer) clearTimeout(navLockTimer);
-        navLockTimer = window.setTimeout(() => {
-          navLockTimer = null;
-        }, 400);
-      }
-      if (e.code === "KeyL") {
-        executeAction("like");
-      }
-      if (e.code === "KeyO") {
-        executeAction("repost");
-      }
-      if (e.code === "KeyB") {
-        executeAction("bookmark");
-      }
-      if (e.code === "KeyI") {
-        window.location.href = "https://x.com/notifications";
-      }
-      if (e.code === "KeyU") {
-        window.location.href = "https://x.com/i/bookmarks";
-      }
-      if (e.code === "Slash") {
-        const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]');
-        if (searchInput) searchInput.focus();
-      }
-      if (e.code === "Semicolon") {
-        if (e.shiftKey) {
-          const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') || document.querySelector('[data-testid="SideNav_NewTweet_Button"]');
-          if (composeBtn) {
-            composeBtn.click();
-          } else {
-            console.warn("[X-Ops Walker] Compose button not found.");
-          }
-        } else {
-          const target = getCurrentTarget(TARGET_SELECTOR);
-          if (target && target.isConnected) {
-            const replyBtn = target.querySelector('[data-testid="reply"]');
-            if (replyBtn) replyBtn.click();
-          }
-        }
-      }
-      if (e.code === "Enter") {
-        const target = getCurrentTarget(TARGET_SELECTOR);
-        if (target && target.isConnected) {
-          const timeEl = target.querySelector("time");
-          const link = timeEl ? timeEl.closest("a") : null;
-          if (link) {
-            link.click();
-          }
-        }
-      }
-      if (e.code === "KeyC") {
-        const target = getCurrentTarget(TARGET_SELECTOR);
-        if (target && target.isConnected) {
-          const textNode = target.querySelector('[data-testid="tweetText"]');
-          if (textNode) {
-            const textToCopy = textNode.innerText;
-            navigator.clipboard.writeText(textToCopy).then(() => {
-              flashFeedback(target, "rgba(0, 255, 255, 0.2)");
-            }).catch((err) => console.error("[X Walker] Copy failed:", err));
-          }
-        }
-      }
-      if (e.code === "Comma") {
-        window.location.href = "https://x.com/home";
-        return;
-      }
-      if (e.code === "Backspace") {
-        if (e.repeat) return;
-        startDRSDelete();
-      }
-      return;
-    }
-  }, true);
-  window.addEventListener("keyup", (e) => {
-    if (!isActive) return;
-    if (isInputActive()) return;
-    if (e.code === "Backspace") {
-      e.preventDefault();
-      e.stopPropagation();
-      isBackspaceHeld = false;
-      if (backspaceTimer !== null) {
-        clearTimeout(backspaceTimer);
-        backspaceTimer = null;
-      }
-      if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
-        document.title = originalTitle;
-      }
-    }
-  }, true);
-  window.addEventListener("x-ops-toggle-star", () => {
+  function toggleStar() {
     if (!dashboardShadow) return;
     const currentUrl = window.location.href;
     const currentClean = cleanUrl(currentUrl);
@@ -761,8 +638,8 @@
       const star = targetItem.querySelector(".x-ops-bm-star");
       star?.click();
     }
-  });
-  window.addEventListener("x-ops-next-star", () => {
+  }
+  function nextStar() {
     if (!dashboardShadow) return;
     const links = Array.from(dashboardShadow.querySelectorAll(".x-ops-bm-link"));
     if (links.length === 0) return;
@@ -818,10 +695,106 @@
       }
       window.location.href = nextUrl;
     }
-  });
-  window.addEventListener("x-ops-go-profile", () => {
+  }
+  function goProfile() {
     window.location.href = getMyProfileUrl();
-  });
+  }
+  var XTimelineProtocol = class {
+    matches(url) {
+      return url.includes("x.com") || url.includes("twitter.com");
+    }
+    handleKey(event, key, shift, container) {
+      if (key === "h") {
+        if (!isActive && !isDashboardEnabled) return false;
+        toggleCheatSheet();
+        return true;
+      }
+      if (isCheatSheetVisible) return true;
+      if (isDashboardEnabled && ["n", "m", "y"].includes(key)) {
+        if (key === "n") toggleStar();
+        if (key === "m") nextStar();
+        if (key === "y") goProfile();
+        return true;
+      }
+      if (!isActive) return false;
+      const timelineKeys = ["j", "k", "l", "o", "b", "backspace", "i", "u", ";", "enter", "/", "c", ","];
+      if (timelineKeys.includes(key)) {
+        if (key === "k" || key === "j") {
+          const direction = key === "j" ? 1 : -1;
+          focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+          if (navLockTimer) clearTimeout(navLockTimer);
+          navLockTimer = window.setTimeout(() => {
+            navLockTimer = null;
+          }, 400);
+        }
+        if (key === "l") executeAction("like");
+        if (key === "o") executeAction("repost");
+        if (key === "b") executeAction("bookmark");
+        if (key === "i") window.location.href = "https://x.com/notifications";
+        if (key === "u") window.location.href = "https://x.com/i/bookmarks";
+        if (key === ",") window.location.href = "https://x.com/home";
+        if (key === "/") {
+          const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]');
+          if (searchInput) searchInput.focus();
+        }
+        if (key === ";") {
+          if (shift) {
+            const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') || document.querySelector('[data-testid="SideNav_NewTweet_Button"]');
+            if (composeBtn) composeBtn.click();
+          } else {
+            const target = getCurrentTarget(TARGET_SELECTOR);
+            if (target && target.isConnected) {
+              const replyBtn = target.querySelector('[data-testid="reply"]');
+              if (replyBtn) replyBtn.click();
+            }
+          }
+        }
+        if (key === "enter") {
+          const target = getCurrentTarget(TARGET_SELECTOR);
+          if (target && target.isConnected) {
+            const timeEl = target.querySelector("time");
+            const link = timeEl ? timeEl.closest("a") : null;
+            if (link) link.click();
+          }
+        }
+        if (key === "c") {
+          const target = getCurrentTarget(TARGET_SELECTOR);
+          if (target && target.isConnected) {
+            const textNode = target.querySelector('[data-testid="tweetText"]');
+            if (textNode) {
+              navigator.clipboard.writeText(textNode.innerText).then(() => {
+                flashFeedback(target, "rgba(0, 255, 255, 0.2)");
+              }).catch((err) => console.error("[X Walker] Copy failed:", err));
+            }
+          }
+        }
+        if (key === "backspace") {
+          if (event.repeat) return true;
+          startDRSDelete();
+        }
+        return true;
+      }
+      return false;
+    }
+  };
+  window.addEventListener("keyup", (e) => {
+    if (!isActive) return;
+    const activeEl = document.activeElement;
+    const isInput = activeEl && (["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable);
+    if (isInput) return;
+    if (e.code === "Backspace") {
+      e.preventDefault();
+      e.stopPropagation();
+      isBackspaceHeld = false;
+      if (backspaceTimer !== null) {
+        clearTimeout(backspaceTimer);
+        backspaceTimer = null;
+      }
+      if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
+        document.title = originalTitle;
+      }
+    }
+  }, true);
   window.addEventListener("x-ops-global-reset", () => {
     if (!isActive) return;
     forceClearFocus();
@@ -1042,6 +1015,7 @@
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
   router.register(new AiChatProtocol());
+  router.register(new XTimelineProtocol());
   if (window.__XOPS_WALKER_ALIVE__) {
     throw new Error("[X-Ops Walker] Duplicate kernel detected. Old instance exiting silently.");
   }
@@ -1055,6 +1029,7 @@
   var STORAGE_KEY = "isWalkerMode";
   var BLOCKER_KEY = "blockGoogleOneTap";
   var REGISTERED_ROUTER_KEYS = /* @__PURE__ */ new Set([
+    // Base & Universal Keys
     "a",
     "d",
     "s",
@@ -1070,7 +1045,22 @@
     "q",
     "e",
     "c",
-    ","
+    // X Timeline & Domain Specific Keys
+    "j",
+    "k",
+    "l",
+    "o",
+    "b",
+    "i",
+    "u",
+    "h",
+    "n",
+    "y",
+    ";",
+    "/",
+    ",",
+    "enter",
+    "backspace"
   ]);
   function getDeepElementFromPoint(x, y) {
     let el = document.elementFromPoint(x, y);
@@ -1223,7 +1213,7 @@
     if (el.getAttribute("contentEditable") === "true") return true;
     return false;
   }
-  function isInputActive2(event) {
+  function isInputActive(event) {
     for (const node of event.composedPath()) {
       if (!node || node.nodeType !== 1) continue;
       const el = node;
@@ -1239,7 +1229,7 @@
     if (event.ctrlKey || event.metaKey || event.altKey) return true;
     if ((window.getSelection()?.toString().trim().length ?? 0) > 0) return true;
     if (event.isComposing || event.key === "Process" || event.keyCode === 229) return true;
-    if (isInputActive2(event)) return true;
+    if (isInputActive(event)) return true;
     if (event.repeat) return true;
     if (event.key === "Alt" || event.key === "Control" || event.key === "Meta" || event.key === "Shift") return true;
     return false;
