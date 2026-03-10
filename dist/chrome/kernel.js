@@ -232,6 +232,7 @@
   var isBackspaceHeld = false;
   var originalTitle = "";
   var isCheatSheetVisible = false;
+  var navLockTimer = null;
   var dashboardHost = null;
   var dashboardShadow = null;
   function injectWalkerCSS() {
@@ -239,7 +240,8 @@
     const style = document.createElement("style");
     style.id = "x-walker-style";
     style.textContent = `
-        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        /* \u5909\u66F4: box-shadow\u306Etransition\u3092\u524A\u9664\u3057\u3001JIT\u306E\u52D5\u7684\u66F4\u65B0\u30E9\u30B0\uFF08\u3082\u3063\u3055\u308A\u611F\uFF09\u3092\u30BC\u30ED\u306B\u3059\u308B */
+        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
     document.documentElement.appendChild(style);
@@ -525,7 +527,12 @@
     return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
   }
   function maintainFocusVisuals() {
-    const currentTarget = getCurrentTarget(TARGET_SELECTOR);
+    let currentTarget = null;
+    if (navLockTimer !== null) {
+      currentTarget = document.querySelector(".x-walker-focused");
+    } else {
+      currentTarget = getCurrentTarget(TARGET_SELECTOR);
+    }
     if (!currentTarget) return;
     document.querySelectorAll(".x-walker-focused").forEach((el) => {
       if (el !== currentTarget) {
@@ -644,11 +651,13 @@
     if (isActive && ["KeyJ", "KeyK", "KeyL", "KeyO", "KeyB", "Backspace", "KeyI", "KeyU", "Semicolon", "Enter", "Slash", "KeyC"].includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
-      if (e.code === "KeyK") {
-        focusNextTarget(TARGET_SELECTOR, -1, CONFIG.scrollOffset);
-      }
-      if (e.code === "KeyJ") {
-        focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
+      if (e.code === "KeyK" || e.code === "KeyJ") {
+        const direction = e.code === "KeyJ" ? 1 : -1;
+        focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+        if (navLockTimer) clearTimeout(navLockTimer);
+        navLockTimer = window.setTimeout(() => {
+          navLockTimer = null;
+        }, 400);
       }
       if (e.code === "KeyL") {
         executeAction("like");
@@ -996,6 +1005,13 @@
   function onTabWakeUp() {
     if (document.hidden) return;
     setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active !== document.body) {
+        if (!["INPUT", "TEXTAREA"].includes(active.tagName) && !active.isContentEditable) {
+          active.blur();
+        }
+      }
+      document.body.focus();
       if (isDashboardEnabled) {
         maintainDOM();
         syncDashboardUI();
@@ -1003,7 +1019,7 @@
       if (isActive) {
         maintainFocusVisuals();
       }
-    }, 50);
+    }, 200);
   }
   document.addEventListener("visibilitychange", onTabWakeUp);
   window.addEventListener("focus", onTabWakeUp);

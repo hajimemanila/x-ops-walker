@@ -37,6 +37,7 @@ let heartbeatId: ReturnType<typeof setInterval> | null = null;
 let walkerSyncFrame: number | null = null;
 let currentUrlPath = window.location.pathname;
 
+
 // ── 🐺 Walker States & Config ──
 const CONFIG = {
     skipReposts: true,
@@ -56,18 +57,20 @@ let backspaceTimer: number | null = null;
 let isBackspaceHeld = false;
 let originalTitle = "";
 let isCheatSheetVisible = false;
+let navLockTimer: number | null = null; // 【追加】スクロール中の再計算ロック用
 
 // ── Dashboard Caches (HUD Architecture) ──
 let dashboardHost: HTMLElement | null = null;
 let dashboardShadow: ShadowRoot | null = null;
 
-// 安全なCSS注入（Reactの管轄外である <html> 直下に配置して消滅を防ぐ）
+// ── CSSの復元 ──
 function injectWalkerCSS() {
     if (document.getElementById('x-walker-style')) return;
     const style = document.createElement('style');
     style.id = 'x-walker-style';
     style.textContent = `
-        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease, box-shadow 0.2s ease; }
+        /* 変更: box-shadowのtransitionを削除し、JITの動的更新ラグ（もっさり感）をゼロにする */
+        body.x-walker-active article { opacity: ${CONFIG.zenOpacity}; transition: opacity 0.2s ease; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03); }
     `;
     document.documentElement.appendChild(style);
@@ -407,9 +410,18 @@ function getArticleColor(article: HTMLElement): string {
     return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
 }
 
-// 【変更】ステートレスなビジュアル維持ロジックに換装
+// 【変更】遅延ゼロのビジュアル維持ロジック（スマートロック方式）
 function maintainFocusVisuals() {
-    const currentTarget = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+    let currentTarget: HTMLElement | null = null;
+
+    if (navLockTimer !== null) {
+        // スクロール（J/K）移動中: レーダーを一時停止し、直前にロックオンされた要素を維持する
+        currentTarget = document.querySelector('.x-walker-focused') as HTMLElement;
+    } else {
+        // 通常時: レーダーで画面中央に最も近い要素をリアルタイム捕捉する
+        currentTarget = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
+    }
+
     if (!currentTarget) return;
 
     // 既存のフォーカスを剥がす
@@ -425,6 +437,7 @@ function maintainFocusVisuals() {
         currentTarget.classList.add('x-walker-focused');
     }
 
+    // 毎フレーム即座にシャドウと色を計算して適用（もっさり感の排除）
     const color = getArticleColor(currentTarget);
     const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
     if (currentTarget.style.boxShadow !== expectedShadow) {
@@ -563,8 +576,14 @@ window.addEventListener('keydown', (e) => {
         e.stopPropagation();
 
         // 【変更】J/K を focusNextTarget に委譲
-        if (e.code === 'KeyK') { focusNextTarget(TARGET_SELECTOR, -1, CONFIG.scrollOffset); }
-        if (e.code === 'KeyJ') { focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset); }
+        if (e.code === 'KeyK' || e.code === 'KeyJ') {
+            const direction = e.code === 'KeyJ' ? 1 : -1;
+            focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+
+            // スムーススクロール完了まで自動再計算をブロック（Race Condition防止）
+            if (navLockTimer) clearTimeout(navLockTimer);
+            navLockTimer = window.setTimeout(() => { navLockTimer = null; }, 400);
+        }
         // 【変更】アクション系を executeAction(JIT版) へ委譲
         if (e.code === 'KeyL') { executeAction('like'); }
         if (e.code === 'KeyO') { executeAction('repost'); }
@@ -934,22 +953,31 @@ function toggleCheatSheet() {
     setTimeout(() => document.addEventListener('click', closer), 10);
 }
 
-// ── 🔄 Tab Wake-up Resync (React Re-render Defense) ──
-// 【維持】v2.1.14の元のまま（全く手を入れない）
+// ── 🔄 Tab Wake-up Resync (Race Condition 防壁) ──
 function onTabWakeUp() {
     if (document.hidden) return;
 
+    // 変更: kernel.tsのblurActiveInput(150ms)の完了を待ち、競合を避けるために200msへ変更
     setTimeout(() => {
+        // Chrome対策: kernelの処理後、変な要素に残ったフォーカスを確実に引き剥がしbodyを掴む
+        const active = document.activeElement as HTMLElement;
+        if (active && active !== document.body) {
+            // 入力欄以外なら強制blur
+            if (!['INPUT', 'TEXTAREA'].includes(active.tagName) && !active.isContentEditable) {
+                active.blur();
+            }
+        }
+        document.body.focus();
+
         if (isDashboardEnabled) {
             maintainDOM();
             syncDashboardUI();
         }
 
         if (isActive) {
-            // 【変更】JIT換装に伴い、内部処理をJIT側に委譲
             maintainFocusVisuals();
         }
-    }, 50);
+    }, 200);
 }
 
 document.addEventListener('visibilitychange', onTabWakeUp);
