@@ -4,6 +4,8 @@
  * [JIT Spatial Navigation Port]
  */
 import { DomainProtocol } from '../router';
+import { getCurrentTarget, focusNextTarget } from './utils/spatial-navigation';
+
 export interface XWalkerConfig {
     enabled: boolean;
     rightColumnDashboard: boolean;
@@ -15,15 +17,24 @@ interface Bookmark {
 }
 
 const STORAGE_KEY_HIGHLIGHTS = 'x_bookmark_highlights';
+const TARGET_SELECTOR = 'article:not([data-x-walker-ignore])';
+
+// ── Utility ──
+function getMsg(key: string, fallback: string): string {
+    return chrome.i18n.getMessage(key) || fallback;
+}
+
 function getHighlights() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY_HIGHLIGHTS) || '{}'); }
     catch (e) { return {}; }
 }
+
 function saveHighlight(url: string, active: boolean) {
     const data = getHighlights();
     if (active) data[url] = true; else delete data[url];
     localStorage.setItem(STORAGE_KEY_HIGHLIGHTS, JSON.stringify(data));
 }
+
 function cleanUrl(url: string) {
     if (!url) return "";
     try {
@@ -37,7 +48,6 @@ let heartbeatId: ReturnType<typeof setInterval> | null = null;
 let walkerSyncFrame: number | null = null;
 let currentUrlPath = window.location.pathname;
 
-
 // ── 🐺 Walker States & Config ──
 const CONFIG = {
     skipReposts: true,
@@ -48,16 +58,12 @@ const CONFIG = {
     longPressDelay: 400
 };
 
-// 【追加】JITナビゲーションモジュールのインポート
-import { getCurrentTarget, focusNextTarget } from './utils/spatial-navigation';
-const TARGET_SELECTOR = 'article:not([data-x-walker-ignore])';
-
 let isActive = false;
 let backspaceTimer: number | null = null;
 let isBackspaceHeld = false;
 let originalTitle = "";
 let isCheatSheetVisible = false;
-let navLockTimer: number | null = null; // 【追加】スクロール中の再計算ロック用
+let navLockTimer: number | null = null;
 
 // ── Dashboard Caches (HUD Architecture) ──
 let dashboardHost: HTMLElement | null = null;
@@ -69,7 +75,6 @@ function injectWalkerCSS() {
     const style = document.createElement('style');
     style.id = 'x-walker-style';
     style.textContent = `
-        /* 変更: opacityに !important を付与し、ブックマークページでも確実に暗転（Zen）させる */
         body.x-walker-active article { opacity: ${CONFIG.zenOpacity} !important; transition: opacity 0.2s ease; }
         body.x-walker-active article:hover { background-color: transparent !important; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03) !important; }
@@ -123,7 +128,6 @@ function removeDashboard() {
         clearInterval(heartbeatId);
         heartbeatId = null;
     }
-    // 旧バージョンのスペーサーが残っていたら安全に削除
     const oldSpacer = document.getElementById('x-ops-dashboard-spacer');
     if (oldSpacer) oldSpacer.remove();
 
@@ -137,7 +141,6 @@ function removeDashboard() {
 function maintainDOM() {
     if (!isDashboardEnabled) return;
 
-    // Reactの破壊から身を守る自動修復
     if (!dashboardHost) {
         initDashboardDOM();
     } else if (!dashboardHost.isConnected) {
@@ -148,14 +151,10 @@ function maintainDOM() {
 function initDashboardDOM() {
     if (dashboardHost) return;
 
-    // Reactの管轄外（body直下）に配置するHost要素
     dashboardHost = document.createElement('div');
     dashboardHost.id = 'x-ops-dashboard-host';
     Object.assign(dashboardHost.style, {
-        position: 'fixed',
-        zIndex: '9999',
-        pointerEvents: 'none', // 背景のクリックを阻害しない
-        display: 'none'
+        position: 'fixed', zIndex: '9999', pointerEvents: 'none', display: 'none'
     });
 
     dashboardShadow = dashboardHost.attachShadow({ mode: 'closed' });
@@ -163,22 +162,15 @@ function initDashboardDOM() {
     const box = document.createElement('div');
     box.id = 'box';
     Object.assign(box.style, {
-        background: 'rgba(10, 10, 22, 0.75)',
-        backdropFilter: 'blur(16px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-        border: '1px solid rgba(255, 140, 0, 0.2)',
-        borderRadius: '12px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-        overflow: 'hidden',
-        pointerEvents: 'auto', // パネル内はクリック可能
-        fontFamily: '"Segoe UI", system-ui, sans-serif',
-        color: '#eff3f4',
-        transition: 'height 0.2s ease',
-        width: '100%'
+        background: 'rgba(10, 10, 22, 0.75)', backdropFilter: 'blur(16px) saturate(180%)', WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        border: '1px solid rgba(255, 140, 0, 0.2)', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)', overflow: 'hidden',
+        pointerEvents: 'auto', fontFamily: '"Segoe UI", system-ui, sans-serif', color: '#eff3f4', transition: 'height 0.2s ease', width: '100%'
     });
 
-    const titleText = chrome.i18n.getMessage('x_dashboard_title') || 'PHANTOM OPS DASHBOARD';
-    const statusText = chrome.i18n.getMessage('x_dashboard_status_ready') || 'SYSTEM READY';
+    const titleText = getMsg('x_dashboard_title', 'PHANTOM OPS DASHBOARD');
+    const statusText = getMsg('x_dashboard_status_ready', 'SYSTEM READY');
+    const btnAddText = getMsg('x_dashboard_add_btn', '[+] ADD');
+    const minimizeText = getMsg('x_dashboard_minimize', '最小化');
 
     box.innerHTML = `
         <style>
@@ -198,8 +190,8 @@ function initDashboardDOM() {
         <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase; user-select: none;">${titleText}</span>
             <div style="display: flex; gap: 6px; align-items: center;">
-                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s;">[+] ADD</button>
-                <button id="x-ops-dashboard-toggle" title="最小化" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">−</button>
+                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s;">${btnAddText}</button>
+                <button id="x-ops-dashboard-toggle" title="${minimizeText}" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">−</button>
             </div>
         </div>
         <div id="x-ops-dashboard-content">
@@ -210,7 +202,6 @@ function initDashboardDOM() {
         </div>
     `;
 
-    // トグル機能
     const toggleBtn = box.querySelector('#x-ops-dashboard-toggle') as HTMLButtonElement;
     const contentContainer = box.querySelector('#x-ops-dashboard-content') as HTMLDivElement;
     if (toggleBtn && contentContainer) {
@@ -221,16 +212,15 @@ function initDashboardDOM() {
             if (isHidden) {
                 contentContainer.style.display = 'block';
                 toggleBtn.textContent = '−';
-                toggleBtn.title = '最小化';
+                toggleBtn.title = getMsg('x_dashboard_minimize', '最小化');
             } else {
                 contentContainer.style.display = 'none';
                 toggleBtn.textContent = '＋';
-                toggleBtn.title = '展開';
+                toggleBtn.title = getMsg('x_dashboard_expand', '展開');
             }
         });
     }
 
-    // クイック追加機能
     const quickAddBtn = box.querySelector('#x-ops-quick-add') as HTMLButtonElement;
     if (quickAddBtn) {
         quickAddBtn.addEventListener('mouseover', () => { quickAddBtn.style.background = 'rgba(255, 140, 0, 0.3)'; quickAddBtn.style.boxShadow = '0 0 8px rgba(255, 140, 0, 0.4)'; });
@@ -248,7 +238,7 @@ function initDashboardDOM() {
             }
 
             const originalText = quickAddBtn.innerText;
-            quickAddBtn.innerText = 'ADDED!';
+            quickAddBtn.innerText = getMsg('x_dashboard_added', 'ADDED!');
             quickAddBtn.style.color = '#00ba7c';
             quickAddBtn.style.borderColor = '#00ba7c';
             setTimeout(() => {
@@ -286,7 +276,6 @@ function syncDashboardUI() {
 
     if (dashboardHost.style.display !== 'block') dashboardHost.style.display = 'block';
 
-    // サイドバーの座標に追従
     const sidebarRect = sidebar.getBoundingClientRect();
     if (dashboardHost.style.width !== sidebarRect.width + 'px') dashboardHost.style.width = sidebarRect.width + 'px';
     if (dashboardHost.style.left !== sidebarRect.left + 'px') dashboardHost.style.left = sidebarRect.left + 'px';
@@ -306,7 +295,6 @@ function syncDashboardUI() {
 
     if (dashboardHost.style.top !== targetTop + 'px') dashboardHost.style.top = targetTop + 'px';
 
-    // Reactを壊さない「仮想スペーサー（Margin制御）」
     if (targetMarginDiv) {
         const currentBoxHeight = box.offsetHeight;
         const targetMargin = (currentBoxHeight + 10) + 'px';
@@ -318,8 +306,6 @@ function syncDashboardUI() {
 }
 
 // ── 🛡️ Unified Walker Loop (SPA Router & React Defense) ──
-
-// 【追加】レーダー捕捉前にノイズ（広告/リポスト）をマーキングする関数
 function tagIgnoredArticles() {
     document.querySelectorAll('article:not([data-x-walker-inspected])').forEach(article => {
         article.setAttribute('data-x-walker-inspected', 'true');
@@ -353,26 +339,18 @@ function startWalkerLoop() {
             return;
         }
 
-        // 🌟 蘇生防壁: ReactによるSPA遷移時の body クラス剥奪を監視・復元
         if (!document.body.classList.contains('x-walker-active')) {
             document.body.classList.add('x-walker-active');
         }
-        // CSSタグ自体の生存確認
         injectWalkerCSS();
 
-        // 1. SPAナビゲーション検知（通知や別ページへの遷移をフック）
         if (currentUrlPath !== window.location.pathname) {
             currentUrlPath = window.location.pathname;
             triggerAutoTargeting();
         }
 
-        // 【追加】ノイズのマーキング
         tagIgnoredArticles();
-
-        // 2. React 再レンダリング防壁（ホバー時のスタイル消失を即座に修復）
         maintainFocusVisuals();
-
-        // 3. ダッシュボードの追従同期
         if (isDashboardEnabled) syncDashboardUI();
 
         walkerSyncFrame = requestAnimationFrame(loop);
@@ -380,7 +358,6 @@ function startWalkerLoop() {
     walkerSyncFrame = requestAnimationFrame(loop);
 }
 
-// 【変更】JIT用の初期フォーカス発火ロジックに換装
 function triggerAutoTargeting() {
     let attempts = 0;
     const initFocusInterval = setInterval(() => {
@@ -411,21 +388,17 @@ function getArticleColor(article: HTMLElement): string {
     return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
 }
 
-// 【変更】遅延ゼロのビジュアル維持ロジック（スマートロック方式）
 function maintainFocusVisuals() {
     let currentTarget: HTMLElement | null = null;
 
     if (navLockTimer !== null) {
-        // スクロール（J/K）移動中: レーダーを一時停止し、直前にロックオンされた要素を維持する
         currentTarget = document.querySelector('.x-walker-focused') as HTMLElement;
     } else {
-        // 通常時: レーダーで画面中央に最も近い要素をリアルタイム捕捉する
         currentTarget = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
     }
 
     if (!currentTarget) return;
 
-    // 既存のフォーカスを剥がす
     document.querySelectorAll('.x-walker-focused').forEach(el => {
         if (el !== currentTarget) {
             el.classList.remove('x-walker-focused');
@@ -433,12 +406,10 @@ function maintainFocusVisuals() {
         }
     });
 
-    // 新たなターゲットにフォーカスを付与
     if (!currentTarget.classList.contains('x-walker-focused')) {
         currentTarget.classList.add('x-walker-focused');
     }
 
-    // 毎フレーム即座にシャドウと色を計算して適用（もっさり感の排除）
     const color = getArticleColor(currentTarget);
     const expectedShadow = `-4px 0 0 0 ${color}, 0 0 20px ${color}33`;
     if (currentTarget.style.boxShadow !== expectedShadow) {
@@ -457,7 +428,8 @@ async function renderBookmarkList() {
     container.innerHTML = '';
 
     const profileUrl = getMyProfileUrl();
-    container.appendChild(createBookmarkItem("My Profile (自分のプロフィール)", profileUrl));
+    const myProfileText = getMsg('x_dashboard_my_profile', 'My Profile (自分のプロフィール)');
+    container.appendChild(createBookmarkItem(myProfileText, profileUrl));
 
     bookmarks.forEach(bm => {
         container.appendChild(createBookmarkItem(bm.title, bm.url));
@@ -539,7 +511,6 @@ function updateTargetHighlight() {
 }
 
 // ── 🌟 Domain Protocol Implementation (Router Integration) ──
-
 function toggleStar() {
     if (!dashboardShadow) return;
     const currentUrl = window.location.href;
@@ -557,7 +528,7 @@ function toggleStar() {
 function nextStar() {
     if (!dashboardShadow) return;
     const links = Array.from(dashboardShadow.querySelectorAll('.x-ops-bm-link')) as HTMLAnchorElement[];
-    if (links.length === 0) return;
+    if (links.length <= 1) return; // プロフィールしかない場合は何もしない
 
     const targets = links.map(a => a.href);
     const highlights = getHighlights();
@@ -572,14 +543,16 @@ function nextStar() {
         while (i < targets.length) {
             let candidateIdx = (currentIdx + i) % targets.length;
             let candidateUrl = targets[candidateIdx];
-            if (cleanUrl(candidateUrl) !== myProfilePath) {
+            // 【修正】インデックス0（一番上のプロフィール）は無条件でスキップ
+            if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
                 nextUrl = candidateUrl;
                 break;
             }
             i++;
         }
     } else {
-        let starredIdx = targets.findIndex(url => highlights[cleanUrl(url)]);
+        // 【修正】インデックス0のスターは探さない
+        let starredIdx = targets.findIndex((url, idx) => idx !== 0 && highlights[cleanUrl(url)]);
         if (starredIdx !== -1) {
             nextUrl = targets[starredIdx];
         } else {
@@ -587,7 +560,8 @@ function nextStar() {
             while (i < targets.length) {
                 let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
                 let candidateUrl = targets[candidateIdx];
-                if (cleanUrl(candidateUrl) !== myProfilePath) {
+                // 【修正】インデックス0は無条件でスキップ
+                if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
                     nextUrl = candidateUrl;
                     break;
                 }
@@ -629,17 +603,14 @@ export class XTimelineProtocol implements DomainProtocol {
     }
 
     handleKey(event: KeyboardEvent, key: string, shift: boolean, container: Element): boolean {
-        // チートシートの開閉 (Dashboard または Timeline が有効な場合)
         if (key === 'h') {
             if (!isActive && !isDashboardEnabled) return false;
             toggleCheatSheet();
             return true;
         }
 
-        // チートシート表示中は、H と Esc 以外は無視（Escはkernel側で処理される）
         if (isCheatSheetVisible) return true;
 
-        // ダッシュボード専用キー (N, M, Y)
         if (isDashboardEnabled && ['n', 'm', 'y'].includes(key)) {
             if (key === 'n') toggleStar();
             if (key === 'm') nextStar();
@@ -649,7 +620,6 @@ export class XTimelineProtocol implements DomainProtocol {
 
         if (!isActive) return false;
 
-        // タイムライン専用キー（kernel.tsの正規化に合わせて小文字ベースで判定）
         const timelineKeys = ['j', 'k', 'l', 'o', 'b', 'backspace', 'i', 'u', ';', 'enter', '/', 'c', ','];
         if (timelineKeys.includes(key)) {
             if (key === 'k' || key === 'j') {
@@ -707,19 +677,17 @@ export class XTimelineProtocol implements DomainProtocol {
                 startDRSDelete();
             }
 
-            return true; // ルーターに「処理完了」を報告し、伝播を止める
+            return true;
         }
 
-        return false; // 関知しないキーは base.ts へフォールバック
+        return false;
     }
 }
 
 // ── DRS Delete 用の残存機能（keyupとreset） ──
-
 window.addEventListener('keyup', (e) => {
     if (!isActive) return;
 
-    // isInputActive関数を削除したため、ここでインラインで安全に弾く
     const activeEl = document.activeElement;
     const isInput = activeEl && (['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable);
     if (isInput) return;
@@ -758,21 +726,18 @@ function setWalkerState(enabled: boolean) {
         injectWalkerCSS();
         document.body.classList.add('x-walker-active');
 
-        startWalkerLoop();       // SPA検知・React防壁・UI同期のループを開始
-        triggerAutoTargeting();  // 初期ロードのフォーカスを実行
+        startWalkerLoop();
+        triggerAutoTargeting();
     } else {
         document.body.classList.remove('x-walker-active');
         forceClearFocus();
-        // currentIndex = -1; // 削除
-        // targetArticles = []; // 削除
     }
 }
 
-// 【変更】フォーカスクリア時のインラインスタイル初期化
 function forceClearFocus() {
     document.querySelectorAll('.x-walker-focused').forEach(el => {
         el.classList.remove('x-walker-focused');
-        (el as HTMLElement).style.boxShadow = ''; // クラスだけでなくスタイルもパージ
+        (el as HTMLElement).style.boxShadow = '';
     });
 }
 
@@ -790,7 +755,6 @@ function waitAndClick(selector: string | (() => HTMLElement | null), callback?: 
     }, 50);
 }
 
-// 【変更】アクション実行時のステートレス化
 function executeAction(actionType: string) {
     if (!isActive) return;
     const article = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
@@ -815,14 +779,15 @@ function executeAction(actionType: string) {
     }
 }
 
-// 【変更】DRS削除のステートレス化
 function startDRSDelete() {
     isBackspaceHeld = true;
     const article = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
     if (!article) return;
 
     originalTitle = document.title;
-    document.title = "⚠️ DRS ACTIVE ⚠️";
+    // 【修正】元のタイトルに 💤 が含まれていれば維持しつつ警告を追加
+    const isSleeping = originalTitle.startsWith('💤 ');
+    document.title = (isSleeping ? '💤 ' : '') + "⚠️ DRS ACTIVE ⚠️";
 
     const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
     if (caret) caret.click();
@@ -852,7 +817,8 @@ function startDRSDelete() {
                 }
             }, 50);
 
-            if (document.title === "⚠️ DRS ACTIVE ⚠️") document.title = originalTitle;
+            // 【修正】完全一致ではなく、部分一致でタイトルを戻す
+            if (document.title.includes("⚠️ DRS ACTIVE ⚠️")) document.title = originalTitle;
             isBackspaceHeld = false;
         }
     }, 600);
@@ -871,8 +837,6 @@ function toggleCheatSheet() {
         borderRadius: '12px', padding: '24px', color: '#e7e9ea', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', minWidth: '360px',
         fontFamily: '"Segoe UI", system-ui, sans-serif'
     });
-
-    const getMsg = (key: string, fallback: string) => chrome.i18n.getMessage(key) || fallback;
 
     const kbdStyle = `background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;`;
     const kbdAlertStyle = `background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;`;
@@ -941,12 +905,9 @@ function toggleCheatSheet() {
 function onTabWakeUp() {
     if (document.hidden) return;
 
-    // 変更: kernel.tsのblurActiveInput(150ms)の完了を待ち、競合を避けるために200msへ変更
     setTimeout(() => {
-        // Chrome対策: kernelの処理後、変な要素に残ったフォーカスを確実に引き剥がしbodyを掴む
         const active = document.activeElement as HTMLElement;
         if (active && active !== document.body) {
-            // 入力欄以外なら強制blur
             if (!['INPUT', 'TEXTAREA'].includes(active.tagName) && !active.isContentEditable) {
                 active.blur();
             }

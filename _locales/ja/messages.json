@@ -220,5 +220,20 @@
     },
     "x_cheat_sheet_close": {
         "message": "Hキー または 任意のクリックで閉じる"
+    },
+    "x_dashboard_add_btn": {
+        "message": "[+] 追加"
+    },
+    "x_dashboard_minimize": {
+        "message": "最小化"
+    },
+    "x_dashboard_expand": {
+        "message": "展開"
+    },
+    "x_dashboard_added": {
+        "message": "完了!"
+    },
+    "x_dashboard_my_profile": {
+        "message": "自分のプロフィール"
     }
 }

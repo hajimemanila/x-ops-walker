@@ -199,6 +199,10 @@
 
   // src/protocols/x-timeline.ts
   var STORAGE_KEY_HIGHLIGHTS = "x_bookmark_highlights";
+  var TARGET_SELECTOR = "article:not([data-x-walker-ignore])";
+  function getMsg(key, fallback) {
+    return chrome.i18n.getMessage(key) || fallback;
+  }
   function getHighlights() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY_HIGHLIGHTS) || "{}");
@@ -233,7 +237,6 @@
     zenOpacity: 0.5,
     longPressDelay: 400
   };
-  var TARGET_SELECTOR = "article:not([data-x-walker-ignore])";
   var isActive = false;
   var backspaceTimer = null;
   var isBackspaceHeld = false;
@@ -247,7 +250,6 @@
     const style = document.createElement("style");
     style.id = "x-walker-style";
     style.textContent = `
-        /* \u5909\u66F4: opacity\u306B !important \u3092\u4ED8\u4E0E\u3057\u3001\u30D6\u30C3\u30AF\u30DE\u30FC\u30AF\u30DA\u30FC\u30B8\u3067\u3082\u78BA\u5B9F\u306B\u6697\u8EE2\uFF08Zen\uFF09\u3055\u305B\u308B */
         body.x-walker-active article { opacity: ${CONFIG.zenOpacity} !important; transition: opacity 0.2s ease; }
         body.x-walker-active article:hover { background-color: transparent !important; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03) !important; }
@@ -316,7 +318,6 @@
       position: "fixed",
       zIndex: "9999",
       pointerEvents: "none",
-      // 背景のクリックを阻害しない
       display: "none"
     });
     dashboardShadow = dashboardHost.attachShadow({ mode: "closed" });
@@ -331,14 +332,15 @@
       boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
       overflow: "hidden",
       pointerEvents: "auto",
-      // パネル内はクリック可能
       fontFamily: '"Segoe UI", system-ui, sans-serif',
       color: "#eff3f4",
       transition: "height 0.2s ease",
       width: "100%"
     });
-    const titleText = chrome.i18n.getMessage("x_dashboard_title") || "PHANTOM OPS DASHBOARD";
-    const statusText = chrome.i18n.getMessage("x_dashboard_status_ready") || "SYSTEM READY";
+    const titleText = getMsg("x_dashboard_title", "PHANTOM OPS DASHBOARD");
+    const statusText = getMsg("x_dashboard_status_ready", "SYSTEM READY");
+    const btnAddText = getMsg("x_dashboard_add_btn", "[+] ADD");
+    const minimizeText = getMsg("x_dashboard_minimize", "\u6700\u5C0F\u5316");
     box.innerHTML = `
         <style>
             #x-ops-bookmark-container::-webkit-scrollbar { width: 4px; }
@@ -357,8 +359,8 @@
         <div style="padding: 10px 14px; background: rgba(255, 140, 0, 0.1); border-bottom: 1px solid rgba(255, 140, 0, 0.2); display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 11px; font-weight: 800; color: #ff8c00; letter-spacing: 0.12em; text-transform: uppercase; user-select: none;">${titleText}</span>
             <div style="display: flex; gap: 6px; align-items: center;">
-                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s;">[+] ADD</button>
-                <button id="x-ops-dashboard-toggle" title="\u6700\u5C0F\u5316" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">\u2212</button>
+                <button id="x-ops-quick-add" style="background: rgba(255, 140, 0, 0.15); border: 1px solid rgba(255, 140, 0, 0.3); border-radius: 4px; color: #ffac30; font-size: 9px; font-weight: 800; padding: 2px 6px; cursor: pointer; transition: all 0.2s;">${btnAddText}</button>
+                <button id="x-ops-dashboard-toggle" title="${minimizeText}" style="background: transparent; border: none; color: rgba(255, 255, 255, 0.6); font-size: 16px; font-weight: bold; cursor: pointer; padding: 0 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">\u2212</button>
             </div>
         </div>
         <div id="x-ops-dashboard-content">
@@ -378,11 +380,11 @@
         if (isHidden) {
           contentContainer.style.display = "block";
           toggleBtn.textContent = "\u2212";
-          toggleBtn.title = "\u6700\u5C0F\u5316";
+          toggleBtn.title = getMsg("x_dashboard_minimize", "\u6700\u5C0F\u5316");
         } else {
           contentContainer.style.display = "none";
           toggleBtn.textContent = "\uFF0B";
-          toggleBtn.title = "\u5C55\u958B";
+          toggleBtn.title = getMsg("x_dashboard_expand", "\u5C55\u958B");
         }
       });
     }
@@ -407,7 +409,7 @@
           await chrome.storage.local.set({ xOpsBookmarks: bookmarks });
         }
         const originalText = quickAddBtn.innerText;
-        quickAddBtn.innerText = "ADDED!";
+        quickAddBtn.innerText = getMsg("x_dashboard_added", "ADDED!");
         quickAddBtn.style.color = "#00ba7c";
         quickAddBtn.style.borderColor = "#00ba7c";
         setTimeout(() => {
@@ -565,7 +567,8 @@
     const bookmarks = result.xOpsBookmarks || [];
     container.innerHTML = "";
     const profileUrl = getMyProfileUrl();
-    container.appendChild(createBookmarkItem("My Profile (\u81EA\u5206\u306E\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB)", profileUrl));
+    const myProfileText = getMsg("x_dashboard_my_profile", "My Profile (\u81EA\u5206\u306E\u30D7\u30ED\u30D5\u30A3\u30FC\u30EB)");
+    container.appendChild(createBookmarkItem(myProfileText, profileUrl));
     bookmarks.forEach((bm) => {
       container.appendChild(createBookmarkItem(bm.title, bm.url));
     });
@@ -642,7 +645,7 @@
   function nextStar() {
     if (!dashboardShadow) return;
     const links = Array.from(dashboardShadow.querySelectorAll(".x-ops-bm-link"));
-    if (links.length === 0) return;
+    if (links.length <= 1) return;
     const targets = links.map((a) => a.href);
     const highlights = getHighlights();
     const currentPath = cleanUrl(window.location.href);
@@ -654,14 +657,14 @@
       while (i < targets.length) {
         let candidateIdx = (currentIdx + i) % targets.length;
         let candidateUrl = targets[candidateIdx];
-        if (cleanUrl(candidateUrl) !== myProfilePath) {
+        if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
           nextUrl = candidateUrl;
           break;
         }
         i++;
       }
     } else {
-      let starredIdx = targets.findIndex((url) => highlights[cleanUrl(url)]);
+      let starredIdx = targets.findIndex((url, idx) => idx !== 0 && highlights[cleanUrl(url)]);
       if (starredIdx !== -1) {
         nextUrl = targets[starredIdx];
       } else {
@@ -669,7 +672,7 @@
         while (i < targets.length) {
           let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
           let candidateUrl = targets[candidateIdx];
-          if (cleanUrl(candidateUrl) !== myProfilePath) {
+          if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
             nextUrl = candidateUrl;
             break;
           }
@@ -867,7 +870,8 @@
     const article = getCurrentTarget(TARGET_SELECTOR);
     if (!article) return;
     originalTitle = document.title;
-    document.title = "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
+    const isSleeping = originalTitle.startsWith("\u{1F4A4} ");
+    document.title = (isSleeping ? "\u{1F4A4} " : "") + "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
     const caret = article.querySelector('[data-testid="caret"]');
     if (caret) caret.click();
     setTimeout(() => {
@@ -893,7 +897,7 @@
             clearInterval(interval);
           }
         }, 50);
-        if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") document.title = originalTitle;
+        if (document.title.includes("\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F")) document.title = originalTitle;
         isBackspaceHeld = false;
       }
     }, 600);
@@ -924,7 +928,6 @@
       minWidth: "360px",
       fontFamily: '"Segoe UI", system-ui, sans-serif'
     });
-    const getMsg = (key, fallback) => chrome.i18n.getMessage(key) || fallback;
     const kbdStyle = `background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 6px; color: #ffac30; font-family: monospace; font-weight: bold;`;
     const kbdAlertStyle = `background: rgba(244,33,46,0.2); border: 1px solid rgba(244,33,46,0.4); border-radius: 4px; padding: 2px 6px; color: #f4212e; font-family: monospace; font-weight: bold;`;
     sheet.innerHTML = `

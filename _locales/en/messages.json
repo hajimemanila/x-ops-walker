@@ -202,5 +202,20 @@
     },
     "x_cheat_sheet_close": {
         "message": "Press H or click anywhere to close"
+    },
+    "x_dashboard_add_btn": {
+        "message": "[+] ADD"
+    },
+    "x_dashboard_minimize": {
+        "message": "Minimize"
+    },
+    "x_dashboard_expand": {
+        "message": "Expand"
+    },
+    "x_dashboard_added": {
+        "message": "ADDED!"
+    },
+    "x_dashboard_my_profile": {
+        "message": "My Profile"
     }
 }
