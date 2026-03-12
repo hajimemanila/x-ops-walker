@@ -47,7 +47,7 @@ window.__XOPS_WALKER_ALIVE__ = true;
 // Walkerキー全体セット
 const REGISTERED_ROUTER_KEYS = new Set([
     // Base & Universal Keys
-    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c',
+    'a', 'd', 's', 'w', 'f', 'x', 'z', 'r', 'm', 'g', 't', '9', 'q', 'e', 'c', 'p',
     // X Timeline & Domain Specific Keys
     'j', 'k', 'l', 'o', 'b', 'i', 'u', 'h', 'n', 'y', ';', '/', ',', 'enter', 'backspace'
 ]);
@@ -374,14 +374,14 @@ const hud: HudController = (() => {
 function updateAppState(global: GlobalState, phantom: PhantomState) {
     globalStateSnapshot = global;
     phantomStateSnapshot = phantom;
-    
+
     // Core Walker Mode Sync
     isWalkerMode = !!global.walkerMode;
     hud.setState(isWalkerMode);
-    
+
     // Google One Tap Sync
     applyOneTapBlocker(!!global.blockOneTap);
-    
+
     // Logic Cascade: If phantom.master changed, we need to re-init or signal protocols
     if (window.location.hostname.includes('x.com') || window.location.hostname.includes('twitter.com')) {
         initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
@@ -498,6 +498,7 @@ const cheatsheet: CheatsheetController = (() => {
 
     addSection('cs_section_sys');
     addRow(['Shift', 'P'], 'cs_sys_shift_p');
+    addRow(['P'], 'cs_sys_p');
     addRow(['F'], 'cs_sys_f');
     addRow(['Z'], 'cs_sys_z');
     addRow(['Alt', 'Z'], 'cs_sys_altz');
@@ -638,6 +639,28 @@ function keydownHandler(event: KeyboardEvent): void {
             updateAppState(g, p);
         });
         if (isWalkerMode) blurActiveInput();
+        return;
+    }
+
+    // 🌟追加: P 単押し (Phantom Mode Master 全体の ON/OFF トグル)
+    if (event.code === 'KeyP' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        if (cheatsheet.isVisible()) {
+            cheatsheet.hide();
+        }
+
+        safeStorageGet(['global', 'phantom'], (res) => {
+            const g = (res.global as GlobalState) || globalStateSnapshot;
+            const p = (res.phantom as PhantomState) || phantomStateSnapshot;
+            p.master = !p.master; // Phantom Master を反転
+            safeStorageSet({ phantom: p });
+            updateAppState(g, p);
+
+            console.log(`[X-Ops] Phantom Mode Master is now ${p.master ? 'ON' : 'OFF'}`);
+        });
         return;
     }
 

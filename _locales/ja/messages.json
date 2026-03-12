@@ -65,6 +65,9 @@
     "cs_sys_shift_p": {
         "message": "Walkerモード ON / OFF"
     },
+    "cs_sys_p": {
+        "message": "Phantomモード ON / OFF"
+    },
     "cs_sys_esc_close": {
         "message": "チートシートを閉じる"
     },

@@ -2169,6 +2169,7 @@
     "q",
     "e",
     "c",
+    "p",
     // X Timeline & Domain Specific Keys
     "j",
     "k",
@@ -2573,6 +2574,7 @@
     addRow(["Shift", "D"], "cs_tab_dd");
     addSection("cs_section_sys");
     addRow(["Shift", "P"], "cs_sys_shift_p");
+    addRow(["P"], "cs_sys_p");
     addRow(["F"], "cs_sys_f");
     addRow(["Z"], "cs_sys_z");
     addRow(["Alt", "Z"], "cs_sys_altz");
@@ -2684,6 +2686,23 @@
         updateAppState(g, p);
       });
       if (isWalkerMode) blurActiveInput();
+      return;
+    }
+    if (event.code === "KeyP" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (cheatsheet.isVisible()) {
+        cheatsheet.hide();
+      }
+      safeStorageGet(["global", "phantom"], (res) => {
+        const g = res.global || globalStateSnapshot;
+        const p = res.phantom || phantomStateSnapshot;
+        p.master = !p.master;
+        safeStorageSet({ phantom: p });
+        updateAppState(g, p);
+        console.log(`[X-Ops] Phantom Mode Master is now ${p.master ? "ON" : "OFF"}`);
+      });
       return;
     }
     if (isWalkerMode && REGISTERED_ROUTER_KEYS.has(key)) {

@@ -62,8 +62,11 @@
     "cs_tab_dd": {
         "message": "Duplicate Tab"
     },
-    "cs_sys_esc": {
+    "cs_sys_shift_p": {
         "message": "Toggle Walker Mode"
+    },
+    "cs_sys_p": {
+        "message": "Toggle Phantom Mode"
     },
     "cs_sys_f": {
         "message": "Toggle Cheatsheet"
