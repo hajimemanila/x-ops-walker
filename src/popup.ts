@@ -1,16 +1,11 @@
-const STORAGE_KEY = 'isWalkerMode';
-const BLOCKER_KEY = 'blockGoogleOneTap';
-
 // ── ALM Configuration ──
 interface AlmConfig {
     enabled: boolean;
-    safetyEnter?: boolean;
     heavyDomains: string[];
 }
 
 const DEFAULT_ALM_CONFIG: AlmConfig = {
     enabled: true,
-    safetyEnter: false,
     heavyDomains: [
         'x.com',
         'twitter.com',
@@ -52,6 +47,16 @@ function updateUI(active: boolean): void {
         statusText.className = 'off';
         statusDot.className = 'off';
         detail.textContent = t('popup_detail_off');
+    }
+
+    // Cascade Lock (UI Shadow) for domain protocols
+    const domainContainer = document.getElementById('domain-protocol-container');
+    if (domainContainer) {
+        if (active) {
+            domainContainer.classList.remove('disabled-section');
+        } else {
+            domainContainer.classList.add('disabled-section');
+        }
     }
 }
 
@@ -132,17 +137,20 @@ async function init(): Promise<void> {
     scHint.appendChild(afterText);
 
     // Walker Mode の初期状態読み込み
-    const result = await chrome.storage.local.get([STORAGE_KEY, BLOCKER_KEY, 'alm', 'xWalker']);
-    updateUI(!!result[STORAGE_KEY]);
-    updateBlockerUI(!!result[BLOCKER_KEY]); // デフォルト false (OFF)
+    const result = await chrome.storage.local.get(['global', 'phantom', 'alm']);
+    const globalState = result.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+    const phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+
+    updateUI(!!globalState.walkerMode);
+    updateBlockerUI(!!globalState.blockOneTap); // デフォルト false (OFF)
 
     // ALM 初期状態の読み込み
     const almConfig: AlmConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle('alm-master-toggle', almConfig.enabled);
-    updateMiniToggle('alm-safety-toggle', !!almConfig.safetyEnter);
+    updateMiniToggle('alm-safety-toggle', !!globalState.safetyEnter);
 
     // プロトコル xWalker の初期状態読み込み
-    const xWalkerConfig = result.xWalker ?? { enabled: true, rightColumnDashboard: true };
+    const xWalkerConfig = phantomState.xWalker;
     if (document.getElementById('toggle-protocol-x')) {
         updateMiniToggle('toggle-protocol-x', !!xWalkerConfig.enabled);
     }
@@ -188,18 +196,20 @@ async function init(): Promise<void> {
 
     // Walker Mode トグル
     document.getElementById('toggle')!.addEventListener('click', async () => {
-        const res = await chrome.storage.local.get(STORAGE_KEY);
-        const next = !res[STORAGE_KEY];
-        await chrome.storage.local.set({ [STORAGE_KEY]: next });
-        updateUI(next);
+        const res = await chrome.storage.local.get('global');
+        const globalState = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        globalState.walkerMode = !globalState.walkerMode;
+        await chrome.storage.local.set({ global: globalState });
+        updateUI(globalState.walkerMode);
     });
 
     // Google One Tap ブロッカー トグル
     document.getElementById('blocker-toggle')!.addEventListener('click', async () => {
-        const res = await chrome.storage.local.get(BLOCKER_KEY);
-        const next = !res[BLOCKER_KEY];
-        await chrome.storage.local.set({ [BLOCKER_KEY]: next });
-        updateBlockerUI(next);
+        const res = await chrome.storage.local.get('global');
+        const globalState = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        globalState.blockOneTap = !globalState.blockOneTap;
+        await chrome.storage.local.set({ global: globalState });
+        updateBlockerUI(globalState.blockOneTap);
     });
 
     // ALM Master トグル
@@ -213,22 +223,22 @@ async function init(): Promise<void> {
 
     // Chat SafetyEnter トグル
     document.getElementById('alm-safety-toggle')!.addEventListener('click', async () => {
-        const res = await chrome.storage.local.get('alm');
-        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
-        conf.safetyEnter = !conf.safetyEnter;
-        await chrome.storage.local.set({ alm: conf });
-        updateMiniToggle('alm-safety-toggle', !!conf.safetyEnter);
+        const res = await chrome.storage.local.get('global');
+        const globalState = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        globalState.safetyEnter = !globalState.safetyEnter;
+        await chrome.storage.local.set({ global: globalState });
+        updateMiniToggle('alm-safety-toggle', globalState.safetyEnter);
     });
 
     // X Timeline Protocol トグル
     const protocolXToggle = document.getElementById('toggle-protocol-x');
     if (protocolXToggle) {
         protocolXToggle.addEventListener('click', async () => {
-            const res = await chrome.storage.local.get('xWalker');
-            const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
-            conf.enabled = !conf.enabled;
-            await chrome.storage.local.set({ xWalker: conf });
-            updateMiniToggle('toggle-protocol-x', conf.enabled);
+            const res = await chrome.storage.local.get('phantom');
+            const phantomState = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+            phantomState.xWalker.enabled = !phantomState.xWalker.enabled;
+            await chrome.storage.local.set({ phantom: phantomState });
+            updateMiniToggle('toggle-protocol-x', phantomState.xWalker.enabled);
         });
     }
 
@@ -236,11 +246,11 @@ async function init(): Promise<void> {
     const xRightColumnToggle = document.getElementById('toggle-x-right-column');
     if (xRightColumnToggle) {
         xRightColumnToggle.addEventListener('click', async () => {
-            const res = await chrome.storage.local.get('xWalker');
-            const conf = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
-            conf.rightColumnDashboard = !conf.rightColumnDashboard;
-            await chrome.storage.local.set({ xWalker: conf });
-            updateMiniToggle('toggle-x-right-column', conf.rightColumnDashboard);
+            const res = await chrome.storage.local.get('phantom');
+            const phantomState = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+            phantomState.xWalker.rightColumnDashboard = !phantomState.xWalker.rightColumnDashboard;
+            await chrome.storage.local.set({ phantom: phantomState });
+            updateMiniToggle('toggle-x-right-column', phantomState.xWalker.rightColumnDashboard);
         });
     }
 

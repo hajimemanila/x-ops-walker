@@ -2,9 +2,18 @@
 (() => {
   // src/options.ts
   var STORAGE_KEY_BOOKMARKS = "xOpsBookmarks";
-  var STORAGE_KEY_WALKER_MODE = "isWalkerMode";
   var STORAGE_KEY_ALM = "alm";
   var editingIndex = null;
+  function updateOptionsUI(walkerMode) {
+    const bookmarkPanel = document.getElementById("panel-bookmarks");
+    if (bookmarkPanel) {
+      if (walkerMode) {
+        bookmarkPanel.classList.remove("disabled-section");
+      } else {
+        bookmarkPanel.classList.add("disabled-section");
+      }
+    }
+  }
   function cleanUrl(url) {
     try {
       let cleaned = url.replace(/^https?:\/\//, "").replace(/^www\./, "");
@@ -129,10 +138,16 @@
   async function initGeneralSettings() {
     const checkWalkerMode = document.getElementById("check-walker-mode");
     const checkAlmEnabled = document.getElementById("check-alm-enabled");
-    const state = await chrome.storage.local.get([STORAGE_KEY_WALKER_MODE, STORAGE_KEY_ALM]);
-    checkWalkerMode.checked = !!state[STORAGE_KEY_WALKER_MODE];
+    const state = await chrome.storage.local.get(["global", STORAGE_KEY_ALM]);
+    const globalState = state.global || { walkerMode: true };
+    checkWalkerMode.checked = !!globalState.walkerMode;
+    updateOptionsUI(!!globalState.walkerMode);
     checkWalkerMode.addEventListener("change", async () => {
-      await chrome.storage.local.set({ [STORAGE_KEY_WALKER_MODE]: checkWalkerMode.checked });
+      const cur = await chrome.storage.local.get("global");
+      const g = cur.global || { walkerMode: true };
+      g.walkerMode = checkWalkerMode.checked;
+      await chrome.storage.local.set({ global: g });
+      updateOptionsUI(g.walkerMode);
     });
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };
     checkAlmEnabled.checked = !!alm.enabled;

@@ -5,17 +5,17 @@ let isSynthesizing = false;
 
 // ── 初期化シーケンス（WalkerのON/OFFに依存せず独立稼働） ──
 try {
-    chrome.storage.local.get('alm', (res) => {
-        if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== undefined) {
-            isSafetyEnterEnabled = res.alm.safetyEnter;
+    chrome.storage.local.get('global', (res) => {
+        if (!chrome.runtime.lastError && res.global && res.global.safetyEnter !== undefined) {
+            isSafetyEnterEnabled = res.global.safetyEnter;
         }
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && 'alm' in changes) {
-            const alm = changes['alm'].newValue;
-            if (alm && alm.safetyEnter !== undefined) {
-                isSafetyEnterEnabled = alm.safetyEnter;
+        if (area === 'local' && 'global' in changes) {
+            const globalState = changes['global'].newValue;
+            if (globalState && globalState.safetyEnter !== undefined) {
+                isSafetyEnterEnabled = globalState.safetyEnter;
             }
         }
     });

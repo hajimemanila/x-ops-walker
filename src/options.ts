@@ -9,10 +9,21 @@ interface Bookmark {
 }
 
 const STORAGE_KEY_BOOKMARKS = 'xOpsBookmarks';
-const STORAGE_KEY_WALKER_MODE = 'isWalkerMode';
 const STORAGE_KEY_ALM = 'alm';
 
 let editingIndex: number | null = null;
+
+// --- Cascade UI ---
+function updateOptionsUI(walkerMode: boolean) {
+    const bookmarkPanel = document.getElementById('panel-bookmarks');
+    if (bookmarkPanel) {
+        if (walkerMode) {
+            bookmarkPanel.classList.remove('disabled-section');
+        } else {
+            bookmarkPanel.classList.add('disabled-section');
+        }
+    }
+}
 
 // --- Utility: URL Cleaning (Compatible with x-timeline.ts logic) ---
 function cleanUrl(url: string): string {
@@ -165,11 +176,18 @@ async function initGeneralSettings() {
     const checkWalkerMode = document.getElementById('check-walker-mode') as HTMLInputElement;
     const checkAlmEnabled = document.getElementById('check-alm-enabled') as HTMLInputElement;
 
-    const state = await chrome.storage.local.get([STORAGE_KEY_WALKER_MODE, STORAGE_KEY_ALM]);
+    const state = await chrome.storage.local.get(['global', STORAGE_KEY_ALM]);
 
-    checkWalkerMode.checked = !!state[STORAGE_KEY_WALKER_MODE];
+    const globalState = state.global || { walkerMode: true };
+    checkWalkerMode.checked = !!globalState.walkerMode;
+    updateOptionsUI(!!globalState.walkerMode);
+
     checkWalkerMode.addEventListener('change', async () => {
-        await chrome.storage.local.set({ [STORAGE_KEY_WALKER_MODE]: checkWalkerMode.checked });
+        const cur = await chrome.storage.local.get('global');
+        const g = cur.global || { walkerMode: true };
+        g.walkerMode = checkWalkerMode.checked;
+        await chrome.storage.local.set({ global: g });
+        updateOptionsUI(g.walkerMode);
     });
 
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };

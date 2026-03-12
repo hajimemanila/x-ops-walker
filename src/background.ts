@@ -1,5 +1,7 @@
 'use strict';
 
+import { GlobalState, PhantomState, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE } from './config/state';
+
 // ── URL制限チェック ────────────────────────────────────────────────────────────
 // ① プロトコルベースの間騢ページ（Chrome: chrome://, Firefox: moz-extension:// 等）
 function isRestrictedUrl(url: string | undefined): boolean {
@@ -43,6 +45,44 @@ function isSkippableTab(url: string | undefined): boolean {
 // 拡張機能のインストール・リロード直後に開かれているタブには
 // kernel.js が存在しない。onInstalled で既存タブへ強制注入する。
 chrome.runtime.onInstalled.addListener(async () => {
+    // ── [PHASE 2] Phantom State Migration ──
+    try {
+        const result = await chrome.storage.local.get(null);
+        let needsUpdate = false;
+
+        const globalState: GlobalState = result.global || { ...DEFAULT_GLOBAL_STATE };
+        const phantomState: PhantomState = result.phantom || { ...DEFAULT_PHANTOM_STATE };
+
+        // Flat keys -> Hierarchy mapping
+        if ('isWalkerMode' in result) {
+            globalState.walkerMode = result.isWalkerMode;
+            needsUpdate = true;
+        }
+        if ('blockGoogleOneTap' in result) {
+            globalState.blockOneTap = result.blockGoogleOneTap;
+            needsUpdate = true;
+        }
+        if (result.alm && 'safetyEnter' in result.alm) {
+            globalState.safetyEnter = result.alm.safetyEnter;
+            needsUpdate = true;
+        }
+        if ('xWalker' in result && !result.phantom) {
+            phantomState.xWalker = result.xWalker;
+            needsUpdate = true;
+        }
+
+        if (needsUpdate || !result.global || !result.phantom) {
+            await chrome.storage.local.set({
+                global: globalState,
+                phantom: phantomState
+            });
+            await chrome.storage.local.remove(['isWalkerMode', 'blockGoogleOneTap']);
+            console.log('[X-Ops Walker] Phantom State Migration Complete.');
+        }
+    } catch (e) {
+        console.error('[X-Ops Walker] Migration error:', e);
+    }
+
     // chrome.scripting is only available in Chrome (MV3 + "scripting" permission).
     // Firefox MV3 injects content scripts automatically via manifest declarations,
     // so this block is intentionally skipped on Firefox.

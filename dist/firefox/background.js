@@ -1031,6 +1031,23 @@
 
   // src/background.ts
   init_browser_polyfill_entry();
+
+  // src/config/state.ts
+  init_browser_polyfill_entry();
+  var DEFAULT_GLOBAL_STATE = {
+    walkerMode: true,
+    blockOneTap: false,
+    safetyEnter: false
+  };
+  var DEFAULT_PHANTOM_STATE = {
+    master: true,
+    xWalker: {
+      enabled: true,
+      rightColumnDashboard: true
+    }
+  };
+
+  // src/background.ts
   function isRestrictedUrl(url) {
     if (!url) return true;
     return url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("devtools://") || url.startsWith("about:") || url.startsWith("edge://") || url.startsWith("moz-extension://") || url.startsWith("firefox://");
@@ -1053,6 +1070,38 @@
     return isRestrictedUrl(url) || isForbiddenHost(url);
   }
   chrome.runtime.onInstalled.addListener(async () => {
+    try {
+      const result = await chrome.storage.local.get(null);
+      let needsUpdate = false;
+      const globalState = result.global || { ...DEFAULT_GLOBAL_STATE };
+      const phantomState = result.phantom || { ...DEFAULT_PHANTOM_STATE };
+      if ("isWalkerMode" in result) {
+        globalState.walkerMode = result.isWalkerMode;
+        needsUpdate = true;
+      }
+      if ("blockGoogleOneTap" in result) {
+        globalState.blockOneTap = result.blockGoogleOneTap;
+        needsUpdate = true;
+      }
+      if (result.alm && "safetyEnter" in result.alm) {
+        globalState.safetyEnter = result.alm.safetyEnter;
+        needsUpdate = true;
+      }
+      if ("xWalker" in result && !result.phantom) {
+        phantomState.xWalker = result.xWalker;
+        needsUpdate = true;
+      }
+      if (needsUpdate || !result.global || !result.phantom) {
+        await chrome.storage.local.set({
+          global: globalState,
+          phantom: phantomState
+        });
+        await chrome.storage.local.remove(["isWalkerMode", "blockGoogleOneTap"]);
+        console.log("[X-Ops Walker] Phantom State Migration Complete.");
+      }
+    } catch (e) {
+      console.error("[X-Ops Walker] Migration error:", e);
+    }
     if (!chrome.scripting) return;
     try {
       const tabs = await chrome.tabs.query({});

@@ -42,8 +42,6 @@ if (isPWA()) {
 window.__XOPS_WALKER_ALIVE__ = true;
 
 // ── 定数 ─────────────────────────────────────────────────────────────────────
-const STORAGE_KEY = 'isWalkerMode';
-const BLOCKER_KEY = 'blockGoogleOneTap';
 
 // Walkerキー全体セット
 const REGISTERED_ROUTER_KEYS = new Set([
@@ -612,7 +610,11 @@ function keydownHandler(event: KeyboardEvent): void {
         }
 
         isWalkerMode = !isWalkerMode;
-        safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
+        safeStorageGet(['global'], (res) => {
+            const g = (res.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+            g.walkerMode = isWalkerMode;
+            safeStorageSet({ global: g });
+        });
         hud.setState(isWalkerMode);
         if (isWalkerMode) blurActiveInput();
         return;
@@ -632,20 +634,21 @@ function keydownHandler(event: KeyboardEvent): void {
 window.addEventListener('keydown', keydownHandler, { capture: true });
 
 // ── P2: 初期化 ────────────────────────────────────────────────────────
-safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
-    isWalkerMode = !!result[STORAGE_KEY];
+safeStorageGet(['global'], (result) => {
+    const globalState = (result.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+    isWalkerMode = !!globalState.walkerMode;
     hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!result[BLOCKER_KEY]);
+    applyOneTapBlocker(!!globalState.blockOneTap);
 });
 
 // ── X Timeline Walker (v2.1) 初期化判定 ──────────────────────────────────────
 const currentHost = window.location.hostname;
 if (currentHost === 'x.com' || currentHost === 'twitter.com') {
-    safeStorageGet(['xWalker'], (res) => {
-        const xWalker = (res.xWalker as any) ?? { enabled: true, rightColumnDashboard: true };
-        if (xWalker.enabled) {
-            initXWalker(xWalker);
-        }
+    safeStorageGet(['phantom'], (res) => {
+        const phantom = (res.phantom as any) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+        const xWalker = phantom.xWalker || { enabled: true, rightColumnDashboard: true };
+        // initXWalker is designed to be called with xWalker true or false to trigger setWalkerState inner logic correctly
+        initXWalker(xWalker);
     });
 }
 
@@ -653,14 +656,18 @@ if (currentHost === 'x.com' || currentHost === 'twitter.com') {
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
 
-    if (STORAGE_KEY in changes) {
-        isWalkerMode = !!changes[STORAGE_KEY].newValue;
-        hud.setState(isWalkerMode);
-        if (isWalkerMode && !document.hidden) blurActiveInput();
-    }
-
-    if (BLOCKER_KEY in changes) {
-        applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    if ('global' in changes) {
+        const globalState = changes.global.newValue as any;
+        if (globalState) {
+            if (globalState.walkerMode !== undefined && globalState.walkerMode !== isWalkerMode) {
+                isWalkerMode = !!globalState.walkerMode;
+                hud.setState(isWalkerMode);
+                if (isWalkerMode && !document.hidden) blurActiveInput();
+            }
+            if (globalState.blockOneTap !== undefined) {
+                applyOneTapBlocker(!!globalState.blockOneTap);
+            }
+        }
     }
 });
 
@@ -736,10 +743,11 @@ function pullStateFromStorage(): void {
         document.title = document.title.slice('💤 '.length);
     }
 
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (res) => {
-        isWalkerMode = !!res[STORAGE_KEY];
+    safeStorageGet(['global'], (res) => {
+        const globalState = (res.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        isWalkerMode = !!globalState.walkerMode;
         hud.setState(isWalkerMode);
-        applyOneTapBlocker(!!res[BLOCKER_KEY]);
+        applyOneTapBlocker(!!globalState.blockOneTap);
 
         if (isWalkerMode) {
             FocusShield.activate();

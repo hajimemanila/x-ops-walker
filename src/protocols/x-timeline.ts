@@ -97,16 +97,19 @@ export function initXWalker(config: XWalkerConfig) {
 
 chrome.storage.onChanged.addListener((changes: any, area: string) => {
     if (area === 'local') {
-        if ('xWalker' in changes) {
-            const newConfig = changes.xWalker.newValue as XWalkerConfig;
-            isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
+        if ('phantom' in changes) {
+            const phantomState = changes.phantom.newValue;
+            if (phantomState && phantomState.xWalker) {
+                const newConfig = phantomState.xWalker as XWalkerConfig;
+                isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
 
-            setWalkerState(newConfig.enabled);
+                setWalkerState(newConfig.enabled);
 
-            if (isDashboardEnabled) {
-                installDashboard();
-            } else {
-                removeDashboard();
+                if (isDashboardEnabled) {
+                    installDashboard();
+                } else {
+                    removeDashboard();
+                }
             }
         }
         if ('xOpsBookmarks' in changes && isDashboardEnabled) {

@@ -268,14 +268,17 @@
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local") {
-      if ("xWalker" in changes) {
-        const newConfig = changes.xWalker.newValue;
-        isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
-        setWalkerState(newConfig.enabled);
-        if (isDashboardEnabled) {
-          installDashboard();
-        } else {
-          removeDashboard();
+      if ("phantom" in changes) {
+        const phantomState = changes.phantom.newValue;
+        if (phantomState && phantomState.xWalker) {
+          const newConfig = phantomState.xWalker;
+          isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
+          setWalkerState(newConfig.enabled);
+          if (isDashboardEnabled) {
+            installDashboard();
+          } else {
+            removeDashboard();
+          }
         }
       }
       if ("xOpsBookmarks" in changes && isDashboardEnabled) {
@@ -1019,16 +1022,16 @@
   var isSafetyEnterEnabled = false;
   var isSynthesizing = false;
   try {
-    chrome.storage.local.get("alm", (res) => {
-      if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== void 0) {
-        isSafetyEnterEnabled = res.alm.safetyEnter;
+    chrome.storage.local.get("global", (res) => {
+      if (!chrome.runtime.lastError && res.global && res.global.safetyEnter !== void 0) {
+        isSafetyEnterEnabled = res.global.safetyEnter;
       }
     });
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && "alm" in changes) {
-        const alm = changes["alm"].newValue;
-        if (alm && alm.safetyEnter !== void 0) {
-          isSafetyEnterEnabled = alm.safetyEnter;
+      if (area === "local" && "global" in changes) {
+        const globalState = changes["global"].newValue;
+        if (globalState && globalState.safetyEnter !== void 0) {
+          isSafetyEnterEnabled = globalState.safetyEnter;
         }
       }
     });
@@ -1114,8 +1117,6 @@
     console.log("[FoxPhantom] PWA mode detected. Shutting down Kernel.");
   }
   window.__XOPS_WALKER_ALIVE__ = true;
-  var STORAGE_KEY = "isWalkerMode";
-  var BLOCKER_KEY = "blockGoogleOneTap";
   var REGISTERED_ROUTER_KEYS = /* @__PURE__ */ new Set([
     // Base & Universal Keys
     "a",
@@ -1629,7 +1630,11 @@
         cheatsheet.hide();
       }
       isWalkerMode = !isWalkerMode;
-      safeStorageSet({ [STORAGE_KEY]: isWalkerMode });
+      safeStorageGet(["global"], (res) => {
+        const g = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        g.walkerMode = isWalkerMode;
+        safeStorageSet({ global: g });
+      });
       hud.setState(isWalkerMode);
       if (isWalkerMode) blurActiveInput();
       return;
@@ -1644,29 +1649,34 @@
     }
   }
   window.addEventListener("keydown", keydownHandler, { capture: true });
-  safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (result) => {
-    isWalkerMode = !!result[STORAGE_KEY];
+  safeStorageGet(["global"], (result) => {
+    const globalState = result.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+    isWalkerMode = !!globalState.walkerMode;
     hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!result[BLOCKER_KEY]);
+    applyOneTapBlocker(!!globalState.blockOneTap);
   });
   var currentHost = window.location.hostname;
   if (currentHost === "x.com" || currentHost === "twitter.com") {
-    safeStorageGet(["xWalker"], (res) => {
-      const xWalker = res.xWalker ?? { enabled: true, rightColumnDashboard: true };
-      if (xWalker.enabled) {
-        initXWalker(xWalker);
-      }
+    safeStorageGet(["phantom"], (res) => {
+      const phantom = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+      const xWalker = phantom.xWalker || { enabled: true, rightColumnDashboard: true };
+      initXWalker(xWalker);
     });
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (STORAGE_KEY in changes) {
-      isWalkerMode = !!changes[STORAGE_KEY].newValue;
-      hud.setState(isWalkerMode);
-      if (isWalkerMode && !document.hidden) blurActiveInput();
-    }
-    if (BLOCKER_KEY in changes) {
-      applyOneTapBlocker(!!changes[BLOCKER_KEY].newValue);
+    if ("global" in changes) {
+      const globalState = changes.global.newValue;
+      if (globalState) {
+        if (globalState.walkerMode !== void 0 && globalState.walkerMode !== isWalkerMode) {
+          isWalkerMode = !!globalState.walkerMode;
+          hud.setState(isWalkerMode);
+          if (isWalkerMode && !document.hidden) blurActiveInput();
+        }
+        if (globalState.blockOneTap !== void 0) {
+          applyOneTapBlocker(!!globalState.blockOneTap);
+        }
+      }
     }
   });
   chrome.runtime.onMessage.addListener((message) => {
@@ -1725,10 +1735,11 @@
     if (document.title.startsWith("\u{1F4A4} ")) {
       document.title = document.title.slice("\u{1F4A4} ".length);
     }
-    safeStorageGet([STORAGE_KEY, BLOCKER_KEY], (res) => {
-      isWalkerMode = !!res[STORAGE_KEY];
+    safeStorageGet(["global"], (res) => {
+      const globalState = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+      isWalkerMode = !!globalState.walkerMode;
       hud.setState(isWalkerMode);
-      applyOneTapBlocker(!!res[BLOCKER_KEY]);
+      applyOneTapBlocker(!!globalState.blockOneTap);
       if (isWalkerMode) {
         FocusShield.activate();
       }
