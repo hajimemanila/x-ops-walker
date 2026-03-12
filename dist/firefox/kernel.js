@@ -2051,6 +2051,92 @@
   document.addEventListener("visibilitychange", onTabWakeUp);
   window.addEventListener("focus", onTabWakeUp);
 
+  // src/protocols/safety-enter.ts
+  init_browser_polyfill_entry();
+  var isSafetyEnterEnabled = false;
+  var isSynthesizing = false;
+  try {
+    chrome.storage.local.get("alm", (res) => {
+      if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== void 0) {
+        isSafetyEnterEnabled = res.alm.safetyEnter;
+      }
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && "alm" in changes) {
+        const alm = changes["alm"].newValue;
+        if (alm && alm.safetyEnter !== void 0) {
+          isSafetyEnterEnabled = alm.safetyEnter;
+        }
+      }
+    });
+  } catch (e) {
+  }
+  function showSafetyEnterOSD(target) {
+    const existing = document.getElementById("x-ops-safety-osd");
+    if (existing) existing.remove();
+    const osd = document.createElement("div");
+    osd.id = "x-ops-safety-osd";
+    osd.style.cssText = `
+        position: absolute; background: rgba(43, 45, 49, 0.95); color: #fff;
+        font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+        padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,140,0,0.4);
+        pointer-events: none; z-index: 2147483647; opacity: 0; transition: opacity 0.2s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    osd.textContent = "\u{1F4A1} Ctrl+Enter \u3067\u9001\u4FE1";
+    const rect = target.getBoundingClientRect();
+    osd.style.top = `${window.scrollY + rect.bottom - 25}px`;
+    osd.style.left = `${window.scrollX + rect.right - 120}px`;
+    document.body.appendChild(osd);
+    requestAnimationFrame(() => {
+      osd.style.opacity = "1";
+      setTimeout(() => {
+        osd.style.opacity = "0";
+        setTimeout(() => osd.remove(), 200);
+      }, 1500);
+    });
+  }
+  function triggerForcedSend(target) {
+    isSynthesizing = true;
+    try {
+      const keyData = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
+      target.dispatchEvent(new KeyboardEvent("keydown", keyData));
+      target.dispatchEvent(new KeyboardEvent("keypress", keyData));
+      target.dispatchEvent(new KeyboardEvent("keyup", keyData));
+      setTimeout(() => {
+        const sendBtn = target.closest("form")?.querySelector('button[type="submit"]') || document.querySelector('button[data-testid="send-button"]') || document.querySelector('button[aria-label="Send Message"]');
+        if (sendBtn && !sendBtn.disabled) {
+          sendBtn.click();
+        }
+      }, 50);
+    } finally {
+      setTimeout(() => {
+        isSynthesizing = false;
+      }, 50);
+    }
+  }
+  function interceptSafetyEnter(event) {
+    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== "Enter") return false;
+    if (event.isComposing || event.keyCode === 229) return false;
+    const target = event.target;
+    if (!target) return false;
+    const isTextarea = target.tagName === "TEXTAREA";
+    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
+    if (!isTextarea && !isContentEditable) return false;
+    if (event.shiftKey) return false;
+    event.stopPropagation();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.ctrlKey || event.metaKey) {
+      if (event.type === "keydown") triggerForcedSend(target);
+      return true;
+    }
+    if (event.type === "keydown") {
+      showSafetyEnterOSD(target);
+    }
+    return true;
+  }
+
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
   router.register(new AiChatProtocol());
@@ -2396,35 +2482,10 @@
     const style = document.createElement("style");
     style.textContent = `
     :host { all: initial; }
-    #overlay {
-      display: flex; align-items: center; justify-content: center;
-      inset: 0; position: fixed;
-      pointer-events: none;
-    }
-    #panel {
-      pointer-events: auto;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: rgba(12, 12, 20, 0.82);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 16px;
-      box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 140, 0, 0.10) inset;
-      padding: 24px 28px;
-      min-width: 380px;
-      max-width: 480px;
-      opacity: 0;
-      transform: scale(0.94) translateY(10px);
-      transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-                  transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-      user-select: none;
-    }
+    #overlay { display: flex; align-items: center; justify-content: center; inset: 0; position: fixed; pointer-events: none; }
+    #panel { pointer-events: auto; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: rgba(12, 12, 20, 0.82); backdrop-filter: blur(20px) saturate(180%); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 16px; box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 140, 0, 0.10) inset; padding: 24px 28px; min-width: 380px; max-width: 480px; opacity: 0; transform: scale(0.94) translateY(10px); transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1), transform 0.22s cubic-bezier(0.4, 0, 0.2, 1); user-select: none; }
     #panel.visible { opacity: 1; transform: scale(1) translateY(0); }
-    #header {
-      display: flex; align-items: center; gap: 8px;
-      margin-bottom: 16px; padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
+    #header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
     #header .icon  { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; }
     #header .title { font-size: 13px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: rgba(255, 255, 255, 0.85); }
     #header .badge { margin-left: auto; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #ffac30; background: rgba(255, 140, 0, 0.15); border-radius: 999px; padding: 2px 8px; }
@@ -2432,13 +2493,7 @@
     tr + tr td { border-top: 1px solid rgba(255, 255, 255, 0.05); }
     td { padding: 7px 4px; font-size: 12px; color: rgba(255, 255, 255, 0.55); vertical-align: middle; }
     td.key-col { width: 110px; white-space: nowrap; }
-    .key {
-      display: inline-block; font-size: 11px; font-weight: 700;
-      font-family: 'Cascadia Code', 'Consolas', monospace;
-      color: #ffac30; background: rgba(255, 140, 0, 0.12);
-      border: 1px solid rgba(255, 140, 0, 0.25); border-radius: 5px;
-      padding: 1px 7px; margin-right: 2px;
-    }
+    .key { display: inline-block; font-size: 11px; font-weight: 700; font-family: 'Cascadia Code', 'Consolas', monospace; color: #ffac30; background: rgba(255, 140, 0, 0.12); border: 1px solid rgba(255, 140, 0, 0.25); border-radius: 5px; padding: 1px 7px; margin-right: 2px; }
     .desc { color: rgba(255, 255, 255, 0.70); }
     .section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 140, 0, 0.55); padding: 10px 4px 4px; }
     #footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.07); font-size: 10px; color: rgba(255, 255, 255, 0.25); text-align: center; letter-spacing: 0.06em; }
@@ -2576,94 +2631,9 @@
     if (code === "Space") return " ";
     return event.key.toLowerCase();
   }
-  var isSafetyEnterEnabled = false;
-  var isSynthesizing = false;
-  try {
-    chrome.storage.local.get("alm", (res) => {
-      if (!chrome.runtime.lastError && res.alm && res.alm.safetyEnter !== void 0) {
-        isSafetyEnterEnabled = res.alm.safetyEnter;
-      }
-    });
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && "alm" in changes) {
-        const alm = changes["alm"].newValue;
-        if (alm && alm.safetyEnter !== void 0) {
-          isSafetyEnterEnabled = alm.safetyEnter;
-        }
-      }
-    });
-  } catch (e) {
-  }
-  function showSafetyEnterOSD(target) {
-    const existing = document.getElementById("x-ops-safety-osd");
-    if (existing) existing.remove();
-    const osd = document.createElement("div");
-    osd.id = "x-ops-safety-osd";
-    osd.style.cssText = `
-        position: absolute; background: rgba(43, 45, 49, 0.95); color: #fff;
-        font-family: 'Segoe UI', system-ui, sans-serif; font-size: 11px; font-weight: 600;
-        padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,140,0,0.4);
-        pointer-events: none; z-index: 2147483647; opacity: 0; transition: opacity 0.2s;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    `;
-    osd.textContent = "\u{1F4A1} Ctrl+Enter \u3067\u9001\u4FE1";
-    const rect = target.getBoundingClientRect();
-    osd.style.top = `${window.scrollY + rect.bottom - 25}px`;
-    osd.style.left = `${window.scrollX + rect.right - 120}px`;
-    document.body.appendChild(osd);
-    requestAnimationFrame(() => {
-      osd.style.opacity = "1";
-      setTimeout(() => {
-        osd.style.opacity = "0";
-        setTimeout(() => osd.remove(), 200);
-      }, 1500);
-    });
-  }
-  function triggerForcedSend(target) {
-    isSynthesizing = true;
-    try {
-      const keyData = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };
-      target.dispatchEvent(new KeyboardEvent("keydown", keyData));
-      target.dispatchEvent(new KeyboardEvent("keypress", keyData));
-      target.dispatchEvent(new KeyboardEvent("keyup", keyData));
-      setTimeout(() => {
-        const sendBtn = target.closest("form")?.querySelector('button[type="submit"]') || document.querySelector('button[data-testid="send-button"]') || document.querySelector('button[aria-label="Send Message"]');
-        if (sendBtn && !sendBtn.disabled) {
-          sendBtn.click();
-        }
-      }, 50);
-    } finally {
-      setTimeout(() => {
-        isSynthesizing = false;
-      }, 50);
-    }
-  }
-  function handleSafetyEnter(event) {
-    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== "Enter") return;
-    if (isOrphan()) return;
-    if (event.isComposing || event.keyCode === 229) return;
-    const target = event.target;
-    if (!target) return;
-    const isTextarea = target.tagName === "TEXTAREA";
-    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
-    if (!isTextarea && !isContentEditable) return;
-    if (event.shiftKey) return;
-    event.stopPropagation();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.ctrlKey || event.metaKey) {
-      if (event.type === "keydown") triggerForcedSend(target);
-      return;
-    }
-    if (event.type === "keydown") {
-      showSafetyEnterOSD(target);
-    }
-  }
-  window.addEventListener("keydown", handleSafetyEnter, true);
-  window.addEventListener("keypress", handleSafetyEnter, true);
-  window.addEventListener("keyup", handleSafetyEnter, true);
   function keydownHandler(event) {
     if (isOrphan()) return;
+    if (interceptSafetyEnter(event)) return;
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
       event.preventDefault();
       event.stopPropagation();
@@ -2866,6 +2836,7 @@
   connectKeepAlivePort();
   function suppressSiteShortcutsHandler(event) {
     if (isOrphan()) return;
+    if (interceptSafetyEnter(event)) return;
     if (shouldPassThrough(event)) return;
     const key = normalizeKey(event);
     if (REGISTERED_ROUTER_KEYS.has(key)) {
