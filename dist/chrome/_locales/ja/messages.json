@@ -253,5 +253,23 @@
     },
     "options_phantom_master": {
         "message": "ファントムモード"
+    },
+    "options_tab_alm": {
+        "message": "休眠保護ドメイン"
+    },
+    "options_alm_title": {
+        "message": "休眠保護ドメイン"
+    },
+    "options_alm_add_label": {
+        "message": "新規ドメイン追加"
+    },
+    "options_alm_add_btn": {
+        "message": "追加する"
+    },
+    "options_alm_added_msg": {
+        "message": "登録しました！"
+    },
+    "options_alm_delete_btn": {
+        "message": "削除"
     }
 }

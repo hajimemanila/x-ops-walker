@@ -172,6 +172,81 @@
       }, 2e3);
     });
   }
+  var DEFAULT_ALM_DOMAINS = [
+    "x.com",
+    "twitter.com",
+    "gemini.google.com",
+    "chatgpt.com",
+    "claude.ai",
+    "chat.deepseek.com",
+    "copilot.microsoft.com",
+    "perplexity.ai",
+    "grok.com",
+    "figma.com",
+    "canva.com",
+    "notion.so",
+    "www.youtube.com"
+  ];
+  async function loadAlmDomains() {
+    const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
+    const alm = res[STORAGE_KEY_ALM];
+    if (alm && alm.excludeDomains) {
+      return alm.excludeDomains;
+    }
+    return [...DEFAULT_ALM_DOMAINS];
+  }
+  async function saveAlmDomains(domains) {
+    const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
+    const alm = res[STORAGE_KEY_ALM] || { enabled: true };
+    alm.excludeDomains = domains;
+    if ("heavyDomains" in alm) delete alm.heavyDomains;
+    await chrome.storage.local.set({ [STORAGE_KEY_ALM]: alm });
+    renderAlmDomains();
+  }
+  async function renderAlmDomains() {
+    const domains = await loadAlmDomains();
+    const list = document.getElementById("alm-domain-list");
+    list.innerHTML = "";
+    domains.forEach((domain, index) => {
+      const li = document.createElement("li");
+      li.className = "bookmark-item";
+      li.innerHTML = `
+            <div class="bookmark-info" style="flex: 1; padding-right: 15px;">
+                <div class="bookmark-title">${domain}</div>
+            </div>
+            <div class="bookmark-actions">
+                <button class="btn btn-danger btn-delete-alm" data-index="${index}">${t("options_alm_delete_btn", "\u524A\u9664")}</button>
+            </div>
+        `;
+      li.querySelector(".btn-delete-alm").addEventListener("click", async () => {
+        if (confirm(`\u300C${domain}\u300D\u3092\u4FDD\u8B77\u30EA\u30B9\u30C8\u304B\u3089\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F`)) {
+          const current = await loadAlmDomains();
+          current.splice(index, 1);
+          await saveAlmDomains(current);
+        }
+      });
+      list.appendChild(li);
+    });
+  }
+  function initAlmDomainManager() {
+    const inputDomain = document.getElementById("input-alm-domain");
+    const msg = document.getElementById("alm-add-msg");
+    document.getElementById("btn-add-alm-domain").addEventListener("click", async () => {
+      let domain = inputDomain.value.trim().toLowerCase();
+      if (!domain) return;
+      domain = domain.replace(/^https?:\/\//, "").split("/")[0];
+      const current = await loadAlmDomains();
+      if (!current.includes(domain)) {
+        current.push(domain);
+        await saveAlmDomains(current);
+      }
+      inputDomain.value = "";
+      msg.style.display = "block";
+      setTimeout(() => {
+        msg.style.display = "none";
+      }, 2e3);
+    });
+  }
   async function initGeneralSettings() {
     const checkWalkerMode = document.getElementById("check-walker-mode");
     const checkAlmEnabled = document.getElementById("check-alm-enabled");
@@ -234,9 +309,13 @@
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };
     checkAlmEnabled.checked = !!alm.enabled;
     checkAlmEnabled.addEventListener("change", async () => {
-      const currentAlm = (await chrome.storage.local.get(STORAGE_KEY_ALM))[STORAGE_KEY_ALM] || { enabled: true };
-      currentAlm.enabled = checkAlmEnabled.checked;
-      await chrome.storage.local.set({ [STORAGE_KEY_ALM]: currentAlm });
+      const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
+      const raw = res[STORAGE_KEY_ALM] || {};
+      const saveAlm = {
+        enabled: checkAlmEnabled.checked,
+        excludeDomains: raw.excludeDomains || DEFAULT_ALM_DOMAINS
+      };
+      await chrome.storage.local.set({ [STORAGE_KEY_ALM]: saveAlm });
     });
     const manifest = chrome.runtime.getManifest();
     document.getElementById("extension-version").textContent = `Version: ${manifest.version}`;
@@ -247,5 +326,7 @@
     initQuickAdd();
     renderBookmarks();
     initGeneralSettings();
+    initAlmDomainManager();
+    renderAlmDomains();
   });
 })();

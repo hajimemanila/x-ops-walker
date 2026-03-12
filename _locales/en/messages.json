@@ -235,5 +235,23 @@
     },
     "options_phantom_master": {
         "message": "Phantom Mode"
+    },
+    "options_alm_title": {
+        "message": "Sleep Protection Domains"
+    },
+    "options_alm_add_label": {
+        "message": "Add New Domain"
+    },
+    "options_alm_add_btn": {
+        "message": "Add"
+    },
+    "options_alm_added_msg": {
+        "message": "Added!"
+    },
+    "options_alm_delete_btn": {
+        "message": "Delete"
+    },
+    "options_tab_alm": {
+        "message": "Sleep Protection Domains"
     }
 }

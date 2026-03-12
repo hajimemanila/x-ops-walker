@@ -1033,7 +1033,7 @@
   init_browser_polyfill_entry();
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
-    heavyDomains: [
+    excludeDomains: [
       "x.com",
       "twitter.com",
       "gemini.google.com",
@@ -1159,7 +1159,11 @@
     const phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
     updateUI(!!globalState.walkerMode);
     updateBlockerUI(!!globalState.blockOneTap);
-    const almConfig = result.alm ?? DEFAULT_ALM_CONFIG;
+    const rawAlm = result.alm || {};
+    const almConfig = {
+      enabled: rawAlm.enabled ?? true,
+      excludeDomains: rawAlm.excludeDomains || rawAlm.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+    };
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
     updateMiniToggle("alm-safety-toggle", !!globalState.safetyEnter);
     updateMiniToggle("toggle-phantom-master", !!phantomState.master);
@@ -1177,7 +1181,7 @@
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab && activeTab.url) {
         currentHostname = new URL(activeTab.url).hostname;
-        const isMonitored = almConfig.heavyDomains.includes(currentHostname);
+        const isMonitored = almConfig.excludeDomains.includes(currentHostname);
         updateDynamicDomainBtn(domainBtn, currentHostname, isMonitored);
         domainBtn.style.display = "block";
         const protocolX = document.getElementById("protocol-x");
@@ -1214,9 +1218,14 @@
     });
     document.getElementById("alm-master-toggle").addEventListener("click", async () => {
       const res = await chrome.storage.local.get("alm");
-      const conf = res.alm ?? DEFAULT_ALM_CONFIG;
-      conf.enabled = !conf.enabled;
-      await chrome.storage.local.set({ alm: conf });
+      const raw = res.alm || {};
+      const conf = {
+        enabled: !(raw.enabled ?? true),
+        excludeDomains: raw.excludeDomains || raw.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+      };
+      const saveObj = { ...conf };
+      delete saveObj.heavyDomains;
+      await chrome.storage.local.set({ alm: saveObj });
       updateMiniToggle("alm-master-toggle", conf.enabled);
     });
     document.getElementById("alm-safety-toggle").addEventListener("click", async () => {
@@ -1260,14 +1269,20 @@
     domainBtn.addEventListener("click", async () => {
       if (!currentHostname) return;
       const res = await chrome.storage.local.get("alm");
-      const conf = res.alm ?? DEFAULT_ALM_CONFIG;
-      const isMonitored = conf.heavyDomains.includes(currentHostname);
+      const raw = res.alm || {};
+      const conf = {
+        enabled: raw.enabled ?? true,
+        excludeDomains: raw.excludeDomains || raw.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+      };
+      const isMonitored = conf.excludeDomains.includes(currentHostname);
       if (isMonitored) {
-        conf.heavyDomains = conf.heavyDomains.filter((d) => d !== currentHostname);
+        conf.excludeDomains = conf.excludeDomains.filter((d) => d !== currentHostname);
       } else {
-        conf.heavyDomains.push(currentHostname);
+        conf.excludeDomains.push(currentHostname);
       }
-      await chrome.storage.local.set({ alm: conf });
+      const saveObj = { ...conf };
+      delete saveObj.heavyDomains;
+      await chrome.storage.local.set({ alm: saveObj });
       updateDynamicDomainBtn(domainBtn, currentHostname, !isMonitored);
     });
     document.getElementById("advanced-settings").addEventListener("click", () => {

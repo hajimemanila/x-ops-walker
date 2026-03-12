@@ -1,12 +1,12 @@
 // ── ALM Configuration ──
 interface AlmConfig {
     enabled: boolean;
-    heavyDomains: string[];
+    excludeDomains: string[]; // <-- 名前の相違を修正
 }
 
 const DEFAULT_ALM_CONFIG: AlmConfig = {
     enabled: true,
-    heavyDomains: [
+    excludeDomains: [
         'x.com',
         'twitter.com',
         'gemini.google.com',
@@ -155,8 +155,13 @@ async function init(): Promise<void> {
     updateUI(!!globalState.walkerMode);
     updateBlockerUI(!!globalState.blockOneTap); // デフォルト false (OFF)
 
-    // ALM 初期状態の読み込み
-    const almConfig: AlmConfig = result.alm ?? DEFAULT_ALM_CONFIG;
+    // ALM 初期状態の読み込み（マイグレーション処理）
+    const rawAlm = result.alm || {};
+    const almConfig: AlmConfig = {
+        enabled: rawAlm.enabled ?? true,
+        excludeDomains: rawAlm.excludeDomains || rawAlm.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+    };
+
     updateMiniToggle('alm-master-toggle', almConfig.enabled);
     updateMiniToggle('alm-safety-toggle', !!globalState.safetyEnter);
 
@@ -180,8 +185,8 @@ async function init(): Promise<void> {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (activeTab && activeTab.url) {
             currentHostname = new URL(activeTab.url).hostname;
-            // "www." プレフィックスを基本的には除去するが、既存仕様互換でそのまま判定
-            const isMonitored = almConfig.heavyDomains.includes(currentHostname);
+            // excludeDomains を参照
+            const isMonitored = almConfig.excludeDomains.includes(currentHostname);
             updateDynamicDomainBtn(domainBtn, currentHostname, isMonitored);
             domainBtn.style.display = 'block';
 
@@ -226,12 +231,17 @@ async function init(): Promise<void> {
         updateBlockerUI(globalState.blockOneTap);
     });
 
-    // ALM Master トグル
+    // ALM Master トグル（マイグレーション保存）
     document.getElementById('alm-master-toggle')!.addEventListener('click', async () => {
         const res = await chrome.storage.local.get('alm');
-        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
-        conf.enabled = !conf.enabled;
-        await chrome.storage.local.set({ alm: conf });
+        const raw = res.alm || {};
+        const conf: AlmConfig = {
+            enabled: !(raw.enabled ?? true),
+            excludeDomains: raw.excludeDomains || raw.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+        };
+        const saveObj: any = { ...conf };
+        delete saveObj.heavyDomains; // マイグレーション掃除
+        await chrome.storage.local.set({ alm: saveObj });
         updateMiniToggle('alm-master-toggle', conf.enabled);
     });
 
@@ -281,20 +291,27 @@ async function init(): Promise<void> {
         });
     }
 
-    // Dynamic Domain トグルボタン
+    // Dynamic Domain トグルボタン（マイグレーション保存）
     domainBtn.addEventListener('click', async () => {
         if (!currentHostname) return;
         const res = await chrome.storage.local.get('alm');
-        const conf: AlmConfig = res.alm ?? DEFAULT_ALM_CONFIG;
-        const isMonitored = conf.heavyDomains.includes(currentHostname);
+        const raw = res.alm || {};
+        const conf: AlmConfig = {
+            enabled: raw.enabled ?? true,
+            excludeDomains: raw.excludeDomains || raw.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains
+        };
+        const isMonitored = conf.excludeDomains.includes(currentHostname);
 
         if (isMonitored) {
-            conf.heavyDomains = conf.heavyDomains.filter(d => d !== currentHostname);
+            conf.excludeDomains = conf.excludeDomains.filter(d => d !== currentHostname);
         } else {
-            conf.heavyDomains.push(currentHostname);
+            conf.excludeDomains.push(currentHostname);
         }
 
-        await chrome.storage.local.set({ alm: conf });
+        const saveObj: any = { ...conf };
+        delete saveObj.heavyDomains; // マイグレーション掃除
+
+        await chrome.storage.local.set({ alm: saveObj });
         updateDynamicDomainBtn(domainBtn, currentHostname, !isMonitored);
     });
 

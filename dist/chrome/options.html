@@ -331,11 +331,14 @@
             <img src="icons/icon48.png" alt="Logo">
             X-Ops
         </div>
-        <div class="nav-item active" data-tab="bookmarks">
+        <div class="nav-item active" data-tab="general">
+            <span>⚙️</span> <span data-i18n="options_tab_general"></span>
+        </div>
+        <div class="nav-item" data-tab="bookmarks">
             <span>🔖</span> <span data-i18n="options_tab_bookmark"></span>
         </div>
-        <div class="nav-item" data-tab="general">
-            <span>⚙️</span> <span data-i18n="options_tab_general"></span>
+        <div class="nav-item" data-tab="alm">
+            <span>🛡️</span> <span data-i18n="options_tab_alm"></span>
         </div>
         <div class="nav-item" data-tab="system">
             <span>🖥️</span> <span data-i18n="options_tab_system"></span>
@@ -343,32 +346,7 @@
     </nav>
 
     <main>
-        <div id="panel-bookmarks" class="panel active">
-            <h2 data-i18n="x_cheat_sheet_bookmark">ブックマーク管理</h2>
-            <div class="section">
-                <div class="section-title">
-                    新規登録
-                </div>
-                <div class="form-group">
-                    <label for="input-title">タイトル</label>
-                    <input type="text" id="input-title" placeholder="X-Ops Dashboard">
-                </div>
-                <div class="form-group">
-                    <label for="input-url">URL</label>
-                    <input type="text" id="input-url" placeholder="x.com/home">
-                </div>
-                <button id="btn-save-bookmark" class="btn">保存する</button>
-                <div id="quick-add-msg" data-i18n="x_dashboard_added">登録しました！</div>
-            </div>
-
-            <div class="section">
-                <div class="section-title">登録済み一覧</div>
-                <ul id="bookmark-list" class="bookmark-list">
-                </ul>
-            </div>
-        </div>
-
-        <div id="panel-general" class="panel">
+        <div id="panel-general" class="panel active">
             <h2>全般設定</h2>
 
             <div class="section">
@@ -403,7 +381,8 @@
                     <span>📍 <span data-i18n="options_domain_protocols"></span></span>
                 </div>
                 <div class="setting-row">
-                    <span data-i18n="options_phantom_master"></span> <label class="switch">
+                    <span data-i18n="options_phantom_master"></span>
+                    <label class="switch">
                         <input type="checkbox" id="check-phantom-master">
                         <span class="slider"></span>
                     </label>
@@ -436,6 +415,51 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+            </div>
+        </div>
+
+        <div id="panel-bookmarks" class="panel">
+            <h2 data-i18n="x_cheat_sheet_bookmark">ブックマーク管理</h2>
+
+            <div class="section">
+                <div class="section-title">新規登録</div>
+                <div class="form-group">
+                    <label for="input-title">タイトル</label>
+                    <input type="text" id="input-title" placeholder="X-Ops Dashboard">
+                </div>
+                <div class="form-group">
+                    <label for="input-url">URL</label>
+                    <input type="text" id="input-url" placeholder="x.com/home">
+                </div>
+                <button id="btn-save-bookmark" class="btn">保存する</button>
+                <div id="quick-add-msg" data-i18n="x_dashboard_added"
+                    style="display: none; margin-top: 10px; font-size: 13px; color: var(--success);">登録しました！</div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">登録済み一覧</div>
+                <ul id="bookmark-list" class="bookmark-list">
+                </ul>
+            </div>
+        </div>
+
+        <div id="panel-alm" class="panel">
+            <h2 data-i18n="options_alm_title">保護ドメイン管理</h2>
+
+            <div class="section">
+                <div class="section-title" data-i18n="options_alm_add_label">新規ドメイン追加</div>
+                <div class="form-group">
+                    <input type="text" id="input-alm-domain" placeholder="github.com">
+                </div>
+                <button id="btn-add-alm-domain" class="btn" data-i18n="options_alm_add_btn">追加する</button>
+                <div id="alm-add-msg" style="display: none; margin-top: 10px; font-size: 13px; color: var(--success);"
+                    data-i18n="options_alm_added_msg">登録しました！</div>
+            </div>
+
+            <div class="section">
+                <div class="section-title" data-i18n="options_alm_list_title">保護対象一覧</div>
+                <ul id="alm-domain-list" class="bookmark-list">
+                </ul>
             </div>
         </div>
 
