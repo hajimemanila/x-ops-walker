@@ -217,5 +217,23 @@
     },
     "x_dashboard_my_profile": {
         "message": "My Profile"
+    },
+    "options_tab_bookmark": {
+        "message": "X.com Bookmarks"
+    },
+    "options_global_settings": {
+        "message": "Global Settings"
+    },
+    "options_tab_general": {
+        "message": "General Settings"
+    },
+    "options_tab_system": {
+        "message": "System Info"
+    },
+    "options_domain_protocols": {
+        "message": "Domain Protocols"
+    },
+    "options_phantom_master": {
+        "message": "Phantom Mode"
     }
 }

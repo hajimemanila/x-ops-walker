@@ -235,5 +235,23 @@
     },
     "x_dashboard_my_profile": {
         "message": "自分のプロフィール"
+    },
+    "options_tab_bookmark": {
+        "message": "X.com ブックマーク"
+    },
+    "options_global_settings": {
+        "message": "全般設定"
+    },
+    "options_tab_general": {
+        "message": "全般設定"
+    },
+    "options_tab_system": {
+        "message": "システム情報"
+    },
+    "options_domain_protocols": {
+        "message": "ドメインプロトコル"
+    },
+    "options_phantom_master": {
+        "message": "ファントムモード"
     }
 }

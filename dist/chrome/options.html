@@ -332,21 +332,19 @@
             X-Ops
         </div>
         <div class="nav-item active" data-tab="bookmarks">
-            <span>🔖</span> [X.com / Star]
+            <span>🔖</span> <span data-i18n="options_tab_bookmark"></span>
         </div>
         <div class="nav-item" data-tab="general">
-            <span>⚙️</span> [General]
+            <span>⚙️</span> <span data-i18n="options_tab_general"></span>
         </div>
         <div class="nav-item" data-tab="system">
-            <span>🖥️</span> [System Info]
+            <span>🖥️</span> <span data-i18n="options_tab_system"></span>
         </div>
     </nav>
 
     <main>
-        <!-- Bookmark Panel -->
         <div id="panel-bookmarks" class="panel active">
-            <h2>ブックマーク管理</h2>
-
+            <h2 data-i18n="x_cheat_sheet_bookmark">ブックマーク管理</h2>
             <div class="section">
                 <div class="section-title">
                     新規登録
@@ -360,39 +358,39 @@
                     <input type="text" id="input-url" placeholder="x.com/home">
                 </div>
                 <button id="btn-save-bookmark" class="btn">保存する</button>
-                <div id="quick-add-msg">登録しました！</div>
+                <div id="quick-add-msg" data-i18n="x_dashboard_added">登録しました！</div>
             </div>
 
             <div class="section">
                 <div class="section-title">登録済み一覧</div>
                 <ul id="bookmark-list" class="bookmark-list">
-                    <!-- Dynamic Content -->
                 </ul>
             </div>
         </div>
 
-        <!-- General Settings Panel -->
         <div id="panel-general" class="panel">
             <h2>全般設定</h2>
-            
+
             <div class="section">
-                <div class="section-title">Global Systems</div>
+                <div class="section-title">
+                    <span>🌍 <span data-i18n="options_global_settings"></span></span>
+                </div>
                 <div class="setting-row">
-                    <span>Walker Mode (Master ON/OFF)</span>
+                    <span data-i18n="popup_mode_label">Walker Mode (Master ON/OFF)</span>
                     <label class="switch">
                         <input type="checkbox" id="check-walker-mode">
                         <span class="slider"></span>
                     </label>
                 </div>
                 <div class="setting-row">
-                    <span>Block Google One Tap</span>
+                    <span data-i18n="popup_blocker_label">Block Google One Tap</span>
                     <label class="switch">
                         <input type="checkbox" id="check-block-one-tap">
                         <span class="slider"></span>
                     </label>
                 </div>
                 <div class="setting-row">
-                    <span>Chat SafetyEnter</span>
+                    <span data-i18n="popup_safety_enter_label">Chat SafetyEnter</span>
                     <label class="switch">
                         <input type="checkbox" id="check-safety-enter">
                         <span class="slider"></span>
@@ -401,24 +399,26 @@
             </div>
 
             <div class="section" id="phantom-container">
-                <div class="section-title">Phantom Mode</div>
+                <div class="section-title">
+                    <span>📍 <span data-i18n="options_domain_protocols"></span></span>
+                </div>
                 <div class="setting-row">
-                    <span>Phantom Mode Master Switch</span>
-                    <label class="switch">
+                    <span data-i18n="options_phantom_master"></span> <label class="switch">
                         <input type="checkbox" id="check-phantom-master">
                         <span class="slider"></span>
                     </label>
                 </div>
                 <div id="phantom-sub-settings">
                     <div class="setting-row" style="padding-left: 20px;">
-                        <span>X Timeline Walker (Domain Protocol)</span>
+                        <span data-i18n="protocol_x_title"></span>
                         <label class="switch">
                             <input type="checkbox" id="check-phantom-x">
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <div class="setting-row" style="padding-left: 20px;">
-                        <span>X Right Column Dashboard</span>
+                    <div class="setting-row"
+                        style="padding-left: 40px; border-left: 2px solid rgba(255, 255, 255, 0.1); margin-left: 28px; margin-top: -5px; margin-bottom: 10px;">
+                        <span data-i18n="x_right_column_title"></span>
                         <label class="switch">
                             <input type="checkbox" id="check-phantom-x-dashboard">
                             <span class="slider"></span>
@@ -430,7 +430,7 @@
             <div class="section">
                 <div class="section-title">ALM (Adaptive Lifecycle Management)</div>
                 <div class="setting-row">
-                    <span>Smart Tab Discard</span>
+                    <span data-i18n="popup_smart_discard_label">Smart Tab Discard</span>
                     <label class="switch">
                         <input type="checkbox" id="check-alm-enabled">
                         <span class="slider"></span>
@@ -439,7 +439,6 @@
             </div>
         </div>
 
-        <!-- System info Panel -->
         <div id="panel-system" class="panel">
             <h2>システム情報</h2>
             <div class="section">

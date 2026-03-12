@@ -1,6 +1,7 @@
 /**
  * X-Ops Walker: Options Page Logic
  * Tab switching, Bookmark (xOpsBookmarks) CRUD, Quick Add, Edit, and Reorder.
+ * Centralized settings management for Global, Phantom, and ALM states.
  */
 import { GlobalState, PhantomState } from './config/state';
 
@@ -14,14 +15,46 @@ const STORAGE_KEY_ALM = 'alm';
 
 let editingIndex: number | null = null;
 
+// --- i18n Utility ---
+function t(key: string, subs?: string | string[]): string {
+    return chrome.i18n.getMessage(key, subs) || key;
+}
+
+function applyI18n(): void {
+    const elements = document.querySelectorAll('[data-i18n]');
+    elements.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const message = t(key);
+            if (message && message !== key) {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                    (el as HTMLInputElement).placeholder = message;
+                } else {
+                    el.textContent = message;
+                }
+            }
+        }
+    });
+}
+
 // --- Cascade UI ---
 function updateOptionsUI(walkerMode: boolean) {
     const bookmarkPanel = document.getElementById('panel-bookmarks');
+    const phantomContainer = document.getElementById('phantom-container');
+
     if (bookmarkPanel) {
         if (walkerMode) {
             bookmarkPanel.classList.remove('disabled-section');
         } else {
             bookmarkPanel.classList.add('disabled-section');
+        }
+    }
+
+    if (phantomContainer) {
+        if (walkerMode) {
+            phantomContainer.classList.remove('disabled-section');
+        } else {
+            phantomContainer.classList.add('disabled-section');
         }
     }
 }
@@ -37,12 +70,10 @@ function updatePhantomUI(master: boolean) {
     }
 }
 
-// --- Utility: URL Cleaning (Compatible with x-timeline.ts logic) ---
+// --- Utility: URL Cleaning ---
 function cleanUrl(url: string): string {
     try {
-        // Remove protocol and normalize
         let cleaned = url.replace(/^https?:\/\//, '').replace(/^www\./, '');
-        // Remove trailing slash
         cleaned = cleaned.replace(/\/$/, '');
         return cleaned.toLowerCase().trim();
     } catch {
@@ -59,11 +90,9 @@ function initTabs() {
         item.addEventListener('click', () => {
             const tabName = item.getAttribute('data-tab');
 
-            // Update Nav
             navItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
 
-            // Update Panels
             panels.forEach(p => p.classList.remove('active'));
             const targetPanel = document.getElementById(`panel-${tabName}`);
             if (targetPanel) targetPanel.classList.add('active');
@@ -106,12 +135,12 @@ async function renderBookmarks() {
                 ${!isEditing ? `
                     <button class="btn btn-reorder btn-up" data-index="${index}" ${index === 0 ? 'disabled' : ''}>↑</button>
                     <button class="btn btn-reorder btn-down" data-index="${index}" ${index === bookmarks.length - 1 ? 'disabled' : ''}>↓</button>
-                    <button class="btn btn-outline btn-edit" data-index="${index}">編集</button>
+                    <button class="btn btn-outline btn-edit" data-index="${index}">Edit</button>
                 ` : `
-                    <button class="btn btn-save" data-index="${index}">保存</button>
-                    <button class="btn btn-cancel">戻る</button>
+                    <button class="btn btn-save" data-index="${index}">Save</button>
+                    <button class="btn btn-cancel">Cancel</button>
                 `}
-                <button class="btn btn-danger btn-delete" data-index="${index}">削除</button>
+                <button class="btn btn-danger btn-delete" data-index="${index}">Delete</button>
             </div>
         `;
 
@@ -148,7 +177,7 @@ async function renderBookmarks() {
         }
 
         li.querySelector('.btn-delete')!.addEventListener('click', async () => {
-            if (confirm('削除しますか？')) {
+            if (confirm('Delete this bookmark?')) {
                 const current = await loadBookmarks();
                 current.splice(index, 1);
                 await saveBookmarks(current);
@@ -159,7 +188,7 @@ async function renderBookmarks() {
     });
 }
 
-// --- Quick Add Logic (Manual Entry Only) ---
+// --- Quick Add Logic ---
 async function initQuickAdd() {
     const inputTitle = document.getElementById('input-title') as HTMLInputElement;
     const inputUrl = document.getElementById('input-url') as HTMLInputElement;
@@ -175,7 +204,6 @@ async function initQuickAdd() {
         current.push({ title, url });
         await saveBookmarks(current);
 
-        // Clear and show message
         inputTitle.value = '';
         inputUrl.value = '';
         msg.style.display = 'block';
@@ -183,7 +211,7 @@ async function initQuickAdd() {
     });
 }
 
-// --- General Settings Sync ---
+// --- General Settings Sync (Centralized) ---
 async function initGeneralSettings() {
     const checkWalkerMode = document.getElementById('check-walker-mode') as HTMLInputElement;
     const checkAlmEnabled = document.getElementById('check-alm-enabled') as HTMLInputElement;
@@ -202,7 +230,7 @@ async function initGeneralSettings() {
     checkWalkerMode.checked = !!globalState.walkerMode;
     checkBlockOneTap.checked = !!globalState.blockOneTap;
     checkSafetyEnter.checked = !!globalState.safetyEnter;
-    
+
     checkPhantomMaster.checked = !!phantomState.master;
     checkPhantomX.checked = !!phantomState.xWalker?.enabled;
     checkPhantomXDashboard.checked = !!phantomState.xWalker?.rightColumnDashboard;
@@ -264,13 +292,13 @@ async function initGeneralSettings() {
         await chrome.storage.local.set({ [STORAGE_KEY_ALM]: currentAlm });
     });
 
-    // Version info
     const manifest = chrome.runtime.getManifest();
     document.getElementById('extension-version')!.textContent = `Version: ${manifest.version}`;
 }
 
 // --- Initialize All ---
 document.addEventListener('DOMContentLoaded', () => {
+    applyI18n();
     initTabs();
     initQuickAdd();
     renderBookmarks();

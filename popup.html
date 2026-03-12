@@ -395,14 +395,12 @@
 
 <body>
 
-    <!-- Header -->
     <div id="header">
         <img src="icons/icon48.png" class="logo" alt="X-Ops Walker" />
         <span class="title" id="title-text">X-Ops Walker</span>
         <span class="version" id="version-badge"></span>
     </div>
 
-    <!-- Mode Card -->
     <div id="mode-card">
         <div class="row">
             <div class="label-group">
@@ -417,20 +415,18 @@
         </div>
     </div>
 
-    <!-- Shortcuts Card -->
     <div id="shortcuts-card">
         <div class="sc-title" id="sc-title" data-i18n="popup_sc_title"></div>
         <div class="sc-hint" id="sc-hint"></div>
     </div>
 
-    <!-- Settings Card -->
     <div id="settings-card">
 
-        <!-- Global Systems Section -->
         <div class="section-container">
-            <div class="section-title" id="section-global-title" data-i18n="section_global">🌍 Global Systems</div>
+            <div class="section-title" id="section-global-title">
+                <span>🌍 <span data-i18n="options_global_settings"></span></span>
+            </div>
 
-            <!-- Google One Tap Blocker -->
             <div class="setting-row">
                 <span class="setting-label" id="blocker-label" data-i18n="popup_blocker_label"></span>
                 <div id="blocker-toggle" class="mini-toggle" role="switch" aria-checked="false"></div>
@@ -438,7 +434,6 @@
 
             <div class="card-separator"></div>
 
-            <!-- ALM: Chat SafetyEnter -->
             <div class="setting-row" id="alm-safety-row">
                 <span class="setting-label" id="alm-safety-label" data-i18n="popup_safety_enter_label">Chat
                     SafetyEnter</span>
@@ -446,24 +441,23 @@
             </div>
 
             <div class="card-separator"></div>
-            <!-- ALM: Strategic Hibernation -->
             <div class="setting-row">
                 <span class="setting-label" id="alm-master-label" data-i18n="popup_smart_discard_label">Smart Tab
                     Discard</span>
                 <div id="alm-master-toggle" class="mini-toggle active" role="switch" aria-checked="true"></div>
             </div>
 
-            <!-- Dynamic Domain Button (Smart Tab Discard専用) -->
             <button id="dynamic-domain-btn" class="domain-btn">Loading domain...</button>
 
             <div class="card-separator"></div>
         </div>
-        <!-- Domain-Specific Protocols Section -->
         <div id="domain-protocol-container">
-            <div class="section-title" id="section-domain-title" data-i18n="section_domain">📍 Domain Protocols</div>
+            <div class="section-title" id="section-domain-title">
+                <span>📍 <span data-i18n="options_domain_protocols"></span></span>
+            </div>
 
             <div class="setting-row" id="phantom-master-row">
-                <span class="setting-label" id="phantom-master-label" data-i18n="popup_phantom_master">Phantom Mode (Master)</span>
+                <span class="setting-label" id="phantom-master-label" data-i18n="options_phantom_master"></span>
                 <div id="toggle-phantom-master" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
 
@@ -471,28 +465,28 @@
 
             <div id="phantom-sub-container">
                 <div id="protocol-x" style="display: none;">
-                <div class="setting-row">
-                    <span class="setting-label" id="protocol-x-title" data-i18n="protocol_x_title">X Timeline
-                        Walker</span>
-                    <div id="toggle-protocol-x" class="mini-toggle" role="switch" aria-checked="false"></div>
-                </div>
-                <!-- Sub Settings for X -->
-                <div id="protocol-x-sub" class="sub-settings">
                     <div class="setting-row">
-                        <span class="setting-label" id="x-right-column-title" data-i18n="x_right_column_title">Right
-                            Column Dashboard</span>
-                        <div id="toggle-x-right-column" class="mini-toggle" role="switch" aria-checked="false"></div>
+                        <span class="setting-label" id="protocol-x-title" data-i18n="protocol_x_title">X Timeline
+                            Walker</span>
+                        <div id="toggle-protocol-x" class="mini-toggle" role="switch" aria-checked="false"></div>
+                    </div>
+                    <div id="protocol-x-sub" class="sub-settings">
+                        <div class="setting-row">
+                            <span class="setting-label" id="x-right-column-title" data-i18n="x_right_column_title">Right
+                                Column Dashboard</span>
+                            <div id="toggle-x-right-column" class="mini-toggle" role="switch" aria-checked="false">
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div id="protocol-gemini" style="display: none;">
-            <div class="setting-row">
-                <span class="setting-label" id="protocol-gemini-title" data-i18n="protocol_gemini_title">Gemini
-                    Walker</span>
-                <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
+            <div id="protocol-gemini" style="display: none;">
+                <div class="setting-row">
+                    <span class="setting-label" id="protocol-gemini-title" data-i18n="protocol_gemini_title">Gemini
+                        Walker</span>
+                    <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
+                </div>
             </div>
-        </div>
         </div>
         <div id="protocol-none" style="display: none;">
             <span class="setting-label" id="protocol-none-msg" data-i18n="protocol_none_msg"
@@ -502,11 +496,9 @@
 
     </div>
 
-    <!-- Advanced Settings Link -->
     <a id="advanced-settings" title="Open Extension Options" data-i18n="popup_advanced_settings">🛠 Advanced
         Settings</a>
 
-    <!-- Footer -->
     <div id="footer" data-i18n="popup_footer_hint"></div>
 
     <script src="popup.js"></script>

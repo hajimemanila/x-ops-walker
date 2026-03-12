@@ -4,13 +4,40 @@
   var STORAGE_KEY_BOOKMARKS = "xOpsBookmarks";
   var STORAGE_KEY_ALM = "alm";
   var editingIndex = null;
+  function t(key, subs) {
+    return chrome.i18n.getMessage(key, subs) || key;
+  }
+  function applyI18n() {
+    const elements = document.querySelectorAll("[data-i18n]");
+    elements.forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      if (key) {
+        const message = t(key);
+        if (message && message !== key) {
+          if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+            el.placeholder = message;
+          } else {
+            el.textContent = message;
+          }
+        }
+      }
+    });
+  }
   function updateOptionsUI(walkerMode) {
     const bookmarkPanel = document.getElementById("panel-bookmarks");
+    const phantomContainer = document.getElementById("phantom-container");
     if (bookmarkPanel) {
       if (walkerMode) {
         bookmarkPanel.classList.remove("disabled-section");
       } else {
         bookmarkPanel.classList.add("disabled-section");
+      }
+    }
+    if (phantomContainer) {
+      if (walkerMode) {
+        phantomContainer.classList.remove("disabled-section");
+      } else {
+        phantomContainer.classList.add("disabled-section");
       }
     }
   }
@@ -77,12 +104,12 @@
                 ${!isEditing ? `
                     <button class="btn btn-reorder btn-up" data-index="${index}" ${index === 0 ? "disabled" : ""}>\u2191</button>
                     <button class="btn btn-reorder btn-down" data-index="${index}" ${index === bookmarks.length - 1 ? "disabled" : ""}>\u2193</button>
-                    <button class="btn btn-outline btn-edit" data-index="${index}">\u7DE8\u96C6</button>
+                    <button class="btn btn-outline btn-edit" data-index="${index}">Edit</button>
                 ` : `
-                    <button class="btn btn-save" data-index="${index}">\u4FDD\u5B58</button>
-                    <button class="btn btn-cancel">\u623B\u308B</button>
+                    <button class="btn btn-save" data-index="${index}">Save</button>
+                    <button class="btn btn-cancel">Cancel</button>
                 `}
-                <button class="btn btn-danger btn-delete" data-index="${index}">\u524A\u9664</button>
+                <button class="btn btn-danger btn-delete" data-index="${index}">Delete</button>
             </div>
         `;
       if (isEditing) {
@@ -117,7 +144,7 @@
         });
       }
       li.querySelector(".btn-delete").addEventListener("click", async () => {
-        if (confirm("\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F")) {
+        if (confirm("Delete this bookmark?")) {
           const current = await loadBookmarks();
           current.splice(index, 1);
           await saveBookmarks(current);
@@ -215,6 +242,7 @@
     document.getElementById("extension-version").textContent = `Version: ${manifest.version}`;
   }
   document.addEventListener("DOMContentLoaded", () => {
+    applyI18n();
     initTabs();
     initQuickAdd();
     renderBookmarks();
