@@ -1,27 +1,4 @@
-// ── ALM Configuration ──
-interface AlmConfig {
-    enabled: boolean;
-    excludeDomains: string[]; // <-- 名前の相違を修正
-}
-
-const DEFAULT_ALM_CONFIG: AlmConfig = {
-    enabled: true,
-    excludeDomains: [
-        'x.com',
-        'twitter.com',
-        'gemini.google.com',
-        'chatgpt.com',
-        'claude.ai',
-        'chat.deepseek.com',
-        'copilot.microsoft.com',
-        'perplexity.ai',
-        'grok.com',
-        'figma.com',
-        'canva.com',
-        'notion.so',
-        'www.youtube.com',
-    ]
-};
+import { GlobalState, PhantomState, AlmConfig, DEFAULT_ALM_CONFIG } from './config/state';
 
 function t(key: string, subs?: string | string[]): string {
     return chrome.i18n.getMessage(key, subs) || key;

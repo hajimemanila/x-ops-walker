@@ -3,7 +3,7 @@
  * Tab switching, Bookmark (xOpsBookmarks) CRUD, Quick Add, Edit, and Reorder.
  * Centralized settings management for Global, Phantom, and ALM states.
  */
-import { GlobalState, PhantomState } from './config/state';
+import { GlobalState, PhantomState, AlmConfig, DEFAULT_ALM_CONFIG } from './config/state';
 
 interface Bookmark {
     title: string;
@@ -211,22 +211,6 @@ async function initQuickAdd() {
     });
 }
 
-// --- ALM Domain Management ---
-const DEFAULT_ALM_DOMAINS = [
-    'x.com',
-    'twitter.com',
-    'gemini.google.com',
-    'chatgpt.com',
-    'claude.ai',
-    'chat.deepseek.com',
-    'copilot.microsoft.com',
-    'perplexity.ai',
-    'grok.com',
-    'figma.com',
-    'canva.com',
-    'notion.so',
-    'www.youtube.com',
-];
 
 async function loadAlmDomains(): Promise<string[]> {
     const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
@@ -236,7 +220,7 @@ async function loadAlmDomains(): Promise<string[]> {
         return alm.excludeDomains;
     }
 
-    return [...DEFAULT_ALM_DOMAINS];
+    return [...DEFAULT_ALM_CONFIG.excludeDomains];
 }
 
 async function saveAlmDomains(domains: string[]) {
@@ -383,7 +367,7 @@ async function initGeneralSettings() {
 
         const saveAlm = {
             enabled: checkAlmEnabled.checked,
-            excludeDomains: raw.excludeDomains || DEFAULT_ALM_DOMAINS
+            excludeDomains: raw.excludeDomains || DEFAULT_ALM_CONFIG.excludeDomains
         };
 
         await chrome.storage.local.set({ [STORAGE_KEY_ALM]: saveAlm });

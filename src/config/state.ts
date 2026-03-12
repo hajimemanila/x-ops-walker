@@ -12,6 +12,11 @@ export interface PhantomState {
     };
 }
 
+export interface AlmConfig {
+    enabled: boolean;
+    excludeDomains: string[];
+}
+
 export const DEFAULT_GLOBAL_STATE: GlobalState = {
     walkerMode: true,
     blockOneTap: false,
@@ -24,4 +29,23 @@ export const DEFAULT_PHANTOM_STATE: PhantomState = {
         enabled: true,
         rightColumnDashboard: true
     }
+};
+
+export const DEFAULT_ALM_CONFIG: AlmConfig = {
+    enabled: true,
+    excludeDomains: [
+        'x.com',
+        'twitter.com',
+        'gemini.google.com',
+        'chatgpt.com',
+        'claude.ai',
+        'chat.deepseek.com',
+        'copilot.microsoft.com',
+        'perplexity.ai',
+        'grok.com',
+        'figma.com',
+        'canva.com',
+        'notion.so',
+        'www.youtube.com',
+    ]
 };

@@ -1046,6 +1046,24 @@
       rightColumnDashboard: true
     }
   };
+  var DEFAULT_ALM_CONFIG = {
+    enabled: true,
+    excludeDomains: [
+      "x.com",
+      "twitter.com",
+      "gemini.google.com",
+      "chatgpt.com",
+      "claude.ai",
+      "chat.deepseek.com",
+      "copilot.microsoft.com",
+      "perplexity.ai",
+      "grok.com",
+      "figma.com",
+      "canva.com",
+      "notion.so",
+      "www.youtube.com"
+    ]
+  };
 
   // src/background.ts
   function isRestrictedUrl(url) {
@@ -1268,21 +1286,7 @@
     port.onDisconnect.addListener(() => {
     });
   });
-  var ALM_EXCLUDE_DOMAINS = /* @__PURE__ */ new Set([
-    "x.com",
-    "twitter.com",
-    "gemini.google.com",
-    "chatgpt.com",
-    "claude.ai",
-    "chat.deepseek.com",
-    "copilot.microsoft.com",
-    "perplexity.ai",
-    "grok.com",
-    "figma.com",
-    "canva.com",
-    "notion.so",
-    "www.youtube.com"
-  ]);
+  var ALM_EXCLUDE_DOMAINS = new Set(DEFAULT_ALM_CONFIG.excludeDomains);
   var currentAlmConfig = {
     enabled: true,
     excludeDomains: Array.from(ALM_EXCLUDE_DOMAINS)
@@ -1291,7 +1295,7 @@
   var configLoadPromise = new Promise((resolve) => {
     chrome.storage.local.get("alm", (res) => {
       if (res.alm) {
-        const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || [];
+        const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains;
         currentAlmConfig = res.alm;
         currentAlmConfig.excludeDomains = loadedDomains;
         ALM_EXCLUDE_DOMAINS = new Set(loadedDomains);

@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/popup.ts
+  // src/config/state.ts
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
     excludeDomains: [
@@ -19,6 +19,8 @@
       "www.youtube.com"
     ]
   };
+
+  // src/popup.ts
   function t(key, subs) {
     return chrome.i18n.getMessage(key, subs) || key;
   }

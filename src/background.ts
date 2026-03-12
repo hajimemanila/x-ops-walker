@@ -1,6 +1,6 @@
 'use strict';
 
-import { GlobalState, PhantomState, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE } from './config/state';
+import { GlobalState, PhantomState, AlmConfig, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE, DEFAULT_ALM_CONFIG } from './config/state';
 
 // ── URL制限チェック ────────────────────────────────────────────────────────────
 // ① プロトコルベースの間騢ページ（Chrome: chrome://, Firefox: moz-extension:// 等）
@@ -361,30 +361,8 @@ chrome.runtime.onConnect.addListener((port) => {
 //
 // ============================================================================
 
-// ── ALM Configuration ──
-interface AlmConfig {
-    enabled: boolean;
-    excludeDomains: string[];
-}
 
-// ── Exclude Domain 定義 (初期値) ────────────────────────────────────────────────────────
-// 絶対に Discard させない「除外ドメイン」。非アクティブになってもタイマーによるメモリ解放を永続的に拒否する。
-// ※ v1.3.2 より初期値となり、実行時は chrome.storage.local で上書きされる。
-let ALM_EXCLUDE_DOMAINS = new Set([
-    'x.com',
-    'twitter.com',
-    'gemini.google.com',
-    'chatgpt.com',
-    'claude.ai',
-    'chat.deepseek.com',
-    'copilot.microsoft.com',
-    'perplexity.ai',
-    'grok.com',
-    'figma.com',
-    'canva.com',
-    'notion.so',
-    'www.youtube.com',
-]);
+let ALM_EXCLUDE_DOMAINS = new Set(DEFAULT_ALM_CONFIG.excludeDomains);
 
 // 実行中の ALM コンフィグ
 let currentAlmConfig: AlmConfig = {
@@ -398,7 +376,7 @@ const configLoadPromise = new Promise<void>((resolve) => {
     chrome.storage.local.get('alm', (res) => {
         if (res.alm) {
             // マイグレーション対応: 古い heavyDomains がストレージに残っていた場合は excludeDomains として引き継ぐ
-            const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || [];
+            const loadedDomains = res.alm.excludeDomains || res.alm.heavyDomains || DEFAULT_ALM_CONFIG.excludeDomains;
 
             currentAlmConfig = res.alm;
             currentAlmConfig.excludeDomains = loadedDomains;

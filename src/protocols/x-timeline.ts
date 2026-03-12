@@ -55,7 +55,6 @@ const CONFIG = {
     scrollOffset: -150,
     colors: { recent: '#00ba7c', old: '#ffd400', ancient: '#f4212e', copied: 'rgba(0, 255, 255, 0.2)' },
     zenOpacity: 0.5,
-    longPressDelay: 400
 };
 
 let isActive = false;

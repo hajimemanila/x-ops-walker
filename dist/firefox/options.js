@@ -1031,6 +1031,29 @@
 
   // src/options.ts
   init_browser_polyfill_entry();
+
+  // src/config/state.ts
+  init_browser_polyfill_entry();
+  var DEFAULT_ALM_CONFIG = {
+    enabled: true,
+    excludeDomains: [
+      "x.com",
+      "twitter.com",
+      "gemini.google.com",
+      "chatgpt.com",
+      "claude.ai",
+      "chat.deepseek.com",
+      "copilot.microsoft.com",
+      "perplexity.ai",
+      "grok.com",
+      "figma.com",
+      "canva.com",
+      "notion.so",
+      "www.youtube.com"
+    ]
+  };
+
+  // src/options.ts
   var STORAGE_KEY_BOOKMARKS = "xOpsBookmarks";
   var STORAGE_KEY_ALM = "alm";
   var editingIndex = null;
@@ -1202,28 +1225,13 @@
       }, 2e3);
     });
   }
-  var DEFAULT_ALM_DOMAINS = [
-    "x.com",
-    "twitter.com",
-    "gemini.google.com",
-    "chatgpt.com",
-    "claude.ai",
-    "chat.deepseek.com",
-    "copilot.microsoft.com",
-    "perplexity.ai",
-    "grok.com",
-    "figma.com",
-    "canva.com",
-    "notion.so",
-    "www.youtube.com"
-  ];
   async function loadAlmDomains() {
     const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
     const alm = res[STORAGE_KEY_ALM];
     if (alm && alm.excludeDomains) {
       return alm.excludeDomains;
     }
-    return [...DEFAULT_ALM_DOMAINS];
+    return [...DEFAULT_ALM_CONFIG.excludeDomains];
   }
   async function saveAlmDomains(domains) {
     const res = await chrome.storage.local.get(STORAGE_KEY_ALM);
@@ -1343,7 +1351,7 @@
       const raw = res[STORAGE_KEY_ALM] || {};
       const saveAlm = {
         enabled: checkAlmEnabled.checked,
-        excludeDomains: raw.excludeDomains || DEFAULT_ALM_DOMAINS
+        excludeDomains: raw.excludeDomains || DEFAULT_ALM_CONFIG.excludeDomains
       };
       await chrome.storage.local.set({ [STORAGE_KEY_ALM]: saveAlm });
     });

@@ -1031,6 +1031,9 @@
 
   // src/popup.ts
   init_browser_polyfill_entry();
+
+  // src/config/state.ts
+  init_browser_polyfill_entry();
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
     excludeDomains: [
@@ -1049,6 +1052,8 @@
       "www.youtube.com"
     ]
   };
+
+  // src/popup.ts
   function t(key, subs) {
     return chrome.i18n.getMessage(key, subs) || key;
   }
