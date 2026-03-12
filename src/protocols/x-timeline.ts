@@ -82,36 +82,63 @@ function injectWalkerCSS() {
     document.documentElement.appendChild(style);
 }
 
-export function initXWalker(config: XWalkerConfig) {
-    isDashboardEnabled = config.enabled && config.rightColumnDashboard;
-    console.log('[X-Ops Walker] 🐺 X Timeline Walker Protocol Status:', isDashboardEnabled);
+// --- Physical Logic Kill & Cleanup ---
+function terminateProtocol() {
+    isActive = false;
+    isDashboardEnabled = false;
 
-    setWalkerState(config.enabled);
+    // 1. Terminate DOM heartbeats & Loops
+    if (heartbeatId) {
+        clearInterval(heartbeatId);
+        heartbeatId = null;
+    }
+    if (walkerSyncFrame !== null) {
+        cancelAnimationFrame(walkerSyncFrame);
+        walkerSyncFrame = null;
+    }
+
+    // 2. Remove Visual Artifacts
+    if (document.body.classList.contains('x-walker-active')) {
+        document.body.classList.remove('x-walker-active');
+    }
+    forceClearFocus();
+    removeDashboard();
+
+    // 3. Clear OSD if exists
+    const osd = document.getElementById('x-ops-safety-osd');
+    if (osd) osd.remove();
+}
+
+export function initXWalker(config: XWalkerConfig, master: boolean, globalWalkerMode: boolean) {
+    // Survival Condition: Master hierarchy check
+    const shouldBeActive = globalWalkerMode && master && config.enabled;
+    const shouldShowDashboard = globalWalkerMode && master && config.enabled && config.rightColumnDashboard;
+
+    console.log(`[X-Ops Walker] 🐺 X Protocol Logic: ${shouldBeActive ? 'ALIVE' : 'KILLED'}`);
+
+    // Idempotent reset before establishing new state
+    terminateProtocol();
+
+    if (!shouldBeActive) return;
+
+    // Reactivate only if condition is met
+    isActive = true;
+    isDashboardEnabled = shouldShowDashboard;
+
+    document.body.classList.add('x-walker-active');
+    injectWalkerCSS();
+    startWalkerLoop();
+    triggerAutoTargeting();
 
     if (isDashboardEnabled) {
         installDashboard();
-    } else {
-        removeDashboard();
     }
 }
 
 chrome.storage.onChanged.addListener((changes: any, area: string) => {
     if (area === 'local') {
-        if ('phantom' in changes) {
-            const phantomState = changes.phantom.newValue;
-            if (phantomState && phantomState.xWalker) {
-                const newConfig = phantomState.xWalker as XWalkerConfig;
-                isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
-
-                setWalkerState(newConfig.enabled);
-
-                if (isDashboardEnabled) {
-                    installDashboard();
-                } else {
-                    removeDashboard();
-                }
-            }
-        }
+        // Only listen for dynamic content (Bookmarks) here. 
+        // Hierarchy states (phantom, global) are handled by kernel.ts -> initXWalker.
         if ('xOpsBookmarks' in changes && isDashboardEnabled) {
             renderBookmarkList();
         }
@@ -716,26 +743,7 @@ window.addEventListener('x-ops-global-reset', () => {
     forceClearFocus();
 });
 
-// ── 🐺 Timeline Walker Core Logic ──
-function setWalkerState(enabled: boolean) {
-    if (isActive === enabled) return;
-    isActive = enabled;
 
-    if ((window as any).PhantomUI) {
-        (window as any).PhantomUI.update(enabled);
-    }
-
-    if (isActive) {
-        injectWalkerCSS();
-        document.body.classList.add('x-walker-active');
-
-        startWalkerLoop();
-        triggerAutoTargeting();
-    } else {
-        document.body.classList.remove('x-walker-active');
-        forceClearFocus();
-    }
-}
 
 function forceClearFocus() {
     document.querySelectorAll('.x-walker-focused').forEach(el => {

@@ -2,6 +2,7 @@
  * X-Ops Walker: Options Page Logic
  * Tab switching, Bookmark (xOpsBookmarks) CRUD, Quick Add, Edit, and Reorder.
  */
+import { GlobalState, PhantomState } from './config/state';
 
 interface Bookmark {
     title: string;
@@ -21,6 +22,17 @@ function updateOptionsUI(walkerMode: boolean) {
             bookmarkPanel.classList.remove('disabled-section');
         } else {
             bookmarkPanel.classList.add('disabled-section');
+        }
+    }
+}
+
+function updatePhantomUI(master: boolean) {
+    const subSettings = document.getElementById('phantom-sub-settings');
+    if (subSettings) {
+        if (master) {
+            subSettings.classList.remove('disabled-section');
+        } else {
+            subSettings.classList.add('disabled-section');
         }
     }
 }
@@ -175,19 +187,73 @@ async function initQuickAdd() {
 async function initGeneralSettings() {
     const checkWalkerMode = document.getElementById('check-walker-mode') as HTMLInputElement;
     const checkAlmEnabled = document.getElementById('check-alm-enabled') as HTMLInputElement;
+    const checkBlockOneTap = document.getElementById('check-block-one-tap') as HTMLInputElement;
+    const checkSafetyEnter = document.getElementById('check-safety-enter') as HTMLInputElement;
 
-    const state = await chrome.storage.local.get(['global', STORAGE_KEY_ALM]);
+    const checkPhantomMaster = document.getElementById('check-phantom-master') as HTMLInputElement;
+    const checkPhantomX = document.getElementById('check-phantom-x') as HTMLInputElement;
+    const checkPhantomXDashboard = document.getElementById('check-phantom-x-dashboard') as HTMLInputElement;
 
-    const globalState = state.global || { walkerMode: true };
+    const state = await chrome.storage.local.get(['global', 'phantom', STORAGE_KEY_ALM]);
+
+    const globalState = (state.global as GlobalState) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+    const phantomState = (state.phantom as PhantomState) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+
     checkWalkerMode.checked = !!globalState.walkerMode;
+    checkBlockOneTap.checked = !!globalState.blockOneTap;
+    checkSafetyEnter.checked = !!globalState.safetyEnter;
+    
+    checkPhantomMaster.checked = !!phantomState.master;
+    checkPhantomX.checked = !!phantomState.xWalker?.enabled;
+    checkPhantomXDashboard.checked = !!phantomState.xWalker?.rightColumnDashboard;
+
     updateOptionsUI(!!globalState.walkerMode);
+    updatePhantomUI(!!phantomState.master);
 
     checkWalkerMode.addEventListener('change', async () => {
         const cur = await chrome.storage.local.get('global');
-        const g = cur.global || { walkerMode: true };
+        const g = (cur.global as GlobalState) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
         g.walkerMode = checkWalkerMode.checked;
         await chrome.storage.local.set({ global: g });
         updateOptionsUI(g.walkerMode);
+    });
+
+    checkBlockOneTap.addEventListener('change', async () => {
+        const cur = await chrome.storage.local.get('global');
+        const g = (cur.global as GlobalState) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        g.blockOneTap = checkBlockOneTap.checked;
+        await chrome.storage.local.set({ global: g });
+    });
+
+    checkSafetyEnter.addEventListener('change', async () => {
+        const cur = await chrome.storage.local.get('global');
+        const g = (cur.global as GlobalState) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
+        g.safetyEnter = checkSafetyEnter.checked;
+        await chrome.storage.local.set({ global: g });
+    });
+
+    checkPhantomMaster.addEventListener('change', async () => {
+        const cur = await chrome.storage.local.get('phantom');
+        const p = (cur.phantom as PhantomState) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+        p.master = checkPhantomMaster.checked;
+        await chrome.storage.local.set({ phantom: p });
+        updatePhantomUI(p.master);
+    });
+
+    checkPhantomX.addEventListener('change', async () => {
+        const cur = await chrome.storage.local.get('phantom');
+        const p = (cur.phantom as PhantomState) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+        if (!p.xWalker) p.xWalker = { enabled: true, rightColumnDashboard: true };
+        p.xWalker.enabled = checkPhantomX.checked;
+        await chrome.storage.local.set({ phantom: p });
+    });
+
+    checkPhantomXDashboard.addEventListener('change', async () => {
+        const cur = await chrome.storage.local.get('phantom');
+        const p = (cur.phantom as PhantomState) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+        if (!p.xWalker) p.xWalker = { enabled: true, rightColumnDashboard: true };
+        p.xWalker.rightColumnDashboard = checkPhantomXDashboard.checked;
+        await chrome.storage.local.set({ phantom: p });
     });
 
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };

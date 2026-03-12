@@ -256,31 +256,43 @@
     `;
     document.documentElement.appendChild(style);
   }
-  function initXWalker(config) {
-    isDashboardEnabled = config.enabled && config.rightColumnDashboard;
-    console.log("[X-Ops Walker] \u{1F43A} X Timeline Walker Protocol Status:", isDashboardEnabled);
-    setWalkerState(config.enabled);
+  function terminateProtocol() {
+    isActive = false;
+    isDashboardEnabled = false;
+    if (heartbeatId) {
+      clearInterval(heartbeatId);
+      heartbeatId = null;
+    }
+    if (walkerSyncFrame !== null) {
+      cancelAnimationFrame(walkerSyncFrame);
+      walkerSyncFrame = null;
+    }
+    if (document.body.classList.contains("x-walker-active")) {
+      document.body.classList.remove("x-walker-active");
+    }
+    forceClearFocus();
+    removeDashboard();
+    const osd = document.getElementById("x-ops-safety-osd");
+    if (osd) osd.remove();
+  }
+  function initXWalker(config, master, globalWalkerMode) {
+    const shouldBeActive = globalWalkerMode && master && config.enabled;
+    const shouldShowDashboard = globalWalkerMode && master && config.enabled && config.rightColumnDashboard;
+    console.log(`[X-Ops Walker] \u{1F43A} X Protocol Logic: ${shouldBeActive ? "ALIVE" : "KILLED"}`);
+    terminateProtocol();
+    if (!shouldBeActive) return;
+    isActive = true;
+    isDashboardEnabled = shouldShowDashboard;
+    document.body.classList.add("x-walker-active");
+    injectWalkerCSS();
+    startWalkerLoop();
+    triggerAutoTargeting();
     if (isDashboardEnabled) {
       installDashboard();
-    } else {
-      removeDashboard();
     }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local") {
-      if ("phantom" in changes) {
-        const phantomState = changes.phantom.newValue;
-        if (phantomState && phantomState.xWalker) {
-          const newConfig = phantomState.xWalker;
-          isDashboardEnabled = newConfig.enabled && newConfig.rightColumnDashboard;
-          setWalkerState(newConfig.enabled);
-          if (isDashboardEnabled) {
-            installDashboard();
-          } else {
-            removeDashboard();
-          }
-        }
-      }
       if ("xOpsBookmarks" in changes && isDashboardEnabled) {
         renderBookmarkList();
       }
@@ -805,22 +817,6 @@
     if (!isActive) return;
     forceClearFocus();
   });
-  function setWalkerState(enabled) {
-    if (isActive === enabled) return;
-    isActive = enabled;
-    if (window.PhantomUI) {
-      window.PhantomUI.update(enabled);
-    }
-    if (isActive) {
-      injectWalkerCSS();
-      document.body.classList.add("x-walker-active");
-      startWalkerLoop();
-      triggerAutoTargeting();
-    } else {
-      document.body.classList.remove("x-walker-active");
-      forceClearFocus();
-    }
-  }
   function forceClearFocus() {
     document.querySelectorAll(".x-walker-focused").forEach((el) => {
       el.classList.remove("x-walker-focused");
@@ -1285,6 +1281,8 @@
     }
   }
   var isWalkerMode = false;
+  var globalStateSnapshot = { walkerMode: true, blockOneTap: false, safetyEnter: false };
+  var phantomStateSnapshot = { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
   function isEditableElement(el) {
     if (!el || el.nodeType !== 1) return false;
     const tag = el.tagName.toUpperCase();
@@ -1430,6 +1428,16 @@
     mount();
     return { setState };
   })();
+  function updateAppState(global, phantom) {
+    globalStateSnapshot = global;
+    phantomStateSnapshot = phantom;
+    isWalkerMode = !!global.walkerMode;
+    hud.setState(isWalkerMode);
+    applyOneTapBlocker(!!global.blockOneTap);
+    if (window.location.hostname.includes("x.com") || window.location.hostname.includes("twitter.com")) {
+      initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
+    }
+  }
   var cheatsheet = (() => {
     const host = document.createElement("div");
     host.id = "fox-walker-cheatsheet";
@@ -1629,13 +1637,13 @@
       if (cheatsheet.isVisible()) {
         cheatsheet.hide();
       }
-      isWalkerMode = !isWalkerMode;
-      safeStorageGet(["global"], (res) => {
-        const g = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-        g.walkerMode = isWalkerMode;
+      safeStorageGet(["global", "phantom"], (res) => {
+        const g = res.global || globalStateSnapshot;
+        const p = res.phantom || phantomStateSnapshot;
+        g.walkerMode = !isWalkerMode;
         safeStorageSet({ global: g });
+        updateAppState(g, p);
       });
-      hud.setState(isWalkerMode);
       if (isWalkerMode) blurActiveInput();
       return;
     }
@@ -1649,34 +1657,20 @@
     }
   }
   window.addEventListener("keydown", keydownHandler, { capture: true });
-  safeStorageGet(["global"], (result) => {
-    const globalState = result.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-    isWalkerMode = !!globalState.walkerMode;
-    hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!globalState.blockOneTap);
+  safeStorageGet(["global", "phantom"], (result) => {
+    const globalState = result.global || globalStateSnapshot;
+    const phantomState = result.phantom || phantomStateSnapshot;
+    updateAppState(globalState, phantomState);
   });
-  var currentHost = window.location.hostname;
-  if (currentHost === "x.com" || currentHost === "twitter.com") {
-    safeStorageGet(["phantom"], (res) => {
-      const phantom = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
-      const xWalker = phantom.xWalker || { enabled: true, rightColumnDashboard: true };
-      initXWalker(xWalker);
-    });
-  }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if ("global" in changes) {
-      const globalState = changes.global.newValue;
-      if (globalState) {
-        if (globalState.walkerMode !== void 0 && globalState.walkerMode !== isWalkerMode) {
-          isWalkerMode = !!globalState.walkerMode;
-          hud.setState(isWalkerMode);
-          if (isWalkerMode && !document.hidden) blurActiveInput();
-        }
-        if (globalState.blockOneTap !== void 0) {
-          applyOneTapBlocker(!!globalState.blockOneTap);
-        }
-      }
+    if ("global" in changes || "phantom" in changes) {
+      safeStorageGet(["global", "phantom"], (res) => {
+        const g = res.global || globalStateSnapshot;
+        const p = res.phantom || phantomStateSnapshot;
+        updateAppState(g, p);
+        if (isWalkerMode && !document.hidden && "global" in changes) blurActiveInput();
+      });
     }
   });
   chrome.runtime.onMessage.addListener((message) => {
@@ -1735,11 +1729,10 @@
     if (document.title.startsWith("\u{1F4A4} ")) {
       document.title = document.title.slice("\u{1F4A4} ".length);
     }
-    safeStorageGet(["global"], (res) => {
-      const globalState = res.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-      isWalkerMode = !!globalState.walkerMode;
-      hud.setState(isWalkerMode);
-      applyOneTapBlocker(!!globalState.blockOneTap);
+    safeStorageGet(["global", "phantom"], (res) => {
+      const globalState = res.global || globalStateSnapshot;
+      const phantomState = res.phantom || phantomStateSnapshot;
+      updateAppState(globalState, phantomState);
       if (isWalkerMode) {
         FocusShield.activate();
       }

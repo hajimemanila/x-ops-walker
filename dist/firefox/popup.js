@@ -1081,6 +1081,16 @@
       }
     }
   }
+  function updatePhantomCascadeUI(master) {
+    const subContainer = document.getElementById("phantom-sub-container");
+    if (subContainer) {
+      if (master) {
+        subContainer.classList.remove("disabled-section");
+      } else {
+        subContainer.classList.add("disabled-section");
+      }
+    }
+  }
   function updateBlockerUI(active) {
     const toggle = document.getElementById("blocker-toggle");
     if (active) {
@@ -1152,6 +1162,8 @@
     const almConfig = result.alm ?? DEFAULT_ALM_CONFIG;
     updateMiniToggle("alm-master-toggle", almConfig.enabled);
     updateMiniToggle("alm-safety-toggle", !!globalState.safetyEnter);
+    updateMiniToggle("toggle-phantom-master", !!phantomState.master);
+    updatePhantomCascadeUI(!!phantomState.master);
     const xWalkerConfig = phantomState.xWalker;
     if (document.getElementById("toggle-protocol-x")) {
       updateMiniToggle("toggle-protocol-x", !!xWalkerConfig.enabled);
@@ -1214,6 +1226,17 @@
       await chrome.storage.local.set({ global: globalState2 });
       updateMiniToggle("alm-safety-toggle", globalState2.safetyEnter);
     });
+    const phantomMasterToggle = document.getElementById("toggle-phantom-master");
+    if (phantomMasterToggle) {
+      phantomMasterToggle.addEventListener("click", async () => {
+        const res = await chrome.storage.local.get("phantom");
+        const phantomState2 = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+        phantomState2.master = !phantomState2.master;
+        await chrome.storage.local.set({ phantom: phantomState2 });
+        updateMiniToggle("toggle-phantom-master", phantomState2.master);
+        updatePhantomCascadeUI(phantomState2.master);
+      });
+    }
     const protocolXToggle = document.getElementById("toggle-protocol-x");
     if (protocolXToggle) {
       protocolXToggle.addEventListener("click", async () => {

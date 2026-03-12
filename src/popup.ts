@@ -60,6 +60,17 @@ function updateUI(active: boolean): void {
     }
 }
 
+function updatePhantomCascadeUI(master: boolean): void {
+    const subContainer = document.getElementById('phantom-sub-container');
+    if (subContainer) {
+        if (master) {
+            subContainer.classList.remove('disabled-section');
+        } else {
+            subContainer.classList.add('disabled-section');
+        }
+    }
+}
+
 function updateBlockerUI(active: boolean): void {
     const toggle = document.getElementById('blocker-toggle')!;
     if (active) {
@@ -150,6 +161,9 @@ async function init(): Promise<void> {
     updateMiniToggle('alm-safety-toggle', !!globalState.safetyEnter);
 
     // プロトコル xWalker の初期状態読み込み
+    updateMiniToggle('toggle-phantom-master', !!phantomState.master);
+    updatePhantomCascadeUI(!!phantomState.master);
+
     const xWalkerConfig = phantomState.xWalker;
     if (document.getElementById('toggle-protocol-x')) {
         updateMiniToggle('toggle-protocol-x', !!xWalkerConfig.enabled);
@@ -229,6 +243,19 @@ async function init(): Promise<void> {
         await chrome.storage.local.set({ global: globalState });
         updateMiniToggle('alm-safety-toggle', globalState.safetyEnter);
     });
+
+    // Phantom Mode Master トグル
+    const phantomMasterToggle = document.getElementById('toggle-phantom-master');
+    if (phantomMasterToggle) {
+        phantomMasterToggle.addEventListener('click', async () => {
+            const res = await chrome.storage.local.get('phantom');
+            const phantomState = res.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+            phantomState.master = !phantomState.master;
+            await chrome.storage.local.set({ phantom: phantomState });
+            updateMiniToggle('toggle-phantom-master', phantomState.master);
+            updatePhantomCascadeUI(phantomState.master);
+        });
+    }
 
     // X Timeline Protocol トグル
     const protocolXToggle = document.getElementById('toggle-protocol-x');

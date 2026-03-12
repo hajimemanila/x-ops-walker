@@ -374,7 +374,9 @@
         <!-- General Settings Panel -->
         <div id="panel-general" class="panel">
             <h2>全般設定</h2>
+            
             <div class="section">
+                <div class="section-title">Global Systems</div>
                 <div class="setting-row">
                     <span>Walker Mode (Master ON/OFF)</span>
                     <label class="switch">
@@ -382,6 +384,51 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+                <div class="setting-row">
+                    <span>Block Google One Tap</span>
+                    <label class="switch">
+                        <input type="checkbox" id="check-block-one-tap">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <span>Chat SafetyEnter</span>
+                    <label class="switch">
+                        <input type="checkbox" id="check-safety-enter">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="section" id="phantom-container">
+                <div class="section-title">Phantom Mode</div>
+                <div class="setting-row">
+                    <span>Phantom Mode Master Switch</span>
+                    <label class="switch">
+                        <input type="checkbox" id="check-phantom-master">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div id="phantom-sub-settings">
+                    <div class="setting-row" style="padding-left: 20px;">
+                        <span>X Timeline Walker (Domain Protocol)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="check-phantom-x">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-row" style="padding-left: 20px;">
+                        <span>X Right Column Dashboard</span>
+                        <label class="switch">
+                            <input type="checkbox" id="check-phantom-x-dashboard">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">ALM (Adaptive Lifecycle Management)</div>
                 <div class="setting-row">
                     <span>Smart Tab Discard</span>
                     <label class="switch">

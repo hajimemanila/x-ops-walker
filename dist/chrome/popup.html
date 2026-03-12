@@ -462,7 +462,15 @@
         <div id="domain-protocol-container">
             <div class="section-title" id="section-domain-title" data-i18n="section_domain">📍 Domain Protocols</div>
 
-            <div id="protocol-x" style="display: none;">
+            <div class="setting-row" id="phantom-master-row">
+                <span class="setting-label" id="phantom-master-label" data-i18n="popup_phantom_master">Phantom Mode (Master)</span>
+                <div id="toggle-phantom-master" class="mini-toggle" role="switch" aria-checked="false"></div>
+            </div>
+
+            <div class="card-separator"></div>
+
+            <div id="phantom-sub-container">
+                <div id="protocol-x" style="display: none;">
                 <div class="setting-row">
                     <span class="setting-label" id="protocol-x-title" data-i18n="protocol_x_title">X Timeline
                         Walker</span>
@@ -484,6 +492,7 @@
                     Walker</span>
                 <div id="toggle-protocol-gemini" class="mini-toggle" role="switch" aria-checked="false"></div>
             </div>
+        </div>
         </div>
         <div id="protocol-none" style="display: none;">
             <span class="setting-label" id="protocol-none-msg" data-i18n="protocol_none_msg"

@@ -12,6 +12,7 @@ import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
 import { initXWalker, XTimelineProtocol } from './protocols/x-timeline';
 import { interceptSafetyEnter } from './protocols/safety-enter';
+import { GlobalState, PhantomState } from './config/state';
 
 const router = new WalkerRouter(new BaseProtocol());
 router.register(new AiChatProtocol());
@@ -205,6 +206,8 @@ function applyOneTapBlocker(enabled: boolean): void {
 
 // ── P2: 自立した状態変数 ─────────────────────────────────────────────────────
 let isWalkerMode = false;
+let globalStateSnapshot: GlobalState = { walkerMode: true, blockOneTap: false, safetyEnter: false };
+let phantomStateSnapshot: PhantomState = { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
 
 // ── Security Guard: 機密入力フィールドの検出 ──────────────────────────────────
 function isEditableElement(el: Element): boolean {
@@ -366,6 +369,24 @@ const hud: HudController = (() => {
     mount();
     return { setState };
 })();
+
+// --- AppState Synchronizer ---
+function updateAppState(global: GlobalState, phantom: PhantomState) {
+    globalStateSnapshot = global;
+    phantomStateSnapshot = phantom;
+    
+    // Core Walker Mode Sync
+    isWalkerMode = !!global.walkerMode;
+    hud.setState(isWalkerMode);
+    
+    // Google One Tap Sync
+    applyOneTapBlocker(!!global.blockOneTap);
+    
+    // Logic Cascade: If phantom.master changed, we need to re-init or signal protocols
+    if (window.location.hostname.includes('x.com') || window.location.hostname.includes('twitter.com')) {
+        initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
+    }
+}
 
 
 // ── Cheatsheet (Shadow DOM) ───────────────────────────────────────────────────
@@ -609,13 +630,13 @@ function keydownHandler(event: KeyboardEvent): void {
             cheatsheet.hide();
         }
 
-        isWalkerMode = !isWalkerMode;
-        safeStorageGet(['global'], (res) => {
-            const g = (res.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-            g.walkerMode = isWalkerMode;
+        safeStorageGet(['global', 'phantom'], (res) => {
+            const g = (res.global as GlobalState) || globalStateSnapshot;
+            const p = (res.phantom as PhantomState) || phantomStateSnapshot;
+            g.walkerMode = !isWalkerMode;
             safeStorageSet({ global: g });
+            updateAppState(g, p);
         });
-        hud.setState(isWalkerMode);
         if (isWalkerMode) blurActiveInput();
         return;
     }
@@ -634,40 +655,25 @@ function keydownHandler(event: KeyboardEvent): void {
 window.addEventListener('keydown', keydownHandler, { capture: true });
 
 // ── P2: 初期化 ────────────────────────────────────────────────────────
-safeStorageGet(['global'], (result) => {
-    const globalState = (result.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-    isWalkerMode = !!globalState.walkerMode;
-    hud.setState(isWalkerMode);
-    applyOneTapBlocker(!!globalState.blockOneTap);
+safeStorageGet(['global', 'phantom'], (result) => {
+    const globalState = (result.global as GlobalState) || globalStateSnapshot;
+    const phantomState = (result.phantom as PhantomState) || phantomStateSnapshot;
+    updateAppState(globalState, phantomState);
 });
 
-// ── X Timeline Walker (v2.1) 初期化判定 ──────────────────────────────────────
-const currentHost = window.location.hostname;
-if (currentHost === 'x.com' || currentHost === 'twitter.com') {
-    safeStorageGet(['phantom'], (res) => {
-        const phantom = (res.phantom as any) || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
-        const xWalker = phantom.xWalker || { enabled: true, rightColumnDashboard: true };
-        // initXWalker is designed to be called with xWalker true or false to trigger setWalkerState inner logic correctly
-        initXWalker(xWalker);
-    });
-}
+
 
 // ── P2: ストレージ変更監視 ───────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
 
-    if ('global' in changes) {
-        const globalState = changes.global.newValue as any;
-        if (globalState) {
-            if (globalState.walkerMode !== undefined && globalState.walkerMode !== isWalkerMode) {
-                isWalkerMode = !!globalState.walkerMode;
-                hud.setState(isWalkerMode);
-                if (isWalkerMode && !document.hidden) blurActiveInput();
-            }
-            if (globalState.blockOneTap !== undefined) {
-                applyOneTapBlocker(!!globalState.blockOneTap);
-            }
-        }
+    if ('global' in changes || 'phantom' in changes) {
+        safeStorageGet(['global', 'phantom'], (res) => {
+            const g = (res.global as GlobalState) || globalStateSnapshot;
+            const p = (res.phantom as PhantomState) || phantomStateSnapshot;
+            updateAppState(g, p);
+            if (isWalkerMode && !document.hidden && 'global' in changes) blurActiveInput();
+        });
     }
 });
 
@@ -743,11 +749,10 @@ function pullStateFromStorage(): void {
         document.title = document.title.slice('💤 '.length);
     }
 
-    safeStorageGet(['global'], (res) => {
-        const globalState = (res.global as any) || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-        isWalkerMode = !!globalState.walkerMode;
-        hud.setState(isWalkerMode);
-        applyOneTapBlocker(!!globalState.blockOneTap);
+    safeStorageGet(['global', 'phantom'], (res) => {
+        const globalState = (res.global as GlobalState) || globalStateSnapshot;
+        const phantomState = (res.phantom as PhantomState) || phantomStateSnapshot;
+        updateAppState(globalState, phantomState);
 
         if (isWalkerMode) {
             FocusShield.activate();
