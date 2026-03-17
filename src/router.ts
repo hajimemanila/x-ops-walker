@@ -13,8 +13,14 @@ export interface DomainProtocol {
     handleReset?(): void;
 }
 
+export interface MiddlewareProtocol {
+    /** イベントを評価し、処理済み（伝播ブロック）なら true を返す */
+    handleEvent(event: KeyboardEvent): boolean;
+}
+
 export class WalkerRouter {
     private protocols: DomainProtocol[] = [];
+    private middlewares: MiddlewareProtocol[] = [];
     private baseProtocol: DomainProtocol;
 
     constructor(base: DomainProtocol) {
@@ -24,6 +30,21 @@ export class WalkerRouter {
     /** ドメイン固有のプロトコルを登録 */
     register(protocol: DomainProtocol) {
         this.protocols.push(protocol);
+    }
+
+    /** ミドルウェア（汎用プロトコル）を登録 */
+    registerMiddleware(mw: MiddlewareProtocol): void {
+        this.middlewares.push(mw);
+    }
+
+    /** ミドルウェア層へのイベントディスパッチ */
+    dispatchMiddleware(event: KeyboardEvent): boolean {
+        for (const mw of this.middlewares) {
+            if (mw.handleEvent(event)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Kernelから受け取った状態変更を該当プロトコルへブロードキャストする */

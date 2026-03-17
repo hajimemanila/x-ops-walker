@@ -1,4 +1,5 @@
 // src/protocols/safety-enter.ts
+import { MiddlewareProtocol } from '../router';
 
 let isSafetyEnterEnabled = false;
 let isSynthesizing = false;
@@ -76,35 +77,37 @@ function triggerForcedSend(target: HTMLElement) {
  * Gatekeeperの最上流で呼ばれるミドルウェアフック。
  * イベントを処理（ブロック）した場合は true を返す。
  */
-export function interceptSafetyEnter(event: KeyboardEvent): boolean {
-    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== 'Enter') return false;
+export class SafetyEnterMiddleware implements MiddlewareProtocol {
+    handleEvent(event: KeyboardEvent): boolean {
+        if (!isSafetyEnterEnabled || isSynthesizing || event.key !== 'Enter') return false;
 
-    // IME変換中は絶対不可侵
-    if (event.isComposing || event.keyCode === 229) return false;
+        // IME変換中は絶対不可侵
+        if (event.isComposing || event.keyCode === 229) return false;
 
-    const target = event.target as HTMLElement;
-    if (!target) return false;
+        const target = event.target as HTMLElement;
+        if (!target) return false;
 
-    const isTextarea = target.tagName === 'TEXTAREA';
-    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
-    if (!isTextarea && !isContentEditable) return false;
+        const isTextarea = target.tagName === 'TEXTAREA';
+        const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
+        if (!isTextarea && !isContentEditable) return false;
 
-    // 【透過パス】Shift+Enter はサイト側の改行処理に任せる
-    if (event.shiftKey) return false;
+        // 【透過パス】Shift+Enter はサイト側の改行処理に任せる
+        if (event.shiftKey) return false;
 
-    // 波状ブロック: イベント伝播を完全に遮断
-    event.stopPropagation();
-    event.preventDefault();
-    event.stopImmediatePropagation();
+        // 波状ブロック: イベント伝播を完全に遮断
+        event.stopPropagation();
+        event.preventDefault();
+        event.stopImmediatePropagation();
 
-    // 【送信強制】Ctrl+Enter (または Cmd+Enter)
-    if (event.ctrlKey || event.metaKey) {
-        if (event.type === 'keydown') triggerForcedSend(target);
-        return true; // インターセプト完了
+        // 【送信強制】Ctrl+Enter (または Cmd+Enter)
+        if (event.ctrlKey || event.metaKey) {
+            if (event.type === 'keydown') triggerForcedSend(target);
+            return true; // インターセプト完了
+        }
+
+        if (event.type === 'keydown') {
+            showSafetyEnterOSD(target);
+        }
+        return true; // インターセプト完了（何もしない＝送信ブロック）
     }
-
-    if (event.type === 'keydown') {
-        showSafetyEnterOSD(target);
-    }
-    return true; // インターセプト完了（何もしない＝送信ブロック）
 }

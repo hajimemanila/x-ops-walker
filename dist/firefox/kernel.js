@@ -1036,6 +1036,7 @@
   init_browser_polyfill_entry();
   var WalkerRouter = class {
     protocols = [];
+    middlewares = [];
     baseProtocol;
     constructor(base) {
       this.baseProtocol = base;
@@ -1043,6 +1044,19 @@
     /** ドメイン固有のプロトコルを登録 */
     register(protocol) {
       this.protocols.push(protocol);
+    }
+    /** ミドルウェア（汎用プロトコル）を登録 */
+    registerMiddleware(mw) {
+      this.middlewares.push(mw);
+    }
+    /** ミドルウェア層へのイベントディスパッチ */
+    dispatchMiddleware(event) {
+      for (const mw of this.middlewares) {
+        if (mw.handleEvent(event)) {
+          return true;
+        }
+      }
+      return false;
     }
     /** Kernelから受け取った状態変更を該当プロトコルへブロードキャストする */
     notifyStateChange(global, phantom) {
@@ -2209,30 +2223,33 @@
       }, 50);
     }
   }
-  function interceptSafetyEnter(event) {
-    if (!isSafetyEnterEnabled || isSynthesizing || event.key !== "Enter") return false;
-    if (event.isComposing || event.keyCode === 229) return false;
-    const target = event.target;
-    if (!target) return false;
-    const isTextarea = target.tagName === "TEXTAREA";
-    const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
-    if (!isTextarea && !isContentEditable) return false;
-    if (event.shiftKey) return false;
-    event.stopPropagation();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (event.ctrlKey || event.metaKey) {
-      if (event.type === "keydown") triggerForcedSend(target);
+  var SafetyEnterMiddleware = class {
+    handleEvent(event) {
+      if (!isSafetyEnterEnabled || isSynthesizing || event.key !== "Enter") return false;
+      if (event.isComposing || event.keyCode === 229) return false;
+      const target = event.target;
+      if (!target) return false;
+      const isTextarea = target.tagName === "TEXTAREA";
+      const isContentEditable = target.isContentEditable || !!target.closest('[contenteditable="true"]');
+      if (!isTextarea && !isContentEditable) return false;
+      if (event.shiftKey) return false;
+      event.stopPropagation();
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.ctrlKey || event.metaKey) {
+        if (event.type === "keydown") triggerForcedSend(target);
+        return true;
+      }
+      if (event.type === "keydown") {
+        showSafetyEnterOSD(target);
+      }
       return true;
     }
-    if (event.type === "keydown") {
-      showSafetyEnterOSD(target);
-    }
-    return true;
-  }
+  };
 
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
+  router.registerMiddleware(new SafetyEnterMiddleware());
   router.register(new AiChatProtocol());
   router.register(new XTimelineProtocol());
   if (window.__XOPS_WALKER_ALIVE__) {
@@ -2740,7 +2757,7 @@
   }
   function keydownHandler(event) {
     if (isOrphan()) return;
-    if (interceptSafetyEnter(event)) return;
+    if (router.dispatchMiddleware(event)) return;
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyZ") {
       event.preventDefault();
       event.stopPropagation();
@@ -2956,7 +2973,7 @@
   connectKeepAlivePort();
   function suppressSiteShortcutsHandler(event) {
     if (isOrphan()) return;
-    if (interceptSafetyEnter(event)) return;
+    if (router.dispatchMiddleware(event)) return;
     if (shouldPassThrough(event)) return;
     const key = normalizeKey(event);
     if (event.type === "keyup") {

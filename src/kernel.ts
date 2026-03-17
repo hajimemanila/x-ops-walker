@@ -11,10 +11,11 @@ import { WalkerRouter } from './router';
 import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
 import { XTimelineProtocol } from './protocols/x-timeline';
-import { interceptSafetyEnter } from './protocols/safety-enter';
+import { SafetyEnterMiddleware } from './protocols/safety-enter';
 import { GlobalState, PhantomState, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE } from './config/state';
 
 const router = new WalkerRouter(new BaseProtocol());
+router.registerMiddleware(new SafetyEnterMiddleware());
 router.register(new AiChatProtocol());
 router.register(new XTimelineProtocol());
 
@@ -585,7 +586,7 @@ function keydownHandler(event: KeyboardEvent): void {
     if (isOrphan()) return;
 
     // 【追加】Middleware: SafetyEnter (絶対的パススルーより前に判定・迎撃)
-    if (interceptSafetyEnter(event)) return;
+    if (router.dispatchMiddleware(event)) return;
 
     // ── Alt+Z: 緊急フォーカス奪還 ──
     if (isWalkerMode && event.altKey && !event.ctrlKey && !event.metaKey && event.code === 'KeyZ') {
@@ -869,7 +870,7 @@ function suppressSiteShortcutsHandler(event: KeyboardEvent): void {
     if (isOrphan()) return;
 
     // 【追加】Middleware: SafetyEnter
-    if (interceptSafetyEnter(event)) return;
+    if (router.dispatchMiddleware(event)) return;
 
     if (shouldPassThrough(event)) return;
 
