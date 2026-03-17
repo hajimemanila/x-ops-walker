@@ -1044,6 +1044,23 @@
     register(protocol) {
       this.protocols.push(protocol);
     }
+    /** Kernelから受け取った状態変更を該当プロトコルへブロードキャストする */
+    notifyStateChange(global, phantom) {
+      const hostname = window.location.hostname;
+      let matched = false;
+      for (const protocol of this.protocols) {
+        if (protocol.matches(hostname)) {
+          if (protocol.onStateUpdate) {
+            protocol.onStateUpdate(global, phantom);
+          }
+          matched = true;
+          break;
+        }
+      }
+      if (!matched && this.baseProtocol.onStateUpdate) {
+        this.baseProtocol.onStateUpdate(global, phantom);
+      }
+    }
     /** Kernel からディスパッチされるエントリーポイント */
     dispatch(event, key, shift, container) {
       const hostname = window.location.hostname;
@@ -1758,6 +1775,9 @@
   var XTimelineProtocol = class {
     matches(url) {
       return url.includes("x.com") || url.includes("twitter.com");
+    }
+    onStateUpdate(global, phantom) {
+      initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
     }
     handleKey(event, key, shift, container) {
       if (key === "h") {
@@ -2474,9 +2494,7 @@
     isWalkerMode = !!global.walkerMode;
     hud.setState(isWalkerMode);
     applyOneTapBlocker(!!global.blockOneTap);
-    if (window.location.hostname.includes("x.com") || window.location.hostname.includes("twitter.com")) {
-      initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
-    }
+    router.notifyStateChange(global, phantom);
   }
   var cheatsheet = (() => {
     const host = document.createElement("div");

@@ -10,7 +10,7 @@
 import { WalkerRouter } from './router';
 import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
-import { initXWalker, XTimelineProtocol } from './protocols/x-timeline';
+import { XTimelineProtocol } from './protocols/x-timeline';
 import { interceptSafetyEnter } from './protocols/safety-enter';
 import { GlobalState, PhantomState } from './config/state';
 
@@ -383,9 +383,8 @@ function updateAppState(global: GlobalState, phantom: PhantomState) {
     applyOneTapBlocker(!!global.blockOneTap);
 
     // Logic Cascade: If phantom.master changed, we need to re-init or signal protocols
-    if (window.location.hostname.includes('x.com') || window.location.hostname.includes('twitter.com')) {
-        initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
-    }
+    // 該当するプロトコルに状態同期を完全委譲 (ルーター・パターンの徹底)
+    router.notifyStateChange(global, phantom);
 }
 
 

@@ -5,6 +5,7 @@
  */
 import { DomainProtocol } from '../router';
 import { getCurrentTarget, focusNextTarget } from './utils/spatial-navigation';
+import { GlobalState, PhantomState } from '../config/state';
 
 export interface XWalkerConfig {
     enabled: boolean;
@@ -629,6 +630,10 @@ function goProfile() {
 export class XTimelineProtocol implements DomainProtocol {
     matches(url: string): boolean {
         return url.includes('x.com') || url.includes('twitter.com');
+    }
+
+    onStateUpdate(global: GlobalState, phantom: PhantomState): void {
+        initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
     }
 
     handleKey(event: KeyboardEvent, key: string, shift: boolean, container: Element): boolean {
