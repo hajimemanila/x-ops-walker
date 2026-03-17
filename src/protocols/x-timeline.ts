@@ -5,12 +5,7 @@
  */
 import { DomainProtocol } from '../router';
 import { getCurrentTarget, focusNextTarget } from './utils/spatial-navigation';
-import { GlobalState, PhantomState } from '../config/state';
-
-export interface XWalkerConfig {
-    enabled: boolean;
-    rightColumnDashboard: boolean;
-}
+import { GlobalState, PhantomState, XWalkerConfig, DEFAULT_PHANTOM_STATE } from '../config/state';
 
 interface Bookmark {
     title: string;
@@ -50,13 +45,7 @@ let walkerSyncFrame: number | null = null;
 let currentUrlPath = window.location.pathname;
 
 // ── 🐺 Walker States & Config ──
-const CONFIG = {
-    skipReposts: true,
-    skipAds: true,
-    scrollOffset: -150,
-    colors: { recent: '#00ba7c', old: '#ffd400', ancient: '#f4212e', copied: 'rgba(0, 255, 255, 0.2)' },
-    zenOpacity: 0.5,
-};
+let xConfig: XWalkerConfig | null = null; // 【追加】ルーターから供給される設定を保持
 
 let isActive = false;
 let backspaceTimer: number | null = null;
@@ -75,7 +64,7 @@ function injectWalkerCSS() {
     const style = document.createElement('style');
     style.id = 'x-walker-style';
     style.textContent = `
-        body.x-walker-active article { opacity: ${CONFIG.zenOpacity} !important; transition: opacity 0.2s ease; }
+        body.x-walker-active article { opacity: ${xConfig!.zenOpacity} !important; transition: opacity 0.2s ease; }
         body.x-walker-active article:hover { background-color: transparent !important; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03) !important; }
     `;
@@ -342,14 +331,14 @@ function tagIgnoredArticles() {
         const text = (article as HTMLElement).innerText || "";
         let shouldIgnore = false;
 
-        if (CONFIG.skipAds) {
+        if (xConfig!.skipAds) {
             const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
             const hasAdText = text.includes('プロモーション') || text.includes('Promoted');
             if (hasAdText && !isOwnPromotable) {
                 shouldIgnore = true;
             }
         }
-        if (!shouldIgnore && CONFIG.skipReposts) {
+        if (!shouldIgnore && xConfig!.skipReposts) {
             if (article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) {
                 shouldIgnore = true;
             }
@@ -400,7 +389,7 @@ function triggerAutoTargeting() {
                 if (target && window.scrollY < 200) {
                     const rect = target.getBoundingClientRect();
                     window.scrollTo({
-                        top: window.scrollY + rect.top - (window.innerHeight * 0.3) - CONFIG.scrollOffset,
+                        top: window.scrollY + rect.top - (window.innerHeight * 0.3) - xConfig!.scrollOffset,
                         behavior: 'smooth'
                     });
                 }
@@ -413,9 +402,9 @@ function triggerAutoTargeting() {
 
 function getArticleColor(article: HTMLElement): string {
     const t = article.querySelector('time');
-    if (!t) return CONFIG.colors.recent;
+    if (!t) return xConfig!.colors.recent;
     const d = (new Date().getTime() - new Date(t.getAttribute('datetime') || '').getTime()) / (86400000);
-    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+    return d >= 30 ? xConfig!.colors.ancient : d >= 4 ? xConfig!.colors.old : xConfig!.colors.recent;
 }
 
 function maintainFocusVisuals() {
@@ -633,7 +622,64 @@ export class XTimelineProtocol implements DomainProtocol {
     }
 
     onStateUpdate(global: GlobalState, phantom: PhantomState): void {
-        initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
+        const rawConfig = phantom.xWalker as any; // 古いboolean型が来る可能性を許容
+        const defaultConfig = DEFAULT_PHANTOM_STATE.xWalker;
+
+        // 【防壁】古いデータ（boolean）やundefinedの場合はデフォルト値で上書き、旧仕様のON/OFF状態だけは継承する
+        if (typeof rawConfig === 'boolean' || !rawConfig) {
+            xConfig = { ...defaultConfig };
+            if (typeof rawConfig === 'boolean') {
+                xConfig.enabled = rawConfig;
+            }
+
+            phantom.xWalker = xConfig;
+            chrome.storage.local.set({ phantom: phantom });
+        } else {
+            // 【防壁】オブジェクトのプロパティ欠損を防ぐディープマージ（Deep Merge）
+            xConfig = {
+                enabled: rawConfig.enabled ?? defaultConfig.enabled,
+                rightColumnDashboard: rawConfig.rightColumnDashboard ?? defaultConfig.rightColumnDashboard,
+                skipReposts: rawConfig.skipReposts ?? defaultConfig.skipReposts,
+                skipAds: rawConfig.skipAds ?? defaultConfig.skipAds,
+                scrollOffset: rawConfig.scrollOffset ?? defaultConfig.scrollOffset,
+                colors: { ...defaultConfig.colors, ...(rawConfig.colors || {}) },
+                zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity
+            };
+        }
+
+        initXWalker(xConfig, !!phantom.master, !!global.walkerMode);
+    }
+
+    /** 【追加】違反3解消: Global Reset処理をフック化 */
+    handleReset(): void {
+        if (!isActive) return;
+        forceClearFocus();
+    }
+
+    /** 【追加】違反3解消: DRS Delete等のKeyUp処理をフック化 */
+    handleKeyUp(event: KeyboardEvent, key: string): boolean {
+        if (!isActive) return false;
+
+        const activeEl = document.activeElement;
+        const isInput = activeEl && (['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable);
+        if (isInput) return false;
+
+        if (event.code === 'Backspace') {
+            event.preventDefault();
+            event.stopPropagation();
+
+            isBackspaceHeld = false;
+            if (backspaceTimer !== null) {
+                clearTimeout(backspaceTimer);
+                backspaceTimer = null;
+            }
+
+            if (document.title === "⚠️ DRS ACTIVE ⚠️") {
+                document.title = originalTitle;
+            }
+            return true;
+        }
+        return false;
     }
 
     handleKey(event: KeyboardEvent, key: string, shift: boolean, container: Element): boolean {
@@ -658,7 +704,7 @@ export class XTimelineProtocol implements DomainProtocol {
         if (timelineKeys.includes(key)) {
             if (key === 'k' || key === 'j') {
                 const direction = key === 'j' ? 1 : -1;
-                focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+                focusNextTarget(TARGET_SELECTOR, direction, xConfig!.scrollOffset);
                 if (navLockTimer) clearTimeout(navLockTimer);
                 navLockTimer = window.setTimeout(() => { navLockTimer = null; }, 400);
             }
@@ -718,34 +764,8 @@ export class XTimelineProtocol implements DomainProtocol {
     }
 }
 
-// ── DRS Delete 用の残存機能（keyupとreset） ──
-window.addEventListener('keyup', (e) => {
-    if (!isActive) return;
-
-    const activeEl = document.activeElement;
-    const isInput = activeEl && (['INPUT', 'TEXTAREA'].includes(activeEl.tagName) || (activeEl as HTMLElement).isContentEditable);
-    if (isInput) return;
-
-    if (e.code === 'Backspace') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        isBackspaceHeld = false;
-        if (backspaceTimer !== null) {
-            clearTimeout(backspaceTimer);
-            backspaceTimer = null;
-        }
-
-        if (document.title === "⚠️ DRS ACTIVE ⚠️") {
-            document.title = originalTitle;
-        }
-    }
-}, true);
-
-window.addEventListener('x-ops-global-reset', () => {
-    if (!isActive) return;
-    forceClearFocus();
-});
+// ── 違反3解消: DRS Delete用の独自リスナー(keyup/reset)を全削除 ──
+// ※処理は XTimelineProtocol の handleKeyUp / handleReset へ完全に移行しました。
 
 
 
@@ -825,7 +845,7 @@ function startDRSDelete() {
                     confirmBtn.click();
                     flashFeedback(article, 'rgba(244, 33, 46, 0.3)');
                     setTimeout(() => {
-                        focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
+                        focusNextTarget(TARGET_SELECTOR, 1, xConfig!.scrollOffset);
                     }, 500);
                 } else if (++attempts > 40) {
                     clearInterval(interval);

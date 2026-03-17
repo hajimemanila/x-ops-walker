@@ -7,6 +7,10 @@ export interface DomainProtocol {
     handleKey(event: KeyboardEvent, key: string, shift: boolean, container: Element): boolean;
     /** 【追加】状態の変更を検知し、自身を初期化・更新するフック（オプショナル） */
     onStateUpdate?(global: GlobalState, phantom: PhantomState): void;
+    /** 【追加】違反3解消: KeyUpイベントを受け取るフック（オプショナル） */
+    handleKeyUp?(event: KeyboardEvent, key: string): boolean;
+    /** 【追加】違反3解消: フォーカスリセット要求を受け取るフック（オプショナル） */
+    handleReset?(): void;
 }
 
 export class WalkerRouter {
@@ -58,5 +62,36 @@ export class WalkerRouter {
 
         // 2. 該当がなければ Base プロトコルへフォールバック
         this.baseProtocol.handleKey(event, key, shift, container);
+    }
+
+    /** 【追加】違反3解消: KeyUpイベントのディスパッチ */
+    dispatchKeyUp(event: KeyboardEvent, key: string): void {
+        const hostname = window.location.hostname;
+        for (const protocol of this.protocols) {
+            if (protocol.matches(hostname)) {
+                if (protocol.handleKeyUp && protocol.handleKeyUp(event, key)) {
+                    return;
+                }
+            }
+        }
+        if (this.baseProtocol.handleKeyUp) {
+            this.baseProtocol.handleKeyUp(event, key);
+        }
+    }
+
+    /** 【追加】違反3解消: Resetイベントのディスパッチ */
+    dispatchReset(): void {
+        const hostname = window.location.hostname;
+        for (const protocol of this.protocols) {
+            if (protocol.matches(hostname)) {
+                if (protocol.handleReset) {
+                    protocol.handleReset();
+                }
+                return;
+            }
+        }
+        if (this.baseProtocol.handleReset) {
+            this.baseProtocol.handleReset();
+        }
     }
 }

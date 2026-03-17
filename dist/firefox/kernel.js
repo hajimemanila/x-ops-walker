@@ -1073,6 +1073,35 @@
       }
       this.baseProtocol.handleKey(event, key, shift, container);
     }
+    /** 【追加】違反3解消: KeyUpイベントのディスパッチ */
+    dispatchKeyUp(event, key) {
+      const hostname = window.location.hostname;
+      for (const protocol of this.protocols) {
+        if (protocol.matches(hostname)) {
+          if (protocol.handleKeyUp && protocol.handleKeyUp(event, key)) {
+            return;
+          }
+        }
+      }
+      if (this.baseProtocol.handleKeyUp) {
+        this.baseProtocol.handleKeyUp(event, key);
+      }
+    }
+    /** 【追加】違反3解消: Resetイベントのディスパッチ */
+    dispatchReset() {
+      const hostname = window.location.hostname;
+      for (const protocol of this.protocols) {
+        if (protocol.matches(hostname)) {
+          if (protocol.handleReset) {
+            protocol.handleReset();
+          }
+          return;
+        }
+      }
+      if (this.baseProtocol.handleReset) {
+        this.baseProtocol.handleReset();
+      }
+    }
   };
 
   // src/protocols/base.ts
@@ -1253,6 +1282,32 @@
     return nextTarget;
   }
 
+  // src/config/state.ts
+  init_browser_polyfill_entry();
+  var DEFAULT_GLOBAL_STATE = {
+    walkerMode: true,
+    blockOneTap: false,
+    safetyEnter: false
+  };
+  var DEFAULT_PHANTOM_STATE = {
+    master: true,
+    xWalker: {
+      enabled: true,
+      rightColumnDashboard: true,
+      // 【追加】違反4解消: デフォルト値のハードコード排除
+      skipReposts: true,
+      skipAds: true,
+      scrollOffset: -150,
+      colors: {
+        recent: "#00ba7c",
+        old: "#ffd400",
+        ancient: "#f4212e",
+        copied: "rgba(0, 255, 255, 0.2)"
+      },
+      zenOpacity: 0.5
+    }
+  };
+
   // src/protocols/x-timeline.ts
   var STORAGE_KEY_HIGHLIGHTS = "x_bookmark_highlights";
   var TARGET_SELECTOR = "article:not([data-x-walker-ignore])";
@@ -1285,13 +1340,7 @@
   var heartbeatId = null;
   var walkerSyncFrame = null;
   var currentUrlPath = window.location.pathname;
-  var CONFIG = {
-    skipReposts: true,
-    skipAds: true,
-    scrollOffset: -150,
-    colors: { recent: "#00ba7c", old: "#ffd400", ancient: "#f4212e", copied: "rgba(0, 255, 255, 0.2)" },
-    zenOpacity: 0.5
-  };
+  var xConfig = null;
   var isActive = false;
   var backspaceTimer = null;
   var isBackspaceHeld = false;
@@ -1305,7 +1354,7 @@
     const style = document.createElement("style");
     style.id = "x-walker-style";
     style.textContent = `
-        body.x-walker-active article { opacity: ${CONFIG.zenOpacity} !important; transition: opacity 0.2s ease; }
+        body.x-walker-active article { opacity: ${xConfig.zenOpacity} !important; transition: opacity 0.2s ease; }
         body.x-walker-active article:hover { background-color: transparent !important; }
         body.x-walker-active article.x-walker-focused { opacity: 1 !important; background-color: rgba(255, 255, 255, 0.03) !important; }
     `;
@@ -1539,14 +1588,14 @@
       article.setAttribute("data-x-walker-inspected", "true");
       const text = article.innerText || "";
       let shouldIgnore = false;
-      if (CONFIG.skipAds) {
+      if (xConfig.skipAds) {
         const isOwnPromotable = article.querySelector('a[href*="/quick_promote_web/"]');
         const hasAdText = text.includes("\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3") || text.includes("Promoted");
         if (hasAdText && !isOwnPromotable) {
           shouldIgnore = true;
         }
       }
-      if (!shouldIgnore && CONFIG.skipReposts) {
+      if (!shouldIgnore && xConfig.skipReposts) {
         if (article.querySelector('[data-testid="socialContext"]')?.textContent?.match(/リポスト|Reposted/)) {
           shouldIgnore = true;
         }
@@ -1590,7 +1639,7 @@
           if (target && window.scrollY < 200) {
             const rect = target.getBoundingClientRect();
             window.scrollTo({
-              top: window.scrollY + rect.top - window.innerHeight * 0.3 - CONFIG.scrollOffset,
+              top: window.scrollY + rect.top - window.innerHeight * 0.3 - xConfig.scrollOffset,
               behavior: "smooth"
             });
           }
@@ -1602,9 +1651,9 @@
   }
   function getArticleColor(article) {
     const t2 = article.querySelector("time");
-    if (!t2) return CONFIG.colors.recent;
+    if (!t2) return xConfig.colors.recent;
     const d = ((/* @__PURE__ */ new Date()).getTime() - new Date(t2.getAttribute("datetime") || "").getTime()) / 864e5;
-    return d >= 30 ? CONFIG.colors.ancient : d >= 4 ? CONFIG.colors.old : CONFIG.colors.recent;
+    return d >= 30 ? xConfig.colors.ancient : d >= 4 ? xConfig.colors.old : xConfig.colors.recent;
   }
   function maintainFocusVisuals() {
     let currentTarget = null;
@@ -1777,7 +1826,53 @@
       return url.includes("x.com") || url.includes("twitter.com");
     }
     onStateUpdate(global, phantom) {
-      initXWalker(phantom.xWalker, !!phantom.master, !!global.walkerMode);
+      const rawConfig = phantom.xWalker;
+      const defaultConfig = DEFAULT_PHANTOM_STATE.xWalker;
+      if (typeof rawConfig === "boolean" || !rawConfig) {
+        xConfig = { ...defaultConfig };
+        if (typeof rawConfig === "boolean") {
+          xConfig.enabled = rawConfig;
+        }
+        phantom.xWalker = xConfig;
+        chrome.storage.local.set({ phantom });
+      } else {
+        xConfig = {
+          enabled: rawConfig.enabled ?? defaultConfig.enabled,
+          rightColumnDashboard: rawConfig.rightColumnDashboard ?? defaultConfig.rightColumnDashboard,
+          skipReposts: rawConfig.skipReposts ?? defaultConfig.skipReposts,
+          skipAds: rawConfig.skipAds ?? defaultConfig.skipAds,
+          scrollOffset: rawConfig.scrollOffset ?? defaultConfig.scrollOffset,
+          colors: { ...defaultConfig.colors, ...rawConfig.colors || {} },
+          zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity
+        };
+      }
+      initXWalker(xConfig, !!phantom.master, !!global.walkerMode);
+    }
+    /** 【追加】違反3解消: Global Reset処理をフック化 */
+    handleReset() {
+      if (!isActive) return;
+      forceClearFocus();
+    }
+    /** 【追加】違反3解消: DRS Delete等のKeyUp処理をフック化 */
+    handleKeyUp(event, key) {
+      if (!isActive) return false;
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable);
+      if (isInput) return false;
+      if (event.code === "Backspace") {
+        event.preventDefault();
+        event.stopPropagation();
+        isBackspaceHeld = false;
+        if (backspaceTimer !== null) {
+          clearTimeout(backspaceTimer);
+          backspaceTimer = null;
+        }
+        if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
+          document.title = originalTitle;
+        }
+        return true;
+      }
+      return false;
     }
     handleKey(event, key, shift, container) {
       if (key === "h") {
@@ -1797,7 +1892,7 @@
       if (timelineKeys.includes(key)) {
         if (key === "k" || key === "j") {
           const direction = key === "j" ? 1 : -1;
-          focusNextTarget(TARGET_SELECTOR, direction, CONFIG.scrollOffset);
+          focusNextTarget(TARGET_SELECTOR, direction, xConfig.scrollOffset);
           if (navLockTimer) clearTimeout(navLockTimer);
           navLockTimer = window.setTimeout(() => {
             navLockTimer = null;
@@ -1853,28 +1948,6 @@
       return false;
     }
   };
-  window.addEventListener("keyup", (e) => {
-    if (!isActive) return;
-    const activeEl = document.activeElement;
-    const isInput = activeEl && (["INPUT", "TEXTAREA"].includes(activeEl.tagName) || activeEl.isContentEditable);
-    if (isInput) return;
-    if (e.code === "Backspace") {
-      e.preventDefault();
-      e.stopPropagation();
-      isBackspaceHeld = false;
-      if (backspaceTimer !== null) {
-        clearTimeout(backspaceTimer);
-        backspaceTimer = null;
-      }
-      if (document.title === "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F") {
-        document.title = originalTitle;
-      }
-    }
-  }, true);
-  window.addEventListener("x-ops-global-reset", () => {
-    if (!isActive) return;
-    forceClearFocus();
-  });
   function forceClearFocus() {
     document.querySelectorAll(".x-walker-focused").forEach((el) => {
       el.classList.remove("x-walker-focused");
@@ -1948,7 +2021,7 @@
             confirmBtn.click();
             flashFeedback(article, "rgba(244, 33, 46, 0.3)");
             setTimeout(() => {
-              focusNextTarget(TARGET_SELECTOR, 1, CONFIG.scrollOffset);
+              focusNextTarget(TARGET_SELECTOR, 1, xConfig.scrollOffset);
             }, 500);
           } else if (++attempts > 40) {
             clearInterval(interval);
@@ -2341,8 +2414,8 @@
     }
   }
   var isWalkerMode = false;
-  var globalStateSnapshot = { walkerMode: true, blockOneTap: false, safetyEnter: false };
-  var phantomStateSnapshot = { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+  var globalStateSnapshot = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_STATE));
+  var phantomStateSnapshot = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
   function isEditableElement(el) {
     if (!el || el.nodeType !== 1) return false;
     const tag = el.tagName.toUpperCase();
@@ -2641,6 +2714,9 @@
   window.addEventListener("XOpsWalker_ToggleCheatsheet", () => {
     cheatsheet.toggle();
   });
+  window.addEventListener("x-ops-global-reset", () => {
+    router.dispatchReset();
+  });
   function deepBlur(root) {
     if (!root) return;
     let el = root;
@@ -2673,6 +2749,7 @@
       document.body.focus();
       window.focus();
       window.dispatchEvent(new CustomEvent("x-ops-global-reset"));
+      router.dispatchReset();
       const container = getBestScrollContainer(event);
       router.dispatch(event, "z", event.shiftKey, container);
       return;
@@ -2882,6 +2959,9 @@
     if (interceptSafetyEnter(event)) return;
     if (shouldPassThrough(event)) return;
     const key = normalizeKey(event);
+    if (event.type === "keyup") {
+      router.dispatchKeyUp(event, key);
+    }
     if (REGISTERED_ROUTER_KEYS.has(key)) {
       event.preventDefault();
       event.stopPropagation();

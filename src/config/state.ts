@@ -4,12 +4,25 @@ export interface GlobalState {
     safetyEnter: boolean;
 }
 
+// 【追加】違反4解消: x-timeline.tsからパージされる設定群を統合した型定義
+export interface XWalkerConfig {
+    enabled: boolean;
+    rightColumnDashboard: boolean;
+    skipReposts: boolean;
+    skipAds: boolean;
+    scrollOffset: number;
+    colors: {
+        recent: string;
+        old: string;
+        ancient: string;
+        copied: string;
+    };
+    zenOpacity: number;
+}
+
 export interface PhantomState {
     master: boolean;
-    xWalker: {
-        enabled: boolean;
-        rightColumnDashboard: boolean;
-    };
+    xWalker: XWalkerConfig; // 【修正】インライン定義から独立したインターフェースへ変更
 }
 
 export interface AlmConfig {
@@ -27,7 +40,18 @@ export const DEFAULT_PHANTOM_STATE: PhantomState = {
     master: true,
     xWalker: {
         enabled: true,
-        rightColumnDashboard: true
+        rightColumnDashboard: true,
+        // 【追加】違反4解消: デフォルト値のハードコード排除
+        skipReposts: true,
+        skipAds: true,
+        scrollOffset: -150,
+        colors: {
+            recent: '#00ba7c',
+            old: '#ffd400',
+            ancient: '#f4212e',
+            copied: 'rgba(0, 255, 255, 0.2)'
+        },
+        zenOpacity: 0.5
     }
 };
 

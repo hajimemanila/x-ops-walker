@@ -12,7 +12,7 @@ import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
 import { XTimelineProtocol } from './protocols/x-timeline';
 import { interceptSafetyEnter } from './protocols/safety-enter';
-import { GlobalState, PhantomState } from './config/state';
+import { GlobalState, PhantomState, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE } from './config/state';
 
 const router = new WalkerRouter(new BaseProtocol());
 router.register(new AiChatProtocol());
@@ -206,8 +206,9 @@ function applyOneTapBlocker(enabled: boolean): void {
 
 // ── P2: 自立した状態変数 ─────────────────────────────────────────────────────
 let isWalkerMode = false;
-let globalStateSnapshot: GlobalState = { walkerMode: true, blockOneTap: false, safetyEnter: false };
-let phantomStateSnapshot: PhantomState = { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+// 【修正】DRY原則の適用：ハードコードを廃止し、state.tsの定数からディープコピーで安全に初期化
+let globalStateSnapshot: GlobalState = JSON.parse(JSON.stringify(DEFAULT_GLOBAL_STATE));
+let phantomStateSnapshot: PhantomState = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
 
 // ── Security Guard: 機密入力フィールドの検出 ──────────────────────────────────
 function isEditableElement(el: Element): boolean {
@@ -549,6 +550,10 @@ window.addEventListener('XOpsWalker_ToggleCheatsheet', () => {
     cheatsheet.toggle();
 });
 
+window.addEventListener('x-ops-global-reset', () => {
+    router.dispatchReset();
+});
+
 // ── Deep Blur ──────────────────────────────────────────────────────────
 function deepBlur(root: Element | null): void {
     if (!root) return;
@@ -593,6 +598,7 @@ function keydownHandler(event: KeyboardEvent): void {
         window.focus();
 
         window.dispatchEvent(new CustomEvent('x-ops-global-reset'));
+        router.dispatchReset(); // 【追加】違反3解消: ルーター経由でリセット信号を伝播
 
         const container = getBestScrollContainer(event);
         router.dispatch(event, 'z', event.shiftKey, container);
@@ -868,6 +874,11 @@ function suppressSiteShortcutsHandler(event: KeyboardEvent): void {
     if (shouldPassThrough(event)) return;
 
     const key = normalizeKey(event);
+
+    // 【追加】違反3解消: keyupイベントのみルーターへ流す
+    if (event.type === 'keyup') {
+        router.dispatchKeyUp(event, key);
+    }
 
     if (REGISTERED_ROUTER_KEYS.has(key)) {
         event.preventDefault();
