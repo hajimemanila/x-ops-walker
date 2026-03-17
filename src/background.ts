@@ -146,9 +146,6 @@ interface BackgroundMessage {
  * タブ到着後に Arrival Override を送信する。
  * ブラウザ自身のフォーカス復元処理を待ってから blur を指示するため、
  * 50ms 遅延して content script へメッセージを送信する。
- *
- * NOTE (Chrome MV3): Service Worker は setTimeout 完了前にスリープする
- * リスクがある。この遅延は最小限に抑えてある。Step 2 でアーキテクチャ改善予定。
  */
 function sendArrivalBlur(tabId: number): void {
     setTimeout(() => {
@@ -171,8 +168,8 @@ type FoxWalkerCommand =
     | 'DUPLICATE_TAB'
     | 'CLEAN_UP'
     // ── ALM v1.3.0 ────────────────────────────────────────────────────────────
-    // ALM_VETO      : 入力中・メディア再生中など、Hibernation を絶対禁止すべき状態を通知する。
-    // ALM_VETO_CLEAR: Veto 状態が解除されたことを通知する（入力完了・再生停止等）。
+    // ALM_VETO      : 入力中・メディア再生中など、Hibernation を絶対禁止すべき状態を通知
+    // ALM_VETO_CLEAR: Veto 状態が解除されたことを通知（入力完了・再生停止等）
     | 'ALM_VETO'
     | 'ALM_VETO_CLEAR';
 
@@ -342,26 +339,7 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 });
 
-
-// ============================================================================
-// X-Ops Walker ALM (Adaptive Lifecycle Management) v1.3.0
-// ============================================================================
-//
-// 【用語定義 — これらの用語を厳守せよ】
-//   Execution Dormancy   : ブラウザが勝手に行う「安楽死（休止状態）」。ALM が排除する敵。
-//   Smart Tab Discard: ALM が意図的に行う「冷凍休眠（Discard）」。我々が支配する。
-//   Vital Heartbeat      : kernel から送る「生存信号」。Veto の根拠となる。
-//   Pure Rebirth         : ユーザーがタブを開いた際の再読み込みによる「確実な転生（起動）」。
-//
-// 【Master Heartbeat Timer の設計思想】
-//   タブごとに個別タイマーを回すと、50枚のタブで50本の setTimeout が Service Worker で
-//   走ることになる。これはリソースの無駄であり、タイマー精度も保証されない。
-//   → Background に「3分間隔のマスタータイマー」を1本だけ置き、全タブを走査・一括処理する。
-//   → SW の休止は walker-keepalive Port（既存機構）が既に阻止しているため、1本で完結する。
-//
-// ============================================================================
-
-
+// X-Ops Walker ALM (Adaptive Lifecycle Management) 
 let ALM_EXCLUDE_DOMAINS = new Set(DEFAULT_ALM_CONFIG.excludeDomains);
 
 // 実行中の ALM コンフィグ
@@ -425,7 +403,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 // ── Grace Period 定数 (ミリ秒) ─────────────────────────────────────────────
 // Standard: タブ30枚以下のデフォルト。8分の余裕を与える。
 // Standard (Overloaded): タブ30枚超。動的に5分へ短縮し、よりアグレッシブにリソース回収。
-// ※ Heavy (1分短縮) は廃止され、Exclude (永久除外) リストへ移行。
+// Exclude (永久除外) リスト
 const ALM_GRACE_STANDARD_MS = 8 * 60 * 1000;        //  8分
 const ALM_GRACE_STANDARD_OVERLOADED_MS = 5 * 60 * 1000; //  5分（30枚超タブ数で動的短縮）
 const ALM_OVERLOAD_THRESHOLD = 30;                   //  30枚超でオーバーロードモード

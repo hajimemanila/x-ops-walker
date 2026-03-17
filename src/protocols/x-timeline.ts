@@ -764,11 +764,6 @@ export class XTimelineProtocol implements DomainProtocol {
     }
 }
 
-// ── 違反3解消: DRS Delete用の独自リスナー(keyup/reset)を全削除 ──
-// ※処理は XTimelineProtocol の handleKeyUp / handleReset へ完全に移行しました。
-
-
-
 function forceClearFocus() {
     document.querySelectorAll('.x-walker-focused').forEach(el => {
         el.classList.remove('x-walker-focused');

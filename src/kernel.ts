@@ -187,7 +187,7 @@ function t(key: string): string {
     return msg || key;
 }
 
-// ── Google One Tap 迎撃 CSS ───────────────────────────────────────────────────
+// ── Google One Tap 無効化 CSS ───────────────────────────────────────────────────
 const oneTapBlockStyle = document.createElement('style');
 oneTapBlockStyle.textContent = [
     'iframe[src*="accounts.google.com/gsi/"]',
@@ -690,8 +690,6 @@ safeStorageGet(['global', 'phantom'], (result) => {
     updateAppState(globalState, phantomState);
 });
 
-
-
 // ── P2: ストレージ変更監視 ───────────────────────────────────────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
@@ -869,14 +867,14 @@ connectKeepAlivePort();
 function suppressSiteShortcutsHandler(event: KeyboardEvent): void {
     if (isOrphan()) return;
 
-    // 【追加】Middleware: SafetyEnter
+    // Middleware: SafetyEnter
     if (router.dispatchMiddleware(event)) return;
 
     if (shouldPassThrough(event)) return;
 
     const key = normalizeKey(event);
 
-    // 【追加】違反3解消: keyupイベントのみルーターへ流す
+    // keyupイベントのみルーターへ流す
     if (event.type === 'keyup') {
         router.dispatchKeyUp(event, key);
     }
