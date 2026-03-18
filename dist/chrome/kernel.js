@@ -697,8 +697,6 @@
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      const myProfileUrl = cleanUrl(getMyProfileUrl());
-      if (cleanUrlStr === myProfileUrl) return;
       const newState = item.classList.toggle("active");
       saveHighlight(cleanUrlStr, newState);
       star.classList.remove("popping");
@@ -757,7 +755,7 @@
         i++;
       }
     } else {
-      let starredIdx = targets.findIndex((url, idx) => idx !== 0 && highlights[cleanUrl(url)]);
+      let starredIdx = targets.findIndex((url, idx) => idx !== 0 && cleanUrl(url) !== myProfilePath && highlights[cleanUrl(url)]);
       if (starredIdx !== -1) {
         nextUrl = targets[starredIdx];
       } else {

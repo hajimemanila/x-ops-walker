@@ -495,9 +495,6 @@ function createBookmarkItem(title: string, url: string): HTMLElement {
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        const myProfileUrl = cleanUrl(getMyProfileUrl());
-        if (cleanUrlStr === myProfileUrl) return;
-
         const newState = item.classList.toggle('active');
         saveHighlight(cleanUrlStr, newState);
 
@@ -562,7 +559,7 @@ function nextStar() {
         while (i < targets.length) {
             let candidateIdx = (currentIdx + i) % targets.length;
             let candidateUrl = targets[candidateIdx];
-            // 【修正】インデックス0（一番上のプロフィール）は無条件でスキップ
+            // 【修正】インデックス0（固定プロフィール）およびURLベースで確実にスキップ
             if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
                 nextUrl = candidateUrl;
                 break;
@@ -570,8 +567,8 @@ function nextStar() {
             i++;
         }
     } else {
-        // 【修正】インデックス0のスターは探さない
-        let starredIdx = targets.findIndex((url, idx) => idx !== 0 && highlights[cleanUrl(url)]);
+        // 【修正】インデックス0およびURLベースでプロフィールURLのスターは探さない
+        let starredIdx = targets.findIndex((url, idx) => idx !== 0 && cleanUrl(url) !== myProfilePath && highlights[cleanUrl(url)]);
         if (starredIdx !== -1) {
             nextUrl = targets[starredIdx];
         } else {
@@ -579,7 +576,7 @@ function nextStar() {
             while (i < targets.length) {
                 let candidateIdx = (Math.max(0, currentIdx) + i) % targets.length;
                 let candidateUrl = targets[candidateIdx];
-                // 【修正】インデックス0は無条件でスキップ
+                // 【修正】インデックス0（固定プロフィール）およびURLベースで確実にスキップ
                 if (candidateIdx !== 0 && cleanUrl(candidateUrl) !== myProfilePath) {
                     nextUrl = candidateUrl;
                     break;
