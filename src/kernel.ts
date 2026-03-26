@@ -11,11 +11,16 @@ import { WalkerRouter } from './router';
 import { BaseProtocol } from './protocols/base';
 import { AiChatProtocol } from './protocols/ai-chat';
 import { XTimelineProtocol } from './protocols/x-timeline';
+import { GeminiWalkerProtocol } from './protocols/gemini-walker';
 import { SafetyEnterMiddleware } from './protocols/safety-enter';
 import { GlobalState, PhantomState, DEFAULT_GLOBAL_STATE, DEFAULT_PHANTOM_STATE } from './config/state';
 
 const router = new WalkerRouter(new BaseProtocol());
 router.registerMiddleware(new SafetyEnterMiddleware());
+// GeminiWalkerProtocol must be registered BEFORE AiChatProtocol.
+// WalkerRouter uses first-match-wins: this ensures gemini.google.com is
+// captured by the dedicated protocol, not the generic AI chat fallback.
+router.register(new GeminiWalkerProtocol());
 router.register(new AiChatProtocol());
 router.register(new XTimelineProtocol());
 

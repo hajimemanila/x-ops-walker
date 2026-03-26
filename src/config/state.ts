@@ -20,9 +20,14 @@ export interface XWalkerConfig {
     zenOpacity: number;
 }
 
+export interface GeminiWalkerConfig {
+    enabled: boolean;
+}
+
 export interface PhantomState {
     master: boolean;
     xWalker: XWalkerConfig; // 【修正】インライン定義から独立したインターフェースへ変更
+    geminiWalker: GeminiWalkerConfig; // 【v2.3追加】Gemini Walker プロトコル設定
 }
 
 export interface AlmConfig {
@@ -52,6 +57,10 @@ export const DEFAULT_PHANTOM_STATE: PhantomState = {
             copied: 'rgba(0, 255, 255, 0.2)'
         },
         zenOpacity: 0.5
+    },
+    // 【v2.3追加】Gemini Walker デフォルト設定
+    geminiWalker: {
+        enabled: true,
     }
 };
 

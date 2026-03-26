@@ -1223,7 +1223,7 @@
   init_browser_polyfill_entry();
   var AiChatProtocol = class {
     matches(hostname) {
-      return hostname.includes("gemini.google.com") || hostname.includes("chatgpt.com") || hostname.includes("claude.ai");
+      return hostname.includes("chatgpt.com") || hostname.includes("claude.ai");
     }
     handleKey(event, key, shift, container) {
       if (key === "z") {
@@ -1319,6 +1319,10 @@
         copied: "rgba(0, 255, 255, 0.2)"
       },
       zenOpacity: 0.5
+    },
+    // 【v2.3追加】Gemini Walker デフォルト設定
+    geminiWalker: {
+      enabled: true
     }
   };
 
@@ -2157,6 +2161,299 @@
   document.addEventListener("visibilitychange", onTabWakeUp);
   window.addEventListener("focus", onTabWakeUp);
 
+  // src/protocols/gemini-walker.ts
+  init_browser_polyfill_entry();
+  var TARGET_SELECTOR2 = "user-query, message-content";
+  var SIDEBAR_SELECTOR = "side-navigation-item a[href], .conversation-list a[href]";
+  var OBSIDIAN_CHAR_LIMIT = 4e3;
+  var STORAGE_KEY_STARS = "gemini_walker_stars";
+  var FOLD_CLASS = "g-walker-folded";
+  var FOCUS_CLASS = "x-walker-focused";
+  var STYLE_ID = "g-walker-style";
+  var GARBAGE_SELECTORS = [
+    "button",
+    "a[href]",
+    "svg",
+    "img",
+    '[role="button"]',
+    ".mat-icon",
+    '[aria-hidden="true"]',
+    '[data-test-id*="button"]',
+    ".sr-only",
+    ".code-block-decoration",
+    ".copy-code-button",
+    ".bottom-container"
+  ].join(", ");
+  var isActive2 = false;
+  function injectGeminiCSS() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+        /* Folded message \u2014 collapsed to a single line with reduced opacity */
+        .${FOLD_CLASS} {
+            max-height: 3.2em !important;
+            overflow: hidden !important;
+            opacity: 0.35 !important;
+            transition: max-height 0.3s ease, opacity 0.2s ease;
+            cursor: pointer;
+        }
+
+        /* Focus ring for JIT spatial navigation target */
+        user-query.${FOCUS_CLASS},
+        message-content.${FOCUS_CLASS} {
+            outline: 2px solid rgba(100, 180, 255, 0.55) !important;
+            outline-offset: 5px;
+            border-radius: 6px;
+            transition: outline 0.15s ease;
+        }
+    `;
+    document.documentElement.appendChild(style);
+  }
+  function extractCleanText(el) {
+    const garbage = Array.from(el.querySelectorAll(GARBAGE_SELECTORS));
+    const hidden = [];
+    for (const g of garbage) {
+      hidden.push({ el: g, prev: g.style.display });
+      g.style.display = "none";
+    }
+    let text = "";
+    try {
+      text = el.innerText?.trim() ?? "";
+    } finally {
+      for (const { el: g, prev } of hidden) {
+        g.style.display = prev;
+      }
+    }
+    if (el.tagName.toLowerCase() === "user-query") {
+      text = text.replace(/\n{2,}/g, "\n");
+    }
+    return text;
+  }
+  function generateSignature(el) {
+    const text = extractCleanText(el);
+    const head = text.slice(0, 30);
+    const tail = text.slice(-30);
+    return `${head}||${tail}`;
+  }
+  function loadStars() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY_STARS) ?? "{}");
+    } catch {
+      return {};
+    }
+  }
+  function saveStars(stars) {
+    localStorage.setItem(STORAGE_KEY_STARS, JSON.stringify(stars));
+  }
+  function findPrecedingUserQuery(el) {
+    let cursor = el.previousElementSibling;
+    while (cursor) {
+      if (cursor.tagName.toLowerCase() === "user-query") {
+        return cursor;
+      }
+      cursor = cursor.previousElementSibling;
+    }
+    return null;
+  }
+  function buildContextText(el) {
+    const tag = el.tagName.toLowerCase();
+    const answerText = extractCleanText(el);
+    if (tag === "message-content") {
+      const questionEl = findPrecedingUserQuery(el);
+      if (questionEl) {
+        const questionText = extractCleanText(questionEl);
+        return `**Q:** ${questionText}
+
+**A:** ${answerText}`;
+      }
+    }
+    return answerText;
+  }
+  function flashFeedback2(el, color) {
+    const htmlEl = el;
+    if (!htmlEl?.isConnected) return;
+    const prev = htmlEl.style.backgroundColor;
+    htmlEl.style.backgroundColor = color;
+    setTimeout(() => {
+      if (htmlEl.isConnected) htmlEl.style.backgroundColor = prev;
+    }, 220);
+  }
+  function navigateSidebar(direction) {
+    const links = Array.from(
+      document.querySelectorAll(SIDEBAR_SELECTOR)
+    ).filter((a) => a.isConnected && a.offsetWidth > 0 && a.offsetHeight > 0);
+    if (links.length === 0) return false;
+    const currentHref = window.location.pathname;
+    let currentIdx = links.findIndex((a) => {
+      try {
+        return new URL(a.href).pathname === currentHref;
+      } catch {
+        return false;
+      }
+    });
+    if (currentIdx === -1) {
+      const focused = document.querySelector(
+        SIDEBAR_SELECTOR + ":focus, side-navigation-item.active a[href]"
+      );
+      if (focused) currentIdx = links.indexOf(focused);
+    }
+    const nextIdx = Math.max(0, Math.min(
+      currentIdx === -1 ? direction === 1 ? 0 : links.length - 1 : currentIdx + direction,
+      links.length - 1
+    ));
+    const target = links[nextIdx];
+    if (target && nextIdx !== currentIdx) {
+      target.click();
+      return true;
+    }
+    return false;
+  }
+  var GeminiWalkerProtocol = class {
+    matches(hostname) {
+      return hostname.includes("gemini.google.com");
+    }
+    // ── State lifecycle hook ──────────────────────────────────────────────────
+    onStateUpdate(global, phantom) {
+      const defaultConfig = DEFAULT_PHANTOM_STATE.geminiWalker;
+      const raw = phantom.geminiWalker;
+      const config = {
+        enabled: raw?.enabled ?? defaultConfig.enabled
+      };
+      const shouldBeActive = !!global.walkerMode && !!phantom.master && config.enabled;
+      if (shouldBeActive && !isActive2) {
+        isActive2 = true;
+        injectGeminiCSS();
+        console.log("[X-Ops Walker] \u{1F48E} Gemini Protocol: ACTIVE");
+      } else if (!shouldBeActive && isActive2) {
+        isActive2 = false;
+        document.querySelectorAll(`.${FOCUS_CLASS}`).forEach((el) => {
+          el.classList.remove(FOCUS_CLASS);
+        });
+        console.log("[X-Ops Walker] \u{1F48E} Gemini Protocol: INACTIVE");
+      } else if (shouldBeActive) {
+        injectGeminiCSS();
+      }
+    }
+    // ── Key handler ───────────────────────────────────────────────────────────
+    handleKey(event, key, shift, container) {
+      if (!isActive2) return false;
+      if (key === "j" || key === "k") {
+        const direction = key === "j" ? 1 : -1;
+        focusNextTarget(TARGET_SELECTOR2, direction, 0, FOCUS_CLASS);
+        return true;
+      }
+      if (key === "c" && !shift) {
+        const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS);
+        if (!el?.isConnected) return true;
+        const text = buildContextText(el);
+        navigator.clipboard.writeText(text).then(() => {
+          flashFeedback2(el, "rgba(100, 200, 255, 0.22)");
+        }).catch((err) => {
+          console.error("[Gemini Walker] Clipboard write failed:", err);
+        });
+        return true;
+      }
+      if (key === "o" && !shift) {
+        const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS);
+        if (!el?.isConnected) return true;
+        let text = buildContextText(el);
+        if (text.length > OBSIDIAN_CHAR_LIMIT) {
+          const trimmedText = text.slice(0, OBSIDIAN_CHAR_LIMIT);
+          const originalLength = text.length;
+          text = `> [!warning] **TRIMMED**
+> Content was truncated from ${originalLength} to ${OBSIDIAN_CHAR_LIMIT} characters to fit Obsidian URI limits.
+
+${trimmedText}`;
+        }
+        const title = encodeURIComponent(
+          `Gemini \u2014 ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`
+        );
+        const content = encodeURIComponent(text);
+        const uri = `obsidian://new?name=${title}&content=${content}`;
+        window.location.href = uri;
+        return true;
+      }
+      if (key === "n" && !shift) {
+        const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS);
+        if (!el?.isConnected) return true;
+        const sig = generateSignature(el);
+        const stars = loadStars();
+        const wasStarred = !!stars[sig];
+        if (wasStarred) {
+          delete stars[sig];
+          flashFeedback2(el, "rgba(128, 128, 128, 0.25)");
+        } else {
+          stars[sig] = true;
+          flashFeedback2(el, "rgba(255, 172, 48, 0.3)");
+        }
+        saveStars(stars);
+        return true;
+      }
+      if (key === "m" && !shift) {
+        const stars = loadStars();
+        if (Object.keys(stars).length === 0) return true;
+        const allTargets = Array.from(
+          document.querySelectorAll(TARGET_SELECTOR2)
+        ).filter((el) => {
+          if (!el.isConnected) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.height > 0 && rect.width > 0;
+        });
+        if (allTargets.length === 0) return true;
+        const currentEl = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS);
+        const currentIdx = currentEl ? allTargets.indexOf(currentEl) : -1;
+        for (let offset = 1; offset <= allTargets.length; offset++) {
+          const idx = (currentIdx + offset) % allTargets.length;
+          const candidate = allTargets[idx];
+          const sig = generateSignature(candidate);
+          if (stars[sig]) {
+            currentEl?.classList.remove(FOCUS_CLASS);
+            candidate.classList.add(FOCUS_CLASS);
+            const rect = candidate.getBoundingClientRect();
+            window.scrollTo({
+              top: window.scrollY + rect.top - window.innerHeight * 0.3,
+              behavior: "smooth"
+            });
+            return true;
+          }
+        }
+        return true;
+      }
+      if (key === "l" && !shift) {
+        const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS);
+        if (!el?.isConnected) return true;
+        el.classList.toggle(FOLD_CLASS);
+        return true;
+      }
+      if (key === "l" && shift) {
+        const all = Array.from(document.querySelectorAll(TARGET_SELECTOR2));
+        const anyUnfolded = all.some((el) => !el.classList.contains(FOLD_CLASS));
+        all.forEach((el) => {
+          if (anyUnfolded) {
+            el.classList.add(FOLD_CLASS);
+          } else {
+            el.classList.remove(FOLD_CLASS);
+          }
+        });
+        return true;
+      }
+      if (key === "u" || key === "i") {
+        const direction = key === "u" ? -1 : 1;
+        navigateSidebar(direction);
+        return true;
+      }
+      if (key === "/") {
+        const inputEl = document.querySelector('rich-textarea [contenteditable="true"]') ?? document.querySelector("rich-textarea") ?? document.querySelector('[data-testid="chat-input"] [contenteditable]') ?? document.querySelector("textarea");
+        if (inputEl) {
+          inputEl.focus();
+        }
+        return true;
+      }
+      return false;
+    }
+  };
+
   // src/protocols/safety-enter.ts
   init_browser_polyfill_entry();
   var isSafetyEnterEnabled = false;
@@ -2248,6 +2545,7 @@
   // src/kernel.ts
   var router = new WalkerRouter(new BaseProtocol());
   router.registerMiddleware(new SafetyEnterMiddleware());
+  router.register(new GeminiWalkerProtocol());
   router.register(new AiChatProtocol());
   router.register(new XTimelineProtocol());
   if (window.__XOPS_WALKER_ALIVE__) {
@@ -2858,10 +3156,10 @@
   });
   var FocusShield = /* @__PURE__ */ (() => {
     let shieldTimer = null;
-    let isActive2 = false;
+    let isActive3 = false;
     function dropShield() {
-      if (!isActive2) return;
-      isActive2 = false;
+      if (!isActive3) return;
+      isActive3 = false;
       if (shieldTimer) {
         clearTimeout(shieldTimer);
         shieldTimer = null;
@@ -2884,7 +3182,7 @@
       if (!isWalkerMode) return;
       dropShield();
       blurActiveInput();
-      isActive2 = true;
+      isActive3 = true;
       window.addEventListener("focusin", interceptFocus, true);
       window.addEventListener("mousedown", dropShield, true);
       window.addEventListener("keydown", dropShield, true);

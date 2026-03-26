@@ -1,4 +1,4 @@
-import { GlobalState, PhantomState, AlmConfig, DEFAULT_ALM_CONFIG } from './config/state';
+import { GlobalState, PhantomState, AlmConfig, DEFAULT_ALM_CONFIG, DEFAULT_PHANTOM_STATE } from './config/state';
 
 function t(key: string, subs?: string | string[]): string {
     return chrome.i18n.getMessage(key, subs) || key;
@@ -127,7 +127,17 @@ async function init(): Promise<void> {
     // Walker Mode の初期状態読み込み
     const result = await chrome.storage.local.get(['global', 'phantom', 'alm']);
     const globalState = result.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-    const phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+    let phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+
+    // ── JIT Migration Guard ────────────────────────────────────────────────────
+    // v2.2.x 以前の環境では phantom に geminiWalker キーが存在しない。
+    // undefined プロパティへのアクセスによるクラッシュを防ぐため、
+    // キーの欠落を検知した瞬間にデフォルト値をディープコピーして補完し、
+    // 即座にストレージへ書き戻す（以降の起動では不要になる）。
+    if (phantomState.geminiWalker === undefined) {
+        phantomState.geminiWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.geminiWalker));
+        chrome.storage.local.set({ phantom: phantomState });
+    }
 
     updateUI(!!globalState.walkerMode);
     updateBlockerUI(!!globalState.blockOneTap); // デフォルト false (OFF)
@@ -152,6 +162,12 @@ async function init(): Promise<void> {
     }
     if (document.getElementById('toggle-x-right-column')) {
         updateMiniToggle('toggle-x-right-column', !!xWalkerConfig.rightColumnDashboard);
+    }
+
+    // Gemini Walker の初期状態読み込み
+    const geminiWalkerConfig = phantomState.geminiWalker;
+    if (document.getElementById('toggle-protocol-gemini')) {
+        updateMiniToggle('toggle-protocol-gemini', !!geminiWalkerConfig.enabled);
     }
 
     // Dynamic Domain Button の初期化
@@ -265,6 +281,22 @@ async function init(): Promise<void> {
             phantomState.xWalker.rightColumnDashboard = !phantomState.xWalker.rightColumnDashboard;
             await chrome.storage.local.set({ phantom: phantomState });
             updateMiniToggle('toggle-x-right-column', phantomState.xWalker.rightColumnDashboard);
+        });
+    }
+
+    // Gemini Walker Protocol トグル
+    const geminiToggle = document.getElementById('toggle-protocol-gemini');
+    if (geminiToggle) {
+        geminiToggle.addEventListener('click', async () => {
+            const res = await chrome.storage.local.get('phantom');
+            const phantomState = res.phantom || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+            // Migration guard: backfill if key is absent in stored state
+            if (!phantomState.geminiWalker) {
+                phantomState.geminiWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.geminiWalker));
+            }
+            phantomState.geminiWalker.enabled = !phantomState.geminiWalker.enabled;
+            await chrome.storage.local.set({ phantom: phantomState });
+            updateMiniToggle('toggle-protocol-gemini', phantomState.geminiWalker.enabled);
         });
     }
 

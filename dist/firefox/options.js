@@ -1055,6 +1055,10 @@
         copied: "rgba(0, 255, 255, 0.2)"
       },
       zenOpacity: 0.5
+    },
+    // 【v2.3追加】Gemini Walker デフォルト設定
+    geminiWalker: {
+      enabled: true
     }
   };
   var DEFAULT_ALM_CONFIG = {

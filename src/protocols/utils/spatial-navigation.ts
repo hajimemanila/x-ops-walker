@@ -10,14 +10,13 @@ function getValidTargets(selector: string): Element[] {
     });
 }
 
-export function getCurrentTarget(selector: string, focusClass = 'x-walker-focused'): Element | null {
+export function getCurrentTarget(selector: string, focusClass = 'x-walker-focused', container?: Element): Element | null {
     const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
 
-    if (window.scrollY < 50 && targets.length > 0) {
-        return targets[0];
-    }
-
+    // 【優先度1】既にフォーカスされている要素が画面内にあれば、スクロール位置に関わらずそれを返す。
+    // この判定を最上位に置くことで、window.scrollY === 0 の内部スクロール型SPA（Gemini等）でも
+    // ナビゲーションがスタックするバグを防ぐ。
     const currentFocused = document.querySelector(`.${focusClass}`);
     if (currentFocused && targets.includes(currentFocused)) {
         const rect = currentFocused.getBoundingClientRect();
@@ -26,13 +25,21 @@ export function getCurrentTarget(selector: string, focusClass = 'x-walker-focuse
         }
     }
 
-    const centerY = window.scrollY + (window.innerHeight * 0.3);
+    // 【優先度2】スクロール量がほぼゼロ（ページ先頭）なら最初のターゲットを返す。
+    // コンテナが渡された場合はそのscrollTopを、そうでなければwindow.scrollYを参照する。
+    const scrollY = container ? container.scrollTop : window.scrollY;
+    if (scrollY < 50) {
+        return targets[0];
+    }
+
+    // 【優先度3】Y軸中央座標に最も近い要素を空間的に探索する（既存のフォールバック）。
+    const centerY = scrollY + (window.innerHeight * 0.3);
     let minDiff = Infinity;
     let closestTarget: Element | null = null;
 
     for (const target of targets) {
         const rect = target.getBoundingClientRect();
-        const targetCenter = window.scrollY + rect.top + (rect.height / 2);
+        const targetCenter = scrollY + rect.top + (rect.height / 2);
         const diff = Math.abs(centerY - targetCenter);
         if (diff < minDiff) {
             minDiff = diff;
@@ -47,12 +54,13 @@ export function focusNextTarget(
     selector: string,
     direction: 1 | -1,
     offset: number = 0,
-    focusClass = 'x-walker-focused'
+    focusClass = 'x-walker-focused',
+    container?: Element
 ): Element | null {
     const targets = getValidTargets(selector);
     if (targets.length === 0) return null;
 
-    const currentTarget = getCurrentTarget(selector, focusClass);
+    const currentTarget = getCurrentTarget(selector, focusClass, container);
     let currentIndex = currentTarget ? targets.indexOf(currentTarget) : -1;
 
     if (currentIndex === -1) {
@@ -69,10 +77,20 @@ export function focusNextTarget(
     nextTarget.classList.add(focusClass);
 
     const nextRect = nextTarget.getBoundingClientRect();
-    window.scrollTo({
-        top: window.scrollY + nextRect.top - (window.innerHeight * 0.3) - offset,
-        behavior: 'smooth'
-    });
+    if (container) {
+        // サイト内部のスクロールコンテナ（Gemini等）向け:
+        // BoundingRect は viewport 相対なので、container のスクロール量に変換する
+        container.scrollTo({
+            top: container.scrollTop + nextRect.top - (window.innerHeight * 0.3) - offset,
+            behavior: 'smooth'
+        });
+    } else {
+        // デフォルト: window スクロール（X Timeline 等の後方互換）
+        window.scrollTo({
+            top: window.scrollY + nextRect.top - (window.innerHeight * 0.3) - offset,
+            behavior: 'smooth'
+        });
+    }
 
     return nextTarget;
 }

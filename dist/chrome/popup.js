@@ -1,6 +1,28 @@
 "use strict";
 (() => {
   // src/config/state.ts
+  var DEFAULT_PHANTOM_STATE = {
+    master: true,
+    xWalker: {
+      enabled: true,
+      rightColumnDashboard: true,
+      // 【追加】違反4解消: デフォルト値のハードコード排除
+      skipReposts: true,
+      skipAds: true,
+      scrollOffset: -150,
+      colors: {
+        recent: "#00ba7c",
+        old: "#ffd400",
+        ancient: "#f4212e",
+        copied: "rgba(0, 255, 255, 0.2)"
+      },
+      zenOpacity: 0.5
+    },
+    // 【v2.3追加】Gemini Walker デフォルト設定
+    geminiWalker: {
+      enabled: true
+    }
+  };
   var DEFAULT_ALM_CONFIG = {
     enabled: true,
     excludeDomains: [
@@ -128,7 +150,11 @@
     scHint.appendChild(afterText);
     const result = await chrome.storage.local.get(["global", "phantom", "alm"]);
     const globalState = result.global || { walkerMode: true, blockOneTap: false, safetyEnter: false };
-    const phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+    let phantomState = result.phantom || { master: true, xWalker: { enabled: true, rightColumnDashboard: true } };
+    if (phantomState.geminiWalker === void 0) {
+      phantomState.geminiWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.geminiWalker));
+      chrome.storage.local.set({ phantom: phantomState });
+    }
     updateUI(!!globalState.walkerMode);
     updateBlockerUI(!!globalState.blockOneTap);
     const rawAlm = result.alm || {};
@@ -146,6 +172,10 @@
     }
     if (document.getElementById("toggle-x-right-column")) {
       updateMiniToggle("toggle-x-right-column", !!xWalkerConfig.rightColumnDashboard);
+    }
+    const geminiWalkerConfig = phantomState.geminiWalker;
+    if (document.getElementById("toggle-protocol-gemini")) {
+      updateMiniToggle("toggle-protocol-gemini", !!geminiWalkerConfig.enabled);
     }
     const domainBtn = document.getElementById("dynamic-domain-btn");
     let currentHostname = "";
@@ -236,6 +266,19 @@
         phantomState2.xWalker.rightColumnDashboard = !phantomState2.xWalker.rightColumnDashboard;
         await chrome.storage.local.set({ phantom: phantomState2 });
         updateMiniToggle("toggle-x-right-column", phantomState2.xWalker.rightColumnDashboard);
+      });
+    }
+    const geminiToggle = document.getElementById("toggle-protocol-gemini");
+    if (geminiToggle) {
+      geminiToggle.addEventListener("click", async () => {
+        const res = await chrome.storage.local.get("phantom");
+        const phantomState2 = res.phantom || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+        if (!phantomState2.geminiWalker) {
+          phantomState2.geminiWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.geminiWalker));
+        }
+        phantomState2.geminiWalker.enabled = !phantomState2.geminiWalker.enabled;
+        await chrome.storage.local.set({ phantom: phantomState2 });
+        updateMiniToggle("toggle-protocol-gemini", phantomState2.geminiWalker.enabled);
       });
     }
     domainBtn.addEventListener("click", async () => {

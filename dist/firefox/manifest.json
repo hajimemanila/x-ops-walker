@@ -6,7 +6,7 @@
     "default_locale": "en",
     "browser_specific_settings": {
         "gecko": {
-            "id": "x-ops-walker@hajimemanila.com",
+            "id": "xops-walker@hajimemanila",
             "strict_min_version": "128.0"
         }
     },
