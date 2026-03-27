@@ -25,7 +25,7 @@ import { GlobalState, PhantomState, DEFAULT_PHANTOM_STATE, GeminiWalkerConfig } 
  * direct child and is the actual rendered text container. Including both would
  * cause the navigator to stutter (2 stops per AI turn).
  */
-const TARGET_SELECTOR = 'user-query, message-content';
+const TARGET_SELECTOR = 'user-query, model-response';
 
 /**
  * Sidebar chat history entries. Gemini renders conversation links in
@@ -94,9 +94,9 @@ function injectGeminiCSS(): void {
         /* Focus indicator: outline is clipped by Gemini's overflow:hidden containers.
          * border-left + background-color is the proven Tampermonkey-era approach. */
         user-query.${FOCUS_CLASS},
-        message-content.${FOCUS_CLASS} {
+        model-response.${FOCUS_CLASS} {
             border-left: 4px solid rgba(100, 180, 255, 0.8) !important;
-            background-color: rgba(100, 180, 255, 0.05) !important;
+            background-color: rgba(100, 180, 255, 0.05);
             padding-left: 8px !important;
             border-radius: 4px;
             transition: background-color 0.15s ease;
@@ -196,19 +196,19 @@ function findPrecedingUserQuery(el: Element): Element | null {
  * If the target is an AI response (message-content), the preceding
  * user-query is also extracted and formatted as a Markdown Q&A pair.
  */
-function buildContextText(el: Element): string {
+function getContextData(el: Element): { promptText: string; responseText: string } {
     const tag = el.tagName.toLowerCase();
-    const answerText = extractCleanText(el);
+    let promptText = '';
+    let responseText = '';
 
-    if (tag === 'message-content') {
-        const questionEl = findPrecedingUserQuery(el);
-        if (questionEl) {
-            const questionText = extractCleanText(questionEl);
-            return `**Q:** ${questionText}\n\n**A:** ${answerText}`;
-        }
+    if (tag === 'model-response' || tag === 'message-content') {
+        responseText = extractCleanText(el);
+        const qEl = findPrecedingUserQuery(el);
+        if (qEl) promptText = extractCleanText(qEl);
+    } else {
+        promptText = extractCleanText(el);
     }
-
-    return answerText;
+    return { promptText, responseText };
 }
 
 // ── Visual feedback ───────────────────────────────────────────────────────────
@@ -331,15 +331,31 @@ export class GeminiWalkerProtocol implements DomainProtocol {
             return true;
         }
 
-        // ── C: Context copy ───────────────────────────────────────────────────
-        // For AI responses: prepends the preceding user-query in Markdown format.
-        if (key === 'c' && !shift) {
+        // ── C / Shift+C: Context copy ─────────────────────────────────────────
+        if (key === 'c') {
             const el = getCurrentTarget(TARGET_SELECTOR, FOCUS_CLASS, container);
             if (!el?.isConnected) return true;
 
-            const text = buildContextText(el);
-            navigator.clipboard.writeText(text).then(() => {
-                flashFeedback(el, 'rgba(100, 200, 255, 0.22)');
+            const { promptText, responseText } = getContextData(el);
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            let clipboardText = '';
+
+            // 引数として渡される shift を直接評価して確実な分岐を行う
+            if (shift) {
+                if (promptText) clipboardText += `## 👤 User Prompt (${timestamp})\n\n${promptText}\n\n`;
+                if (responseText) clipboardText += `## 🤖 AI Response (${timestamp})\n\n${responseText}\n\n`;
+                if (clipboardText) clipboardText += '---\n';
+            } else {
+                if (promptText && responseText) {
+                    clipboardText = `**Q:** ${promptText}\n\n**A:** ${responseText}`;
+                } else {
+                    clipboardText = promptText || responseText;
+                }
+            }
+
+            navigator.clipboard.writeText(clipboardText).then(() => {
+                // 成功時: Markdownは緑、Plainは青のフラッシュ
+                flashFeedback(el, shift ? 'rgba(0, 255, 128, 0.4)' : 'rgba(100, 200, 255, 0.4)');
             }).catch(err => {
                 console.error('[Gemini Walker] Clipboard write failed:', err);
             });
@@ -347,27 +363,51 @@ export class GeminiWalkerProtocol implements DomainProtocol {
         }
 
         // ── O: Obsidian export ────────────────────────────────────────────────
-        // Same extraction as C, with a 4000-character safety trim.
-        // If trimmed, a Callout warning banner is prepended to signal truncation.
-        if (key === 'o' && !shift) {
+        if (key === 'o') {
             const el = getCurrentTarget(TARGET_SELECTOR, FOCUS_CLASS, container);
             if (!el?.isConnected) return true;
 
-            let text = buildContextText(el);
+            const { promptText, responseText } = getContextData(el);
 
-            if (text.length > OBSIDIAN_CHAR_LIMIT) {
-                const trimmedText = text.slice(0, OBSIDIAN_CHAR_LIMIT);
-                const originalLength = text.length;
-                text = `> [!warning] **TRIMMED**\n> Content was truncated from ${originalLength} to ${OBSIDIAN_CHAR_LIMIT} characters to fit Obsidian URI limits.\n\n${trimmedText}`;
+            const timestamp = new Date().toLocaleString();
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const sourceUrl = window.location.href;
+
+            const titleBase = promptText || responseText || 'Gemini Clip';
+            const safeTitle = titleBase.replace(/[\r\n]+/g, ' ').replace(/[\\/:*?"<>|]/g, '').substring(0, 30).trim();
+            const titleCandidate = `[Gemini] ${dateStr} ${safeTitle}`;
+
+            const headerInfo = `> Captured: ${timestamp} | [Open Thread](${sourceUrl})\n\n`;
+            let contentBody = '';
+            if (promptText) contentBody += `## 👤 User Prompt\n${promptText}\n\n`;
+            if (responseText) contentBody += `## 🤖 AI Response\n${responseText}\n\n`;
+            const footerInfo = '---\n#Gemini #X_Ops';
+
+            let finalBody = '';
+            const combinedLength = headerInfo.length + contentBody.length + footerInfo.length;
+
+            if (combinedLength > OBSIDIAN_CHAR_LIMIT) {
+                const trimBanner = `> [!warning] **TRIMMED** ([Full Text](${sourceUrl}))\n\n`;
+                const endMarker = '\n\n... (Trimmed)';
+                const available = OBSIDIAN_CHAR_LIMIT - (headerInfo.length + trimBanner.length + endMarker.length + footerInfo.length);
+
+                let trimmedContent = contentBody.substring(0, available);
+                const lastNl = trimmedContent.lastIndexOf('\n');
+                if (lastNl > 0) trimmedContent = trimmedContent.substring(0, lastNl);
+                trimmedContent = trimmedContent.replace(/\s+$/, '');
+
+                finalBody = headerInfo + trimBanner + trimmedContent + endMarker + '\n' + footerInfo;
+            } else {
+                finalBody = headerInfo + contentBody.replace(/\s+$/, '') + '\n\n' + footerInfo;
             }
 
-            const title = encodeURIComponent(
-                `Gemini — ${new Date().toISOString().slice(0, 10)}`
-            );
-            const content = encodeURIComponent(text);
-            const uri = `obsidian://new?name=${title}&content=${content}`;
+            const uri = `obsidian://new?name=${encodeURIComponent(titleCandidate)}&content=${encodeURIComponent(finalBody)}`;
 
-            window.location.href = uri;
+            // CSPやContent Scriptの制約を最も安全に回避する window.location.assign を使用
+            window.location.assign(uri);
+
+            // 成功時: オレンジのフラッシュ
+            flashFeedback(el, 'rgba(255, 140, 0, 0.4)');
             return true;
         }
 

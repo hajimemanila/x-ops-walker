@@ -1130,7 +1130,7 @@
   window.addEventListener("focus", onTabWakeUp);
 
   // src/protocols/gemini-walker.ts
-  var TARGET_SELECTOR2 = "user-query, message-content";
+  var TARGET_SELECTOR2 = "user-query, model-response";
   var SIDEBAR_SELECTOR = "side-navigation-item a[href], .conversation-list a[href]";
   var OBSIDIAN_CHAR_LIMIT = 4e3;
   var STORAGE_KEY_STARS = "gemini_walker_stars";
@@ -1169,9 +1169,9 @@
         /* Focus indicator: outline is clipped by Gemini's overflow:hidden containers.
          * border-left + background-color is the proven Tampermonkey-era approach. */
         user-query.${FOCUS_CLASS},
-        message-content.${FOCUS_CLASS} {
+        model-response.${FOCUS_CLASS} {
             border-left: 4px solid rgba(100, 180, 255, 0.8) !important;
-            background-color: rgba(100, 180, 255, 0.05) !important;
+            background-color: rgba(100, 180, 255, 0.05);
             padding-left: 8px !important;
             border-radius: 4px;
             transition: background-color 0.15s ease;
@@ -1225,19 +1225,18 @@
     }
     return null;
   }
-  function buildContextText(el) {
+  function getContextData(el) {
     const tag = el.tagName.toLowerCase();
-    const answerText = extractCleanText(el);
-    if (tag === "message-content") {
-      const questionEl = findPrecedingUserQuery(el);
-      if (questionEl) {
-        const questionText = extractCleanText(questionEl);
-        return `**Q:** ${questionText}
-
-**A:** ${answerText}`;
-      }
+    let promptText = "";
+    let responseText = "";
+    if (tag === "model-response" || tag === "message-content") {
+      responseText = extractCleanText(el);
+      const qEl = findPrecedingUserQuery(el);
+      if (qEl) promptText = extractCleanText(qEl);
+    } else {
+      promptText = extractCleanText(el);
     }
-    return answerText;
+    return { promptText, responseText };
   }
   function flashFeedback2(el, color) {
     const htmlEl = el;
@@ -1316,35 +1315,82 @@
         focusNextTarget(TARGET_SELECTOR2, direction, 120, FOCUS_CLASS, container);
         return true;
       }
-      if (key === "c" && !shift) {
+      if (key === "c") {
         const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS, container);
         if (!el?.isConnected) return true;
-        const text = buildContextText(el);
-        navigator.clipboard.writeText(text).then(() => {
-          flashFeedback2(el, "rgba(100, 200, 255, 0.22)");
+        const { promptText, responseText } = getContextData(el);
+        const timestamp = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        let clipboardText = "";
+        if (shift) {
+          if (promptText) clipboardText += `## \u{1F464} User Prompt (${timestamp})
+
+${promptText}
+
+`;
+          if (responseText) clipboardText += `## \u{1F916} AI Response (${timestamp})
+
+${responseText}
+
+`;
+          if (clipboardText) clipboardText += "---\n";
+        } else {
+          if (promptText && responseText) {
+            clipboardText = `**Q:** ${promptText}
+
+**A:** ${responseText}`;
+          } else {
+            clipboardText = promptText || responseText;
+          }
+        }
+        navigator.clipboard.writeText(clipboardText).then(() => {
+          flashFeedback2(el, shift ? "rgba(0, 255, 128, 0.4)" : "rgba(100, 200, 255, 0.4)");
         }).catch((err) => {
           console.error("[Gemini Walker] Clipboard write failed:", err);
         });
         return true;
       }
-      if (key === "o" && !shift) {
+      if (key === "o") {
         const el = getCurrentTarget(TARGET_SELECTOR2, FOCUS_CLASS, container);
         if (!el?.isConnected) return true;
-        let text = buildContextText(el);
-        if (text.length > OBSIDIAN_CHAR_LIMIT) {
-          const trimmedText = text.slice(0, OBSIDIAN_CHAR_LIMIT);
-          const originalLength = text.length;
-          text = `> [!warning] **TRIMMED**
-> Content was truncated from ${originalLength} to ${OBSIDIAN_CHAR_LIMIT} characters to fit Obsidian URI limits.
+        const { promptText, responseText } = getContextData(el);
+        const timestamp = (/* @__PURE__ */ new Date()).toLocaleString();
+        const dateStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10).replace(/-/g, "");
+        const sourceUrl = window.location.href;
+        const titleBase = promptText || responseText || "Gemini Clip";
+        const safeTitle = titleBase.replace(/[\r\n]+/g, " ").replace(/[\\/:*?"<>|]/g, "").substring(0, 30).trim();
+        const titleCandidate = `[Gemini] ${dateStr} ${safeTitle}`;
+        const headerInfo = `> Captured: ${timestamp} | [Open Thread](${sourceUrl})
 
-${trimmedText}`;
+`;
+        let contentBody = "";
+        if (promptText) contentBody += `## \u{1F464} User Prompt
+${promptText}
+
+`;
+        if (responseText) contentBody += `## \u{1F916} AI Response
+${responseText}
+
+`;
+        const footerInfo = "---\n#Gemini #X_Ops";
+        let finalBody = "";
+        const combinedLength = headerInfo.length + contentBody.length + footerInfo.length;
+        if (combinedLength > OBSIDIAN_CHAR_LIMIT) {
+          const trimBanner = `> [!warning] **TRIMMED** ([Full Text](${sourceUrl}))
+
+`;
+          const endMarker = "\n\n... (Trimmed)";
+          const available = OBSIDIAN_CHAR_LIMIT - (headerInfo.length + trimBanner.length + endMarker.length + footerInfo.length);
+          let trimmedContent = contentBody.substring(0, available);
+          const lastNl = trimmedContent.lastIndexOf("\n");
+          if (lastNl > 0) trimmedContent = trimmedContent.substring(0, lastNl);
+          trimmedContent = trimmedContent.replace(/\s+$/, "");
+          finalBody = headerInfo + trimBanner + trimmedContent + endMarker + "\n" + footerInfo;
+        } else {
+          finalBody = headerInfo + contentBody.replace(/\s+$/, "") + "\n\n" + footerInfo;
         }
-        const title = encodeURIComponent(
-          `Gemini \u2014 ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`
-        );
-        const content = encodeURIComponent(text);
-        const uri = `obsidian://new?name=${title}&content=${content}`;
-        window.location.href = uri;
+        const uri = `obsidian://new?name=${encodeURIComponent(titleCandidate)}&content=${encodeURIComponent(finalBody)}`;
+        window.location.assign(uri);
+        flashFeedback2(el, "rgba(255, 140, 0, 0.4)");
         return true;
       }
       if (key === "n" && !shift) {
