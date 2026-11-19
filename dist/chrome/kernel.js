@@ -285,7 +285,10 @@
         hideRightSidebarExtras: true,
         hidePostGrokAndViews: true,
         hideDetailReplies: true,
-        hideMedia: false
+        hideMedia: false,
+        disableProfileHoverModal: true,
+        disableCardClickNavigation: true,
+        enableHomeOverrideRedirect: true
       }
     }
   };
@@ -322,6 +325,8 @@
   var heartbeatId = null;
   var walkerSyncFrame = null;
   var currentUrlPath = window.location.pathname;
+  var interactionGuardsInstalled = false;
+  var homeOverrideRedirected = false;
   var xConfig = null;
   var isActive = false;
   var backspaceTimer = null;
@@ -406,6 +411,13 @@
             }
         `);
     }
+    if (ui.disableCardClickNavigation) {
+      rules.push(`
+            [role="link"][data-href*="/status/"] {
+                cursor: default !important;
+            }
+        `);
+    }
     return rules.join("\n");
   }
   function injectSimpleUICSS() {
@@ -428,9 +440,46 @@
     const style = document.getElementById("x-walker-simple-ui-style");
     if (style) style.remove();
   }
+  function installSimpleUIInteractionGuards() {
+    if (interactionGuardsInstalled) return;
+    interactionGuardsInstalled = true;
+    ["mouseover", "pointerover", "mouseenter", "pointerenter"].forEach((ev) => {
+      window.addEventListener(ev, (e) => {
+        if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.disableProfileHoverModal) return;
+        if (e.target instanceof Element && e.target.closest('[data-post-avatar], article div[id^="base-ui-"]')) {
+          e.stopImmediatePropagation();
+        }
+      }, true);
+    });
+    window.addEventListener("click", (e) => {
+      if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.disableCardClickNavigation) return;
+      if (!e.isTrusted || !(e.target instanceof Element)) return;
+      const card = e.target.closest('[role="link"][data-href*="/status/"]');
+      if (!card) return;
+      const interactive = e.target.closest('a, button, [role="button"], input, textarea, select, video');
+      if (interactive && interactive !== card && card.contains(interactive)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }, true);
+  }
+  function checkHomeOverrideRedirect() {
+    if (window.location.pathname !== "/home" || window.location.hash !== "#override") {
+      homeOverrideRedirected = false;
+      return;
+    }
+    if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.enableHomeOverrideRedirect) return;
+    if (homeOverrideRedirected) return;
+    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') || document.querySelector('nav a:has(svg[data-icon="icon-person"], svg[data-icon="icon-person-fill"])');
+    if (profileLink && profileLink.href && profileLink.href !== "https://x.com/home") {
+      homeOverrideRedirected = true;
+      window.location.replace(profileLink.href);
+    }
+  }
   function terminateProtocol() {
     isActive = false;
     isDashboardEnabled = false;
+    homeOverrideRedirected = false;
     if (heartbeatId) {
       clearInterval(heartbeatId);
       heartbeatId = null;
@@ -459,6 +508,8 @@
     document.body.classList.add("x-walker-active");
     injectWalkerCSS();
     injectSimpleUICSS();
+    installSimpleUIInteractionGuards();
+    checkHomeOverrideRedirect();
     startWalkerLoop();
     triggerAutoTargeting();
     if (isDashboardEnabled) {
@@ -697,6 +748,7 @@
         }
         injectWalkerCSS();
         injectSimpleUICSS();
+        checkHomeOverrideRedirect();
         if (currentUrlPath !== window.location.pathname) {
           currentUrlPath = window.location.pathname;
           triggerAutoTargeting();

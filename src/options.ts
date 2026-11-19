@@ -303,6 +303,9 @@ async function initGeneralSettings() {
     const checkSimpleUIPostExtras = document.getElementById('check-simple-ui-post-extras') as HTMLInputElement;
     const checkSimpleUIReplies = document.getElementById('check-simple-ui-replies') as HTMLInputElement;
     const checkSimpleUIMedia = document.getElementById('check-simple-ui-media') as HTMLInputElement;
+    const checkSimpleUIHoverModal = document.getElementById('check-simple-ui-hover-modal') as HTMLInputElement;
+    const checkSimpleUICardClick = document.getElementById('check-simple-ui-card-click') as HTMLInputElement;
+    const checkSimpleUIHomeOverride = document.getElementById('check-simple-ui-home-override') as HTMLInputElement;
     const simpleUISubSettings = document.getElementById('simple-ui-sub-settings');
 
     function updateSimpleUISubState(enabled: boolean) {
@@ -334,6 +337,9 @@ async function initGeneralSettings() {
     if (checkSimpleUIPostExtras) checkSimpleUIPostExtras.checked = !!simpleUI.hidePostGrokAndViews;
     if (checkSimpleUIReplies) checkSimpleUIReplies.checked = !!simpleUI.hideDetailReplies;
     if (checkSimpleUIMedia) checkSimpleUIMedia.checked = !!simpleUI.hideMedia;
+    if (checkSimpleUIHoverModal) checkSimpleUIHoverModal.checked = !!simpleUI.disableProfileHoverModal;
+    if (checkSimpleUICardClick) checkSimpleUICardClick.checked = !!simpleUI.disableCardClickNavigation;
+    if (checkSimpleUIHomeOverride) checkSimpleUIHomeOverride.checked = !!simpleUI.enableHomeOverrideRedirect;
 
     updateOptionsUI(!!globalState.walkerMode);
     updatePhantomUI(!!phantomState.master);
@@ -404,6 +410,9 @@ async function initGeneralSettings() {
     checkSimpleUIPostExtras?.addEventListener('change', () => updateSimpleUIField('hidePostGrokAndViews', checkSimpleUIPostExtras.checked));
     checkSimpleUIReplies?.addEventListener('change', () => updateSimpleUIField('hideDetailReplies', checkSimpleUIReplies.checked));
     checkSimpleUIMedia?.addEventListener('change', () => updateSimpleUIField('hideMedia', checkSimpleUIMedia.checked));
+    checkSimpleUIHoverModal?.addEventListener('change', () => updateSimpleUIField('disableProfileHoverModal', checkSimpleUIHoverModal.checked));
+    checkSimpleUICardClick?.addEventListener('change', () => updateSimpleUIField('disableCardClickNavigation', checkSimpleUICardClick.checked));
+    checkSimpleUIHomeOverride?.addEventListener('change', () => updateSimpleUIField('enableHomeOverrideRedirect', checkSimpleUIHomeOverride.checked));
 
     // ALM設定の同期
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };

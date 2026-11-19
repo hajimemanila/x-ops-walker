@@ -11,6 +11,9 @@ export interface XSimpleUIConfig {
     hidePostGrokAndViews: boolean;
     hideDetailReplies: boolean;
     hideMedia: boolean;
+    disableProfileHoverModal: boolean;
+    disableCardClickNavigation: boolean;
+    enableHomeOverrideRedirect: boolean;
 }
 
 // 【追加】違反4解消: x-timeline.tsからパージされる設定群を統合した型定義
@@ -68,7 +71,10 @@ export const DEFAULT_PHANTOM_STATE: PhantomState = {
             hideRightSidebarExtras: true,
             hidePostGrokAndViews: true,
             hideDetailReplies: true,
-            hideMedia: false
+            hideMedia: false,
+            disableProfileHoverModal: true,
+            disableCardClickNavigation: true,
+            enableHomeOverrideRedirect: true
         }
     }
 };

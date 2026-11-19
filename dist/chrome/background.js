@@ -28,7 +28,10 @@
         hideRightSidebarExtras: true,
         hidePostGrokAndViews: true,
         hideDetailReplies: true,
-        hideMedia: false
+        hideMedia: false,
+        disableProfileHoverModal: true,
+        disableCardClickNavigation: true,
+        enableHomeOverrideRedirect: true
       }
     }
   };

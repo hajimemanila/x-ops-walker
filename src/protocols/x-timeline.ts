@@ -43,6 +43,8 @@ let isDashboardEnabled = false;
 let heartbeatId: ReturnType<typeof setInterval> | null = null;
 let walkerSyncFrame: number | null = null;
 let currentUrlPath = window.location.pathname;
+let interactionGuardsInstalled = false;
+let homeOverrideRedirected = false;
 
 // ── 🐺 Walker States & Config ──
 let xConfig: XWalkerConfig | null = null; // 【追加】ルーターから供給される設定を保持
@@ -143,6 +145,14 @@ function buildSimpleUICSS(): string {
         `);
     }
 
+    if (ui.disableCardClickNavigation) {
+        rules.push(`
+            [role="link"][data-href*="/status/"] {
+                cursor: default !important;
+            }
+        `);
+    }
+
     return rules.join('\n');
 }
 
@@ -168,10 +178,59 @@ function removeSimpleUICSS() {
     if (style) style.remove();
 }
 
+function installSimpleUIInteractionGuards() {
+    if (interactionGuardsInstalled) return;
+    interactionGuardsInstalled = true;
+
+    (['mouseover', 'pointerover', 'mouseenter', 'pointerenter'] as const).forEach(ev => {
+        window.addEventListener(ev, (e: Event) => {
+            if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.disableProfileHoverModal) return;
+            if (e.target instanceof Element && e.target.closest('[data-post-avatar], article div[id^="base-ui-"]')) {
+                e.stopImmediatePropagation();
+            }
+        }, true);
+    });
+
+    window.addEventListener('click', (e: MouseEvent) => {
+        if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.disableCardClickNavigation) return;
+        if (!e.isTrusted || !(e.target instanceof Element)) return;
+
+        const card = e.target.closest('[role="link"][data-href*="/status/"]');
+        if (!card) return;
+
+        const interactive = e.target.closest('a, button, [role="button"], input, textarea, select, video');
+        if (interactive && interactive !== card && card.contains(interactive)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+    }, true);
+}
+
+function checkHomeOverrideRedirect() {
+    if (window.location.pathname !== '/home' || window.location.hash !== '#override') {
+        homeOverrideRedirected = false;
+        return;
+    }
+    if (!isActive || !xConfig?.simpleUI?.enabled || !xConfig.simpleUI.enableHomeOverrideRedirect) return;
+    if (homeOverrideRedirected) return;
+
+    const profileLink = (
+        document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') ||
+        document.querySelector('nav a:has(svg[data-icon="icon-person"], svg[data-icon="icon-person-fill"])')
+    ) as HTMLAnchorElement | null;
+
+    if (profileLink && profileLink.href && profileLink.href !== 'https://x.com/home') {
+        homeOverrideRedirected = true;
+        window.location.replace(profileLink.href);
+    }
+}
+
 // --- Physical Logic Kill & Cleanup ---
 function terminateProtocol() {
     isActive = false;
     isDashboardEnabled = false;
+    homeOverrideRedirected = false;
 
     // 1. Terminate DOM heartbeats & Loops
     if (heartbeatId) {
@@ -215,6 +274,8 @@ export function initXWalker(config: XWalkerConfig, master: boolean, globalWalker
     document.body.classList.add('x-walker-active');
     injectWalkerCSS();
     injectSimpleUICSS();
+    installSimpleUIInteractionGuards();
+    checkHomeOverrideRedirect();
     startWalkerLoop();
     triggerAutoTargeting();
 
@@ -477,6 +538,7 @@ function startWalkerLoop() {
             }
             injectWalkerCSS();
             injectSimpleUICSS();
+            checkHomeOverrideRedirect();
 
             if (currentUrlPath !== window.location.pathname) {
                 currentUrlPath = window.location.pathname;
