@@ -71,6 +71,103 @@ function injectWalkerCSS() {
     document.documentElement.appendChild(style);
 }
 
+// ── 🪶 Simple UI CSS (Memory-Saving / Zero-Observer) ──
+function buildSimpleUICSS(): string {
+    const ui = xConfig?.simpleUI;
+    if (!ui || !ui.enabled) return '';
+
+    const rules: string[] = [
+        `
+            header[role="banner"] {
+                flex-grow: 0 !important;
+                align-items: flex-start !important;
+            }
+            div:has(> div > main) {
+                justify-content: flex-start !important;
+            }
+            div:has(> div > div > main) {
+                margin-left: 0 !important;
+            }
+        `
+    ];
+
+    if (ui.hideLeftNavExtras) {
+        rules.push(`
+            nav a[href="/i/grok"],
+            nav a[href="/i/jf/creators/studio"],
+            nav a[href="/i/premium_sign_up"],
+            nav a[data-testid="premium-signup-tab"],
+            nav a[href="/i/calls"],
+            nav a[href="/i/history"],
+            nav a[href="/i/connect_people"],
+            nav a[href="/i/chat"] {
+                display: none !important;
+            }
+        `);
+    }
+
+    if (ui.hideRightSidebarExtras) {
+        rules.push(`
+            section:has([data-who-to-follow]),
+            section:has([id^="urt:explore-sidebar"]),
+            nav:has(a[href="https://x.com/tos"]) {
+                display: none !important;
+            }
+        `);
+    }
+
+    if (ui.hidePostGrokAndViews) {
+        rules.push(`
+            article button:has(svg[data-icon="icon-logo-grok"]),
+            article a[href$="/analytics"] {
+                display: none !important;
+            }
+        `);
+    }
+
+    if (ui.hideDetailReplies) {
+        rules.push(`
+            [id^="urt:conversation:"] ul > li:has([data-media-upload-dropzone]) ~ li,
+            [id^="urt:conversation:"] div:has(> [data-media-upload-dropzone]) {
+                display: none !important;
+            }
+        `);
+    }
+
+    if (ui.hideMedia) {
+        rules.push(`
+            article div[style*="aspect-ratio"],
+            img[src*="pbs.twimg.com/profile_banners/"] {
+                display: none !important;
+            }
+        `);
+    }
+
+    return rules.join('\n');
+}
+
+function injectSimpleUICSS() {
+    const css = buildSimpleUICSS();
+    let style = document.getElementById('x-walker-simple-ui-style') as HTMLStyleElement | null;
+    if (!css) {
+        if (style) style.remove();
+        return;
+    }
+    if (!style) {
+        style = document.createElement('style');
+        style.id = 'x-walker-simple-ui-style';
+        document.documentElement.appendChild(style);
+    }
+    if (style.textContent !== css) {
+        style.textContent = css;
+    }
+}
+
+function removeSimpleUICSS() {
+    const style = document.getElementById('x-walker-simple-ui-style');
+    if (style) style.remove();
+}
+
 // --- Physical Logic Kill & Cleanup ---
 function terminateProtocol() {
     isActive = false;
@@ -90,6 +187,7 @@ function terminateProtocol() {
     if (document.body.classList.contains('x-walker-active')) {
         document.body.classList.remove('x-walker-active');
     }
+    removeSimpleUICSS();
     forceClearFocus();
     removeDashboard();
 
@@ -116,6 +214,7 @@ export function initXWalker(config: XWalkerConfig, master: boolean, globalWalker
 
     document.body.classList.add('x-walker-active');
     injectWalkerCSS();
+    injectSimpleUICSS();
     startWalkerLoop();
     triggerAutoTargeting();
 
@@ -287,15 +386,24 @@ function syncDashboardUI() {
         return;
     }
 
-    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    if (!sidebar) {
-        if (dashboardHost.style.display !== 'none') dashboardHost.style.display = 'none';
+    const sidebar = (
+        document.querySelector('[data-testid="sidebarColumn"]') ||
+        document.querySelector('form[role="search"]')?.closest('.sticky')?.parentElement
+    ) as HTMLElement | null;
+    const sidebarRect = sidebar?.getBoundingClientRect();
+
+    if (!sidebar || !sidebarRect || sidebarRect.width < 100) {
+        if (dashboardHost.style.display !== 'block') dashboardHost.style.display = 'block';
+        if (dashboardHost.style.left !== 'auto') dashboardHost.style.left = 'auto';
+        if (dashboardHost.style.right !== '12px') dashboardHost.style.right = '12px';
+        if (dashboardHost.style.top !== '12px') dashboardHost.style.top = '12px';
+        if (dashboardHost.style.width !== '240px') dashboardHost.style.width = '240px';
         return;
     }
 
     if (dashboardHost.style.display !== 'block') dashboardHost.style.display = 'block';
+    if (dashboardHost.style.right !== 'auto') dashboardHost.style.right = 'auto';
 
-    const sidebarRect = sidebar.getBoundingClientRect();
     if (dashboardHost.style.width !== sidebarRect.width + 'px') dashboardHost.style.width = sidebarRect.width + 'px';
     if (dashboardHost.style.left !== sidebarRect.left + 'px') dashboardHost.style.left = sidebarRect.left + 'px';
 
@@ -306,7 +414,8 @@ function syncDashboardUI() {
     if (searchBar) {
         const searchRect = searchBar.getBoundingClientRect();
         targetTop = searchRect.bottom + 12;
-        targetMarginDiv = searchBar.parentElement?.nextElementSibling as HTMLElement;
+        const stickyHeader = searchBar.closest('.sticky');
+        targetMarginDiv = (stickyHeader?.nextElementSibling || searchBar.parentElement?.nextElementSibling) as HTMLElement;
     } else {
         targetTop = Math.max(sidebarRect.top, 53);
         targetMarginDiv = sidebar.firstElementChild as HTMLElement;
@@ -351,26 +460,33 @@ function tagIgnoredArticles() {
 
 function startWalkerLoop() {
     if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
+    let lastTick = 0;
+    const LOOP_INTERVAL_MS = 120;
 
-    function loop() {
+    function loop(now: number) {
         if (!isActive) {
             walkerSyncFrame = null;
             return;
         }
 
-        if (!document.body.classList.contains('x-walker-active')) {
-            document.body.classList.add('x-walker-active');
-        }
-        injectWalkerCSS();
+        if (now - lastTick >= LOOP_INTERVAL_MS) {
+            lastTick = now;
 
-        if (currentUrlPath !== window.location.pathname) {
-            currentUrlPath = window.location.pathname;
-            triggerAutoTargeting();
-        }
+            if (!document.body.classList.contains('x-walker-active')) {
+                document.body.classList.add('x-walker-active');
+            }
+            injectWalkerCSS();
+            injectSimpleUICSS();
 
-        tagIgnoredArticles();
-        maintainFocusVisuals();
-        if (isDashboardEnabled) syncDashboardUI();
+            if (currentUrlPath !== window.location.pathname) {
+                currentUrlPath = window.location.pathname;
+                triggerAutoTargeting();
+            }
+
+            tagIgnoredArticles();
+            maintainFocusVisuals();
+            if (isDashboardEnabled) syncDashboardUI();
+        }
 
         walkerSyncFrame = requestAnimationFrame(loop);
     }
@@ -458,7 +574,10 @@ async function renderBookmarkList() {
 }
 
 function getMyProfileUrl(): string {
-    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') as HTMLAnchorElement;
+    const profileLink = (
+        document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') ||
+        document.querySelector('nav a:has(svg[data-icon="icon-person"], svg[data-icon="icon-person-fill"])')
+    ) as HTMLAnchorElement | null;
     return profileLink ? profileLink.href : 'https://x.com/home';
 }
 
@@ -640,7 +759,8 @@ export class XTimelineProtocol implements DomainProtocol {
                 skipAds: rawConfig.skipAds ?? defaultConfig.skipAds,
                 scrollOffset: rawConfig.scrollOffset ?? defaultConfig.scrollOffset,
                 colors: { ...defaultConfig.colors, ...(rawConfig.colors || {}) },
-                zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity
+                zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity,
+                simpleUI: { ...defaultConfig.simpleUI, ...(rawConfig.simpleUI || {}) }
             };
         }
 
@@ -714,18 +834,28 @@ export class XTimelineProtocol implements DomainProtocol {
             if (key === ',') window.location.href = 'https://x.com/home';
 
             if (key === '/') {
-                const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]') as HTMLElement;
+                const searchInput = (
+                    document.querySelector('[data-testid="SearchBox_Search_Input"]') ||
+                    document.querySelector('form[role="search"] input[data-slot="xds-combobox-input"]') ||
+                    document.querySelector('form[role="search"] input')
+                ) as HTMLElement | null;
                 if (searchInput) searchInput.focus();
             }
             if (key === ';') {
                 if (shift) {
-                    const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') as HTMLElement
-                        || document.querySelector('[data-testid="SideNav_NewTweet_Button"]') as HTMLElement;
+                    const composeBtn = (
+                        document.querySelector('#sidebar-compose-post') ||
+                        document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') ||
+                        document.querySelector('[data-testid="SideNav_NewTweet_Button"]')
+                    ) as HTMLElement | null;
                     if (composeBtn) composeBtn.click();
                 } else {
                     const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
                     if (target && target.isConnected) {
-                        const replyBtn = target.querySelector('[data-testid="reply"]') as HTMLElement;
+                        const replyBtn = (
+                            target.querySelector('[data-testid="reply"]') ||
+                            target.querySelector('[data-engagement-action="reply"] a, [data-engagement-action="reply"] button')
+                        ) as HTMLElement | null;
                         if (replyBtn) replyBtn.click();
                     }
                 }
@@ -734,14 +864,21 @@ export class XTimelineProtocol implements DomainProtocol {
                 const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
                 if (target && target.isConnected) {
                     const timeEl = target.querySelector('time');
-                    const link = timeEl ? timeEl.closest('a') : null;
+                    const link = (
+                        (timeEl ? timeEl.closest('a') : null) ||
+                        target.querySelector('a[href*="/status/"]:not([href$="/analytics"])') ||
+                        target.closest('[role="link"][data-href*="/status/"]')
+                    ) as HTMLElement | null;
                     if (link) link.click();
                 }
             }
             if (key === 'c') {
                 const target = getCurrentTarget(TARGET_SELECTOR) as HTMLElement;
                 if (target && target.isConnected) {
-                    const textNode = target.querySelector('[data-testid="tweetText"]') as HTMLElement;
+                    const textNode = (
+                        target.querySelector('[data-testid="tweetText"]') ||
+                        target.querySelector('div[dir="auto"][lang]')
+                    ) as HTMLElement | null;
                     if (textNode) {
                         navigator.clipboard.writeText(textNode.innerText).then(() => {
                             flashFeedback(target, 'rgba(0, 255, 255, 0.2)');
@@ -788,17 +925,34 @@ function executeAction(actionType: string) {
     if (!article?.isConnected) return;
 
     if (actionType === 'like') {
-        const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]') as HTMLElement;
+        const btn = (
+            article.querySelector('[data-testid="like"], [data-testid="unlike"]') ||
+            article.querySelector('[data-engagement-action="like"] button')
+        ) as HTMLElement | null;
         if (btn) btn.click();
         else flashFeedback(article, 'rgba(249, 24, 128, 0.1)');
     } else if (actionType === 'repost') {
-        const btn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]') as HTMLElement;
-        if (btn) {
-            btn.click();
-            waitAndClick(btn.getAttribute('data-testid') === 'retweet' ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, 'rgba(0, 186, 124, 0.1)'));
+        const legacyBtn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]') as HTMLElement | null;
+        if (legacyBtn) {
+            legacyBtn.click();
+            waitAndClick(legacyBtn.getAttribute('data-testid') === 'retweet' ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, 'rgba(0, 186, 124, 0.1)'));
+            return;
+        }
+        const newBtn = article.querySelector('[data-engagement-action="retweet"] button') as HTMLElement | null;
+        if (newBtn) {
+            newBtn.click();
+            waitAndClick(() => {
+                const confirmEl = document.querySelector('[data-testid="retweetConfirm"], [data-testid="unretweetConfirm"]') as HTMLElement | null;
+                if (confirmEl) return confirmEl;
+                const items = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menuitem"][data-slot="xds-menu-item"], [data-slot="xds-menu-item"], [role="menuitem"]'));
+                return (items.find(el => el.textContent?.match(/リポスト|リツイート|Repost|Retweet/i) && !el.textContent?.match(/引用|Quote/i)) as HTMLElement) || null;
+            }, () => flashFeedback(article, 'rgba(0, 186, 124, 0.1)'));
         }
     } else if (actionType === 'bookmark') {
-        const btn = article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]') as HTMLElement;
+        const btn = (
+            article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]') ||
+            article.querySelector('[data-engagement-action="bookmark"] button')
+        ) as HTMLElement | null;
         if (btn) {
             btn.click();
             flashFeedback(article, 'rgba(29, 155, 240, 0.2)');
@@ -816,13 +970,14 @@ function startDRSDelete() {
     const isSleeping = originalTitle.startsWith('💤 ');
     document.title = (isSleeping ? '💤 ' : '') + "⚠️ DRS ACTIVE ⚠️";
 
-    const caret = article.querySelector('[data-testid="caret"]') as HTMLElement;
+    const caret = (
+        article.querySelector('[data-testid="caret"]') ||
+        article.querySelector('button[data-slot="xds-menu-trigger"]')
+    ) as HTMLElement | null;
     if (caret) caret.click();
 
     setTimeout(() => {
-        const menu = document.querySelector('[role="menu"]');
-        if (!menu) return;
-        const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+        const deleteItems = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menuitem"][data-slot="xds-menu-item"]'));
         const deleteItem = deleteItems.find(el => el.textContent?.match(/削除|Delete/)) as HTMLElement;
         if (deleteItem) deleteItem.click();
     }, 100);

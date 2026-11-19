@@ -4,6 +4,15 @@ export interface GlobalState {
     safetyEnter: boolean;
 }
 
+export interface XSimpleUIConfig {
+    enabled: boolean;
+    hideLeftNavExtras: boolean;
+    hideRightSidebarExtras: boolean;
+    hidePostGrokAndViews: boolean;
+    hideDetailReplies: boolean;
+    hideMedia: boolean;
+}
+
 // 【追加】違反4解消: x-timeline.tsからパージされる設定群を統合した型定義
 export interface XWalkerConfig {
     enabled: boolean;
@@ -18,6 +27,7 @@ export interface XWalkerConfig {
         copied: string;
     };
     zenOpacity: number;
+    simpleUI: XSimpleUIConfig;
 }
 
 export interface PhantomState {
@@ -51,7 +61,15 @@ export const DEFAULT_PHANTOM_STATE: PhantomState = {
             ancient: '#f4212e',
             copied: 'rgba(0, 255, 255, 0.2)'
         },
-        zenOpacity: 0.5
+        zenOpacity: 0.5,
+        simpleUI: {
+            enabled: true,
+            hideLeftNavExtras: true,
+            hideRightSidebarExtras: true,
+            hidePostGrokAndViews: true,
+            hideDetailReplies: true,
+            hideMedia: false
+        }
     }
 };
 

@@ -1054,7 +1054,15 @@
         ancient: "#f4212e",
         copied: "rgba(0, 255, 255, 0.2)"
       },
-      zenOpacity: 0.5
+      zenOpacity: 0.5,
+      simpleUI: {
+        enabled: true,
+        hideLeftNavExtras: true,
+        hideRightSidebarExtras: true,
+        hidePostGrokAndViews: true,
+        hideDetailReplies: true,
+        hideMedia: false
+      }
     }
   };
   var DEFAULT_ALM_CONFIG = {
@@ -1316,17 +1324,38 @@
     const checkPhantomMaster = document.getElementById("check-phantom-master");
     const checkPhantomX = document.getElementById("check-phantom-x");
     const checkPhantomXDashboard = document.getElementById("check-phantom-x-dashboard");
+    const checkSimpleUIEnabled = document.getElementById("check-simple-ui-enabled");
+    const checkSimpleUILeftNav = document.getElementById("check-simple-ui-left-nav");
+    const checkSimpleUIRightSidebar = document.getElementById("check-simple-ui-right-sidebar");
+    const checkSimpleUIPostExtras = document.getElementById("check-simple-ui-post-extras");
+    const checkSimpleUIReplies = document.getElementById("check-simple-ui-replies");
+    const checkSimpleUIMedia = document.getElementById("check-simple-ui-media");
+    const simpleUISubSettings = document.getElementById("simple-ui-sub-settings");
+    function updateSimpleUISubState(enabled) {
+      if (!simpleUISubSettings) return;
+      if (enabled) simpleUISubSettings.classList.remove("disabled-section");
+      else simpleUISubSettings.classList.add("disabled-section");
+    }
     const state = await chrome.storage.local.get(["global", "phantom", STORAGE_KEY_ALM]);
     const globalState = state.global || JSON.parse(JSON.stringify(DEFAULT_GLOBAL_STATE));
     const phantomState = state.phantom || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+    const defaultSimpleUI = DEFAULT_PHANTOM_STATE.xWalker.simpleUI;
+    const simpleUI = { ...defaultSimpleUI, ...phantomState.xWalker?.simpleUI || {} };
     checkWalkerMode.checked = !!globalState.walkerMode;
     checkBlockOneTap.checked = !!globalState.blockOneTap;
     checkSafetyEnter.checked = !!globalState.safetyEnter;
     checkPhantomMaster.checked = !!phantomState.master;
     checkPhantomX.checked = !!phantomState.xWalker?.enabled;
     checkPhantomXDashboard.checked = !!phantomState.xWalker?.rightColumnDashboard;
+    if (checkSimpleUIEnabled) checkSimpleUIEnabled.checked = !!simpleUI.enabled;
+    if (checkSimpleUILeftNav) checkSimpleUILeftNav.checked = !!simpleUI.hideLeftNavExtras;
+    if (checkSimpleUIRightSidebar) checkSimpleUIRightSidebar.checked = !!simpleUI.hideRightSidebarExtras;
+    if (checkSimpleUIPostExtras) checkSimpleUIPostExtras.checked = !!simpleUI.hidePostGrokAndViews;
+    if (checkSimpleUIReplies) checkSimpleUIReplies.checked = !!simpleUI.hideDetailReplies;
+    if (checkSimpleUIMedia) checkSimpleUIMedia.checked = !!simpleUI.hideMedia;
     updateOptionsUI(!!globalState.walkerMode);
     updatePhantomUI(!!phantomState.master);
+    updateSimpleUISubState(!!simpleUI.enabled);
     checkWalkerMode.addEventListener("change", async () => {
       const cur = await chrome.storage.local.get("global");
       const g = cur.global || JSON.parse(JSON.stringify(DEFAULT_GLOBAL_STATE));
@@ -1367,6 +1396,23 @@
       p.xWalker.rightColumnDashboard = checkPhantomXDashboard.checked;
       await chrome.storage.local.set({ phantom: p });
     });
+    async function updateSimpleUIField(key, value) {
+      const cur = await chrome.storage.local.get("phantom");
+      const p = cur.phantom || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+      if (!p.xWalker) p.xWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.xWalker));
+      if (!p.xWalker.simpleUI) p.xWalker.simpleUI = { ...defaultSimpleUI };
+      p.xWalker.simpleUI[key] = value;
+      await chrome.storage.local.set({ phantom: p });
+    }
+    checkSimpleUIEnabled?.addEventListener("change", async () => {
+      updateSimpleUISubState(checkSimpleUIEnabled.checked);
+      await updateSimpleUIField("enabled", checkSimpleUIEnabled.checked);
+    });
+    checkSimpleUILeftNav?.addEventListener("change", () => updateSimpleUIField("hideLeftNavExtras", checkSimpleUILeftNav.checked));
+    checkSimpleUIRightSidebar?.addEventListener("change", () => updateSimpleUIField("hideRightSidebarExtras", checkSimpleUIRightSidebar.checked));
+    checkSimpleUIPostExtras?.addEventListener("change", () => updateSimpleUIField("hidePostGrokAndViews", checkSimpleUIPostExtras.checked));
+    checkSimpleUIReplies?.addEventListener("change", () => updateSimpleUIField("hideDetailReplies", checkSimpleUIReplies.checked));
+    checkSimpleUIMedia?.addEventListener("change", () => updateSimpleUIField("hideMedia", checkSimpleUIMedia.checked));
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };
     checkAlmEnabled.checked = !!alm.enabled;
     checkAlmEnabled.addEventListener("change", async () => {

@@ -21,7 +21,15 @@
         ancient: "#f4212e",
         copied: "rgba(0, 255, 255, 0.2)"
       },
-      zenOpacity: 0.5
+      zenOpacity: 0.5,
+      simpleUI: {
+        enabled: true,
+        hideLeftNavExtras: true,
+        hideRightSidebarExtras: true,
+        hidePostGrokAndViews: true,
+        hideDetailReplies: true,
+        hideMedia: false
+      }
     }
   };
   var DEFAULT_ALM_CONFIG = {

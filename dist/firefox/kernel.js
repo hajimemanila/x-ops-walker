@@ -1318,7 +1318,15 @@
         ancient: "#f4212e",
         copied: "rgba(0, 255, 255, 0.2)"
       },
-      zenOpacity: 0.5
+      zenOpacity: 0.5,
+      simpleUI: {
+        enabled: true,
+        hideLeftNavExtras: true,
+        hideRightSidebarExtras: true,
+        hidePostGrokAndViews: true,
+        hideDetailReplies: true,
+        hideMedia: false
+      }
     }
   };
 
@@ -1374,6 +1382,92 @@
     `;
     document.documentElement.appendChild(style);
   }
+  function buildSimpleUICSS() {
+    const ui = xConfig?.simpleUI;
+    if (!ui || !ui.enabled) return "";
+    const rules = [
+      `
+            header[role="banner"] {
+                flex-grow: 0 !important;
+                align-items: flex-start !important;
+            }
+            div:has(> div > main) {
+                justify-content: flex-start !important;
+            }
+            div:has(> div > div > main) {
+                margin-left: 0 !important;
+            }
+        `
+    ];
+    if (ui.hideLeftNavExtras) {
+      rules.push(`
+            nav a[href="/i/grok"],
+            nav a[href="/i/jf/creators/studio"],
+            nav a[href="/i/premium_sign_up"],
+            nav a[data-testid="premium-signup-tab"],
+            nav a[href="/i/calls"],
+            nav a[href="/i/history"],
+            nav a[href="/i/connect_people"],
+            nav a[href="/i/chat"] {
+                display: none !important;
+            }
+        `);
+    }
+    if (ui.hideRightSidebarExtras) {
+      rules.push(`
+            section:has([data-who-to-follow]),
+            section:has([id^="urt:explore-sidebar"]),
+            nav:has(a[href="https://x.com/tos"]) {
+                display: none !important;
+            }
+        `);
+    }
+    if (ui.hidePostGrokAndViews) {
+      rules.push(`
+            article button:has(svg[data-icon="icon-logo-grok"]),
+            article a[href$="/analytics"] {
+                display: none !important;
+            }
+        `);
+    }
+    if (ui.hideDetailReplies) {
+      rules.push(`
+            [id^="urt:conversation:"] ul > li:has([data-media-upload-dropzone]) ~ li,
+            [id^="urt:conversation:"] div:has(> [data-media-upload-dropzone]) {
+                display: none !important;
+            }
+        `);
+    }
+    if (ui.hideMedia) {
+      rules.push(`
+            article div[style*="aspect-ratio"],
+            img[src*="pbs.twimg.com/profile_banners/"] {
+                display: none !important;
+            }
+        `);
+    }
+    return rules.join("\n");
+  }
+  function injectSimpleUICSS() {
+    const css = buildSimpleUICSS();
+    let style = document.getElementById("x-walker-simple-ui-style");
+    if (!css) {
+      if (style) style.remove();
+      return;
+    }
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "x-walker-simple-ui-style";
+      document.documentElement.appendChild(style);
+    }
+    if (style.textContent !== css) {
+      style.textContent = css;
+    }
+  }
+  function removeSimpleUICSS() {
+    const style = document.getElementById("x-walker-simple-ui-style");
+    if (style) style.remove();
+  }
   function terminateProtocol() {
     isActive = false;
     isDashboardEnabled = false;
@@ -1388,6 +1482,7 @@
     if (document.body.classList.contains("x-walker-active")) {
       document.body.classList.remove("x-walker-active");
     }
+    removeSimpleUICSS();
     forceClearFocus();
     removeDashboard();
     const osd = document.getElementById("x-ops-safety-osd");
@@ -1403,6 +1498,7 @@
     isDashboardEnabled = shouldShowDashboard;
     document.body.classList.add("x-walker-active");
     injectWalkerCSS();
+    injectSimpleUICSS();
     startWalkerLoop();
     triggerAutoTargeting();
     if (isDashboardEnabled) {
@@ -1567,13 +1663,18 @@
       if (dashboardHost.style.display !== "none") dashboardHost.style.display = "none";
       return;
     }
-    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    if (!sidebar) {
-      if (dashboardHost.style.display !== "none") dashboardHost.style.display = "none";
+    const sidebar = document.querySelector('[data-testid="sidebarColumn"]') || document.querySelector('form[role="search"]')?.closest(".sticky")?.parentElement;
+    const sidebarRect = sidebar?.getBoundingClientRect();
+    if (!sidebar || !sidebarRect || sidebarRect.width < 100) {
+      if (dashboardHost.style.display !== "block") dashboardHost.style.display = "block";
+      if (dashboardHost.style.left !== "auto") dashboardHost.style.left = "auto";
+      if (dashboardHost.style.right !== "12px") dashboardHost.style.right = "12px";
+      if (dashboardHost.style.top !== "12px") dashboardHost.style.top = "12px";
+      if (dashboardHost.style.width !== "240px") dashboardHost.style.width = "240px";
       return;
     }
     if (dashboardHost.style.display !== "block") dashboardHost.style.display = "block";
-    const sidebarRect = sidebar.getBoundingClientRect();
+    if (dashboardHost.style.right !== "auto") dashboardHost.style.right = "auto";
     if (dashboardHost.style.width !== sidebarRect.width + "px") dashboardHost.style.width = sidebarRect.width + "px";
     if (dashboardHost.style.left !== sidebarRect.left + "px") dashboardHost.style.left = sidebarRect.left + "px";
     let targetTop = 0;
@@ -1582,7 +1683,8 @@
     if (searchBar) {
       const searchRect = searchBar.getBoundingClientRect();
       targetTop = searchRect.bottom + 12;
-      targetMarginDiv = searchBar.parentElement?.nextElementSibling;
+      const stickyHeader = searchBar.closest(".sticky");
+      targetMarginDiv = stickyHeader?.nextElementSibling || searchBar.parentElement?.nextElementSibling;
     } else {
       targetTop = Math.max(sidebarRect.top, 53);
       targetMarginDiv = sidebar.firstElementChild;
@@ -1621,22 +1723,28 @@
   }
   function startWalkerLoop() {
     if (walkerSyncFrame !== null) cancelAnimationFrame(walkerSyncFrame);
-    function loop() {
+    let lastTick = 0;
+    const LOOP_INTERVAL_MS = 120;
+    function loop(now) {
       if (!isActive) {
         walkerSyncFrame = null;
         return;
       }
-      if (!document.body.classList.contains("x-walker-active")) {
-        document.body.classList.add("x-walker-active");
+      if (now - lastTick >= LOOP_INTERVAL_MS) {
+        lastTick = now;
+        if (!document.body.classList.contains("x-walker-active")) {
+          document.body.classList.add("x-walker-active");
+        }
+        injectWalkerCSS();
+        injectSimpleUICSS();
+        if (currentUrlPath !== window.location.pathname) {
+          currentUrlPath = window.location.pathname;
+          triggerAutoTargeting();
+        }
+        tagIgnoredArticles();
+        maintainFocusVisuals();
+        if (isDashboardEnabled) syncDashboardUI();
       }
-      injectWalkerCSS();
-      if (currentUrlPath !== window.location.pathname) {
-        currentUrlPath = window.location.pathname;
-        triggerAutoTargeting();
-      }
-      tagIgnoredArticles();
-      maintainFocusVisuals();
-      if (isDashboardEnabled) syncDashboardUI();
       walkerSyncFrame = requestAnimationFrame(loop);
     }
     walkerSyncFrame = requestAnimationFrame(loop);
@@ -1708,7 +1816,7 @@
     updateTargetHighlight();
   }
   function getMyProfileUrl() {
-    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]') || document.querySelector('nav a:has(svg[data-icon="icon-person"], svg[data-icon="icon-person-fill"])');
     return profileLink ? profileLink.href : "https://x.com/home";
   }
   function createBookmarkItem(title, url) {
@@ -1855,7 +1963,8 @@
           skipAds: rawConfig.skipAds ?? defaultConfig.skipAds,
           scrollOffset: rawConfig.scrollOffset ?? defaultConfig.scrollOffset,
           colors: { ...defaultConfig.colors, ...rawConfig.colors || {} },
-          zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity
+          zenOpacity: rawConfig.zenOpacity ?? defaultConfig.zenOpacity,
+          simpleUI: { ...defaultConfig.simpleUI, ...rawConfig.simpleUI || {} }
         };
       }
       initXWalker(xConfig, !!phantom.master, !!global.walkerMode);
@@ -1917,17 +2026,17 @@
         if (key === "u") window.location.href = "https://x.com/i/bookmarks";
         if (key === ",") window.location.href = "https://x.com/home";
         if (key === "/") {
-          const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]');
+          const searchInput = document.querySelector('[data-testid="SearchBox_Search_Input"]') || document.querySelector('form[role="search"] input[data-slot="xds-combobox-input"]') || document.querySelector('form[role="search"] input');
           if (searchInput) searchInput.focus();
         }
         if (key === ";") {
           if (shift) {
-            const composeBtn = document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') || document.querySelector('[data-testid="SideNav_NewTweet_Button"]');
+            const composeBtn = document.querySelector("#sidebar-compose-post") || document.querySelector('a[href="/compose/post"], a[href="/compose/tweet"]') || document.querySelector('[data-testid="SideNav_NewTweet_Button"]');
             if (composeBtn) composeBtn.click();
           } else {
             const target = getCurrentTarget(TARGET_SELECTOR);
             if (target && target.isConnected) {
-              const replyBtn = target.querySelector('[data-testid="reply"]');
+              const replyBtn = target.querySelector('[data-testid="reply"]') || target.querySelector('[data-engagement-action="reply"] a, [data-engagement-action="reply"] button');
               if (replyBtn) replyBtn.click();
             }
           }
@@ -1936,14 +2045,14 @@
           const target = getCurrentTarget(TARGET_SELECTOR);
           if (target && target.isConnected) {
             const timeEl = target.querySelector("time");
-            const link = timeEl ? timeEl.closest("a") : null;
+            const link = (timeEl ? timeEl.closest("a") : null) || target.querySelector('a[href*="/status/"]:not([href$="/analytics"])') || target.closest('[role="link"][data-href*="/status/"]');
             if (link) link.click();
           }
         }
         if (key === "c") {
           const target = getCurrentTarget(TARGET_SELECTOR);
           if (target && target.isConnected) {
-            const textNode = target.querySelector('[data-testid="tweetText"]');
+            const textNode = target.querySelector('[data-testid="tweetText"]') || target.querySelector('div[dir="auto"][lang]');
             if (textNode) {
               navigator.clipboard.writeText(textNode.innerText).then(() => {
                 flashFeedback(target, "rgba(0, 255, 255, 0.2)");
@@ -1990,17 +2099,28 @@
     const article = getCurrentTarget(TARGET_SELECTOR);
     if (!article?.isConnected) return;
     if (actionType === "like") {
-      const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]');
+      const btn = article.querySelector('[data-testid="like"], [data-testid="unlike"]') || article.querySelector('[data-engagement-action="like"] button');
       if (btn) btn.click();
       else flashFeedback(article, "rgba(249, 24, 128, 0.1)");
     } else if (actionType === "repost") {
-      const btn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]');
-      if (btn) {
-        btn.click();
-        waitAndClick(btn.getAttribute("data-testid") === "retweet" ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, "rgba(0, 186, 124, 0.1)"));
+      const legacyBtn = article.querySelector('[data-testid="retweet"], [data-testid="unretweet"]');
+      if (legacyBtn) {
+        legacyBtn.click();
+        waitAndClick(legacyBtn.getAttribute("data-testid") === "retweet" ? '[data-testid="retweetConfirm"]' : '[data-testid="unretweetConfirm"]', () => flashFeedback(article, "rgba(0, 186, 124, 0.1)"));
+        return;
+      }
+      const newBtn = article.querySelector('[data-engagement-action="retweet"] button');
+      if (newBtn) {
+        newBtn.click();
+        waitAndClick(() => {
+          const confirmEl = document.querySelector('[data-testid="retweetConfirm"], [data-testid="unretweetConfirm"]');
+          if (confirmEl) return confirmEl;
+          const items = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menuitem"][data-slot="xds-menu-item"], [data-slot="xds-menu-item"], [role="menuitem"]'));
+          return items.find((el) => el.textContent?.match(/リポスト|リツイート|Repost|Retweet/i) && !el.textContent?.match(/引用|Quote/i)) || null;
+        }, () => flashFeedback(article, "rgba(0, 186, 124, 0.1)"));
       }
     } else if (actionType === "bookmark") {
-      const btn = article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+      const btn = article.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]') || article.querySelector('[data-engagement-action="bookmark"] button');
       if (btn) {
         btn.click();
         flashFeedback(article, "rgba(29, 155, 240, 0.2)");
@@ -2014,12 +2134,10 @@
     originalTitle = document.title;
     const isSleeping = originalTitle.startsWith("\u{1F4A4} ");
     document.title = (isSleeping ? "\u{1F4A4} " : "") + "\u26A0\uFE0F DRS ACTIVE \u26A0\uFE0F";
-    const caret = article.querySelector('[data-testid="caret"]');
+    const caret = article.querySelector('[data-testid="caret"]') || article.querySelector('button[data-slot="xds-menu-trigger"]');
     if (caret) caret.click();
     setTimeout(() => {
-      const menu = document.querySelector('[role="menu"]');
-      if (!menu) return;
-      const deleteItems = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      const deleteItems = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menuitem"][data-slot="xds-menu-item"]'));
       const deleteItem = deleteItems.find((el) => el.textContent?.match(/削除|Delete/));
       if (deleteItem) deleteItem.click();
     }, 100);

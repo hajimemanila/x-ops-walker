@@ -297,11 +297,27 @@ async function initGeneralSettings() {
     const checkPhantomX = document.getElementById('check-phantom-x') as HTMLInputElement;
     const checkPhantomXDashboard = document.getElementById('check-phantom-x-dashboard') as HTMLInputElement;
 
+    const checkSimpleUIEnabled = document.getElementById('check-simple-ui-enabled') as HTMLInputElement;
+    const checkSimpleUILeftNav = document.getElementById('check-simple-ui-left-nav') as HTMLInputElement;
+    const checkSimpleUIRightSidebar = document.getElementById('check-simple-ui-right-sidebar') as HTMLInputElement;
+    const checkSimpleUIPostExtras = document.getElementById('check-simple-ui-post-extras') as HTMLInputElement;
+    const checkSimpleUIReplies = document.getElementById('check-simple-ui-replies') as HTMLInputElement;
+    const checkSimpleUIMedia = document.getElementById('check-simple-ui-media') as HTMLInputElement;
+    const simpleUISubSettings = document.getElementById('simple-ui-sub-settings');
+
+    function updateSimpleUISubState(enabled: boolean) {
+        if (!simpleUISubSettings) return;
+        if (enabled) simpleUISubSettings.classList.remove('disabled-section');
+        else simpleUISubSettings.classList.add('disabled-section');
+    }
+
     // 2. ストレージからの状態一括取得とフォールバックのDRY化
     const state = await chrome.storage.local.get(['global', 'phantom', STORAGE_KEY_ALM]);
 
     const globalState = (state.global as GlobalState) || JSON.parse(JSON.stringify(DEFAULT_GLOBAL_STATE));
     const phantomState = (state.phantom as PhantomState) || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+    const defaultSimpleUI = DEFAULT_PHANTOM_STATE.xWalker.simpleUI;
+    const simpleUI = { ...defaultSimpleUI, ...(phantomState.xWalker?.simpleUI || {}) };
 
     // 3. UIへの初期値反映
     checkWalkerMode.checked = !!globalState.walkerMode;
@@ -312,8 +328,16 @@ async function initGeneralSettings() {
     checkPhantomX.checked = !!phantomState.xWalker?.enabled;
     checkPhantomXDashboard.checked = !!phantomState.xWalker?.rightColumnDashboard;
 
+    if (checkSimpleUIEnabled) checkSimpleUIEnabled.checked = !!simpleUI.enabled;
+    if (checkSimpleUILeftNav) checkSimpleUILeftNav.checked = !!simpleUI.hideLeftNavExtras;
+    if (checkSimpleUIRightSidebar) checkSimpleUIRightSidebar.checked = !!simpleUI.hideRightSidebarExtras;
+    if (checkSimpleUIPostExtras) checkSimpleUIPostExtras.checked = !!simpleUI.hidePostGrokAndViews;
+    if (checkSimpleUIReplies) checkSimpleUIReplies.checked = !!simpleUI.hideDetailReplies;
+    if (checkSimpleUIMedia) checkSimpleUIMedia.checked = !!simpleUI.hideMedia;
+
     updateOptionsUI(!!globalState.walkerMode);
     updatePhantomUI(!!phantomState.master);
+    updateSimpleUISubState(!!simpleUI.enabled);
 
     // 4. イベントリスナー群（ハードコード排除済み）
     checkWalkerMode.addEventListener('change', async () => {
@@ -361,6 +385,25 @@ async function initGeneralSettings() {
         p.xWalker.rightColumnDashboard = checkPhantomXDashboard.checked;
         await chrome.storage.local.set({ phantom: p });
     });
+
+    async function updateSimpleUIField(key: keyof typeof defaultSimpleUI, value: boolean) {
+        const cur = await chrome.storage.local.get('phantom');
+        const p = (cur.phantom as PhantomState) || JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE));
+        if (!p.xWalker) p.xWalker = JSON.parse(JSON.stringify(DEFAULT_PHANTOM_STATE.xWalker));
+        if (!p.xWalker.simpleUI) p.xWalker.simpleUI = { ...defaultSimpleUI };
+        p.xWalker.simpleUI[key] = value;
+        await chrome.storage.local.set({ phantom: p });
+    }
+
+    checkSimpleUIEnabled?.addEventListener('change', async () => {
+        updateSimpleUISubState(checkSimpleUIEnabled.checked);
+        await updateSimpleUIField('enabled', checkSimpleUIEnabled.checked);
+    });
+    checkSimpleUILeftNav?.addEventListener('change', () => updateSimpleUIField('hideLeftNavExtras', checkSimpleUILeftNav.checked));
+    checkSimpleUIRightSidebar?.addEventListener('change', () => updateSimpleUIField('hideRightSidebarExtras', checkSimpleUIRightSidebar.checked));
+    checkSimpleUIPostExtras?.addEventListener('change', () => updateSimpleUIField('hidePostGrokAndViews', checkSimpleUIPostExtras.checked));
+    checkSimpleUIReplies?.addEventListener('change', () => updateSimpleUIField('hideDetailReplies', checkSimpleUIReplies.checked));
+    checkSimpleUIMedia?.addEventListener('change', () => updateSimpleUIField('hideMedia', checkSimpleUIMedia.checked));
 
     // ALM設定の同期
     const alm = state[STORAGE_KEY_ALM] || { enabled: true };
