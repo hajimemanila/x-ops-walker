@@ -139,6 +139,8 @@ function buildSimpleUICSS(): string {
     if (ui.hideMedia) {
         rules.push(`
             article div[style*="aspect-ratio"],
+            article div.snap-x.snap-mandatory,
+            article div:has(div.snap-x.snap-mandatory, div[style*="aspect-ratio"]):not(:has([data-testid="tweetText"], div[dir="auto"][lang], [data-engagement-action], [data-testid="like"], time)),
             img[src*="pbs.twimg.com/profile_banners/"] {
                 display: none !important;
             }
